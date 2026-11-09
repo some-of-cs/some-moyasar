@@ -1,0 +1,448 @@
+{
+  "schema_version": "1.1.0",
+  "default_field": "software",
+  "description": "Central field-targeting registry for some-divide-and-conquer (--field <FIELD_PROFILE>). Maps industry domains to default msitarzewski/agency-agents divisions, D1..D4 decomposition sizing rubrics, and 6-gate reviewing council criteria.",
+  "fields": {
+    "software": {
+      "field": "software",
+      "aliases": [
+        "software",
+        "dev"
+      ],
+      "display_name": "Software Engineering (Default)",
+      "divisions": [
+        "engineering",
+        "security",
+        "testing"
+      ],
+      "divisions_csv": "engineering,security,testing",
+      "complexity_mode": "cyclomatic",
+      "decomposition": {
+        "d1_surface": "Entities/endpoints/components (1-2 to 7+ items)",
+        "d2_volume": "Production LOC (under 300 to over 1,400 LOC)",
+        "d3_complexity": "Simple CRUD / static UI to Concurrency / distributed consensus",
+        "d4_boundaries": "1-2 files/modules to 7+ independent files/modules"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Build, Lint & Format)",
+          "criteria": "Compiler, linter, formatter (0 warnings)."
+        },
+        "g1": {
+          "label": "Gate G1 (Tests & Coverage)",
+          "criteria": "Unit/integration tests (>= 90% coverage)."
+        },
+        "g2": {
+          "label": "Gate G2 (`security-audit`)",
+          "criteria": "security-audit (OWASP, secrets, crypto)."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (`cyclomatic-complexity`)",
+          "criteria": "Cyclomatic CC <= 6 (cap 10, blocker > 15, nesting <= 2)."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "100% public symbols documented, runnable doctests/examples, README."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    },
+    "product": {
+      "field": "product",
+      "aliases": [
+        "product",
+        "design"
+      ],
+      "display_name": "Product Management & UX/UI Design",
+      "divisions": [
+        "product",
+        "design",
+        "project-management",
+        "research"
+      ],
+      "divisions_csv": "product,design,project-management,research",
+      "complexity_mode": "structural",
+      "decomposition": {
+        "d1_surface": "User flows/personas/screens (1-2 to 7+ items)",
+        "d2_volume": "Spec depth (under 800 to over 4,000 words)",
+        "d3_complexity": "Linear user journey to Multi-role state transitions & edge-case matrices",
+        "d4_boundaries": "1-2 spec sections/wireframes to 7+ independent modules/chapters"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Structure, Schema & Style Compliance)",
+          "criteria": "Schema, template & link validation."
+        },
+        "g1": {
+          "label": "Gate G1 (Evidence, Verification & Criteria Coverage)",
+          "criteria": "100% acceptance-criteria & edge-case traceability."
+        },
+        "g2": {
+          "label": "Gate G2 (Compliance, Risk & Fact-Check Audit)",
+          "criteria": "Privacy, accessibility (WCAG/Section 508) & UX dark-pattern audit."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (Structural Clarity & Modularity)",
+          "criteria": "Flow branching depth <= 2, unambiguous scope."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "Complete user journey maps, glossary, and stakeholder review index."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    },
+    "marketing": {
+      "field": "marketing",
+      "aliases": [
+        "marketing",
+        "growth"
+      ],
+      "display_name": "Marketing, Growth, Paid Media & Sales",
+      "divisions": [
+        "marketing",
+        "paid-media",
+        "sales",
+        "design"
+      ],
+      "divisions_csv": "marketing,paid-media,sales,design",
+      "complexity_mode": "structural",
+      "decomposition": {
+        "d1_surface": "Channels/funnels/creatives (1-2 to 7+ items)",
+        "d2_volume": "Asset count & copy volume (under 1,000 to over 5,000 words)",
+        "d3_complexity": "Single-channel copy to Multi-touch attribution & funnel segmentation",
+        "d4_boundaries": "1-2 campaign files/assets to 7+ independent channel playbooks"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Structure, Schema & Style Compliance)",
+          "criteria": "Brand voice, style guide & SEO/UTM lint."
+        },
+        "g1": {
+          "label": "Gate G1 (Evidence, Verification & Criteria Coverage)",
+          "criteria": "Conversion tracking, A/B hypothesis & KPI completeness."
+        },
+        "g2": {
+          "label": "Gate G2 (Compliance, Risk & Fact-Check Audit)",
+          "criteria": "FTC/ad-policy compliance, claim substantiation & brand safety."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (Structural Clarity & Modularity)",
+          "criteria": "Readability grade & single-CTA clarity."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "Campaign brief, audience matrix, and UTM taxonomy documented."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    },
+    "finance": {
+      "field": "finance",
+      "aliases": [
+        "finance",
+        "legal"
+      ],
+      "display_name": "Finance, FP&A, Accounting & Legal Compliance",
+      "divisions": [
+        "finance",
+        "specialized",
+        "support"
+      ],
+      "divisions_csv": "finance,specialized,support",
+      "complexity_mode": "structural",
+      "decomposition": {
+        "d1_surface": "Models/statements/scenarios (1-2 to 7+ items)",
+        "d2_volume": "Schedules, formulas & sensitivity tables (1-2 sheets to 7+ sheets)",
+        "d3_complexity": "Single-schedule ledger to Multi-entity consolidation & stochastic stress modeling",
+        "d4_boundaries": "1-2 schedules/modules to 7+ independent financial schedules/memos"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Structure, Schema & Style Compliance)",
+          "criteria": "Formula integrity, balance reconciliation (0 rounding drift)."
+        },
+        "g1": {
+          "label": "Gate G1 (Evidence, Verification & Criteria Coverage)",
+          "criteria": "Stress-test & sensitivity scenario verification."
+        },
+        "g2": {
+          "label": "Gate G2 (Compliance, Risk & Fact-Check Audit)",
+          "criteria": "Tax/regulatory/audit compliance (SOX/IFRS/GAAP) & PII redaction."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (Structural Clarity & Modularity)",
+          "criteria": "Model modularity & transparent assumptions."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "100% assumption sources, formula dictionary, and audit trail documented."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    },
+    "research": {
+      "field": "research",
+      "aliases": [
+        "research",
+        "academic"
+      ],
+      "display_name": "Academic, Scientific & Deep Research",
+      "divisions": [
+        "academic",
+        "research",
+        "specialized"
+      ],
+      "divisions_csv": "academic,research,specialized",
+      "complexity_mode": "structural",
+      "decomposition": {
+        "d1_surface": "Hypotheses/sections/datasets (1-2 to 7+ items)",
+        "d2_volume": "Word count & citation density (under 1,000 to over 5,000 words)",
+        "d3_complexity": "Narrative literature summary to Multi-variable statistical or causal modeling",
+        "d4_boundaries": "1-2 sections/chapters to 7+ independent chapters/appendices"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Structure, Schema & Style Compliance)",
+          "criteria": "Citation format, bibliography & figure/table numbering check."
+        },
+        "g1": {
+          "label": "Gate G1 (Evidence, Verification & Criteria Coverage)",
+          "criteria": "Statistical validity, methodology & source verification."
+        },
+        "g2": {
+          "label": "Gate G2 (Compliance, Risk & Fact-Check Audit)",
+          "criteria": "Plagiarism/hallucination check, ethics & bias audit."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (Structural Clarity & Modularity)",
+          "criteria": "Argument cohesion & readability (section nesting <= 2)."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "Reproducibility notes, dataset schema, and complete reference index."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    },
+    "healthcare": {
+      "field": "healthcare",
+      "aliases": [
+        "healthcare",
+        "medical"
+      ],
+      "display_name": "Healthcare, Clinical Pathways & Medical Systems",
+      "divisions": [
+        "healthcare",
+        "security",
+        "academic",
+        "support"
+      ],
+      "divisions_csv": "healthcare,security,academic,support",
+      "complexity_mode": "structural",
+      "decomposition": {
+        "d1_surface": "Clinical pathways/protocols (1-2 to 7+ items)",
+        "d2_volume": "Evidence tables & regulatory modules (under 1,000 to over 5,000 words)",
+        "d3_complexity": "Standard triage guideline to Multi-comorbidity clinical protocol & regulatory compliance",
+        "d4_boundaries": "1-2 protocol modules to 7+ independent clinical/regulatory modules"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Structure, Schema & Style Compliance)",
+          "criteria": "Terminology standards (ICD/SNOMED/FHIR) & template check."
+        },
+        "g1": {
+          "label": "Gate G1 (Evidence, Verification & Criteria Coverage)",
+          "criteria": "Clinical evidence grading & protocol verification."
+        },
+        "g2": {
+          "label": "Gate G2 (Compliance, Risk & Fact-Check Audit)",
+          "criteria": "HIPAA/PHI privacy, patient-safety & regulatory compliance."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (Structural Clarity & Modularity)",
+          "criteria": "Decision-tree clarity (<= 2 nested conditions)."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "Clinical references, contraindication tables, and audit definitions."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    },
+    "game-dev": {
+      "field": "game-dev",
+      "aliases": [
+        "game-dev",
+        "spatial"
+      ],
+      "display_name": "Game Development & Spatial Computing",
+      "divisions": [
+        "game-development",
+        "spatial-computing",
+        "design",
+        "testing"
+      ],
+      "divisions_csv": "game-development,spatial-computing,design,testing",
+      "complexity_mode": "cyclomatic",
+      "decomposition": {
+        "d1_surface": "Mechanics/systems/shaders/levels (1-2 to 7+ items)",
+        "d2_volume": "Script LOC or scene asset count (under 300 to over 1,400 LOC)",
+        "d3_complexity": "Basic UI/scene script to Physics/netcode/shader/spatial state synchronization",
+        "d4_boundaries": "1-2 scripts/prefabs to 7+ independent gameplay systems/scenes"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Build, Lint & Format)",
+          "criteria": "Engine build, shader compile & asset budget check."
+        },
+        "g1": {
+          "label": "Gate G1 (Tests & Coverage)",
+          "criteria": "Frame-time budget, multiplayer sync & playtest assertions."
+        },
+        "g2": {
+          "label": "Gate G2 (`security-audit`)",
+          "criteria": "Anti-cheat, economy exploit & state-desync audit."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (`cyclomatic-complexity`)",
+          "criteria": "Script CC <= 6 & state-machine simplicity."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "System architecture, inspector parameters, and scene setup documented."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    },
+    "gis": {
+      "field": "gis",
+      "aliases": [
+        "gis",
+        "geospatial"
+      ],
+      "display_name": "GIS, Geospatial Data Science & Cartography",
+      "divisions": [
+        "gis",
+        "engineering",
+        "testing"
+      ],
+      "divisions_csv": "gis,engineering,testing",
+      "complexity_mode": "hybrid",
+      "decomposition": {
+        "d1_surface": "Layers/pipelines/projections (1-2 to 7+ items)",
+        "d2_volume": "Spatial scripts & dataset schemas (under 300 to over 1,400 LOC / features)",
+        "d3_complexity": "Static layer styling to Multi-CRS spatial joins, raster/vector topology & GeoAI",
+        "d4_boundaries": "1-2 spatial layers/scripts to 7+ independent geoprocessing modules"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Structure, Schema & Style Compliance)",
+          "criteria": "CRS/projection validation, GeoJSON/WKT schema lint."
+        },
+        "g1": {
+          "label": "Gate G1 (Evidence, Verification & Criteria Coverage)",
+          "criteria": "Spatial topology, bounds & accuracy verification."
+        },
+        "g2": {
+          "label": "Gate G2 (Compliance, Risk & Fact-Check Audit)",
+          "criteria": "Geoprivacy & data-licensing compliance."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (Structural Clarity & Modularity)",
+          "criteria": "Geoprocessing pipeline modularity (CC <= 6 for scripts, nesting <= 2)."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "CRS metadata, data dictionary, and cartographic legend documented."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    },
+    "all": {
+      "field": "all",
+      "aliases": [
+        "all"
+      ],
+      "display_name": "All 18 Divisions (283 Specialist Agents)",
+      "divisions": [
+        "academic",
+        "design",
+        "engineering",
+        "finance",
+        "game-development",
+        "gis",
+        "healthcare",
+        "marketing",
+        "paid-media",
+        "product",
+        "project-management",
+        "research",
+        "sales",
+        "security",
+        "spatial-computing",
+        "specialized",
+        "support",
+        "testing"
+      ],
+      "divisions_csv": "all",
+      "complexity_mode": "hybrid",
+      "decomposition": {
+        "d1_surface": "Endpoints/components or document sections/channels/models/hypotheses (1-2 to 7+ items)",
+        "d2_volume": "Production LOC (<300 to >1,400 LOC) or Deliverable Volume (<1,000 to >5,000 words / 1-7+ sheets)",
+        "d3_complexity": "Simple CRUD / narrative summary to Concurrency / multi-variable statistical or regulatory modeling",
+        "d4_boundaries": "1-2 files/modules/chapters to 7+ independent files/modules/chapters"
+      },
+      "gates": {
+        "g0": {
+          "label": "Gate G0 (Build/Format & Schema Compliance)",
+          "criteria": "0 compiler/linter warnings (code) & 100% schema/style/citation compliance (deliverables)."
+        },
+        "g1": {
+          "label": "Gate G1 (Tests, Evidence & Criteria Coverage)",
+          "criteria": ">= 90% test coverage (code) & 100% acceptance-criteria/methodology verification (deliverables)."
+        },
+        "g2": {
+          "label": "Gate G2 (Security, Risk & Compliance Audit)",
+          "criteria": "0 vulnerabilities/leaked secrets (security-audit) & full regulatory/policy/fact compliance."
+        },
+        "g_complexity": {
+          "label": "Gate G-Complexity (Cyclomatic & Structural Clarity)",
+          "criteria": "Cyclomatic CC <= 6 (cap 10) for code; nesting depth <= 2 & modular clarity for prose/models."
+        },
+        "g_docs": {
+          "label": "Gate G-Docs (Public Docs & Examples)",
+          "criteria": "100% public interfaces, assumptions, citations, and examples documented."
+        },
+        "g_review": {
+          "label": "Gate G-Review (Council President Verdict)",
+          "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+        }
+      }
+    }
+  }
+}

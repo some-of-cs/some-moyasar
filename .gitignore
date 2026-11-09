@@ -1,0 +1,14 @@
+# some-divide-and-conquer: isolated parallel worktrees
+.worktrees/
+
+# some-divide-and-conquer: per-module checkpoints & field profile state
+.agents/checkpoints/
+
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/

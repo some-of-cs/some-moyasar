@@ -1,0 +1,49 @@
+{
+  "field": "software",
+  "aliases": [
+    "software",
+    "dev"
+  ],
+  "display_name": "Software Engineering (Default)",
+  "divisions": [
+    "engineering",
+    "security",
+    "testing"
+  ],
+  "divisions_csv": "engineering,security,testing",
+  "complexity_mode": "cyclomatic",
+  "decomposition": {
+    "d1_surface": "Entities/endpoints/components (1-2 to 7+ items)",
+    "d2_volume": "Production LOC (under 300 to over 1,400 LOC)",
+    "d3_complexity": "Simple CRUD / static UI to Concurrency / distributed consensus",
+    "d4_boundaries": "1-2 files/modules to 7+ independent files/modules"
+  },
+  "gates": {
+    "g0": {
+      "label": "Gate G0 (Build, Lint & Format)",
+      "criteria": "Compiler, linter, formatter (0 warnings)."
+    },
+    "g1": {
+      "label": "Gate G1 (Tests & Coverage)",
+      "criteria": "Unit/integration tests (>= 90% coverage)."
+    },
+    "g2": {
+      "label": "Gate G2 (`security-audit`)",
+      "criteria": "security-audit (OWASP, secrets, crypto)."
+    },
+    "g_complexity": {
+      "label": "Gate G-Complexity (`cyclomatic-complexity`)",
+      "criteria": "Cyclomatic CC <= 6 (cap 10, blocker > 15, nesting <= 2)."
+    },
+    "g_docs": {
+      "label": "Gate G-Docs (Public Docs & Examples)",
+      "criteria": "100% public symbols documented, runnable doctests/examples, README."
+    },
+    "g_review": {
+      "label": "Gate G-Review (Council President Verdict)",
+      "criteria": "Independent Council sign-off comment posted on GitHub PR conversation."
+    }
+  },
+  "requested_field": "software",
+  "registry_version": "1.1.0"
+}

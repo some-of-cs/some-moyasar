@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none">
+  <defs>
+    <linearGradient id="someNavyTealLeft" x1="68" y1="68" x2="128" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F2942"/>
+      <stop offset="55%" stop-color="#154E70"/>
+      <stop offset="100%" stop-color="#0D9488"/>
+    </linearGradient>
+    <linearGradient id="someTealNavyRight" x1="128" y1="52" x2="188" y2="144" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0D9488"/>
+      <stop offset="55%" stop-color="#155E75"/>
+      <stop offset="100%" stop-color="#0F2942"/>
+    </linearGradient>
+  </defs>
+  <!-- Outer Card with >10% transparent padding -->
+  <rect x="28" y="28" width="200" height="200" rx="44" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="4"/>
+
+  <!-- Left Curly Brace + Lower S-Loop (Navy to Teal) -->
+  <path d="M98 72 H88 C80 72 76 78 76 86 V92 C76 98 70 102 64 102 C70 102 76 106 76 112 V118 C76 126 80 132 88 132 H96 L116 150 C123 156 133 156 140 150 L150 140 C156 134 156 122 148 115 L128 99"
+        stroke="url(#someNavyTealLeft)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Right Curly Brace + Upper S-Loop (Teal to Navy) -->
+  <path d="M158 132 H168 C176 132 180 126 180 118 V112 C180 106 186 102 192 102 C186 102 180 98 180 92 V86 C180 78 176 72 168 72 H160 L140 54 C133 48 123 48 116 54 L106 64 C100 70 100 82 108 89 L128 105"
+        stroke="url(#someTealNavyRight)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Central Interlocking S-Ribbon Diagonal -->
+  <path d="M108 86 L128 102" stroke="#0F2942" stroke-width="11" stroke-linecap="round"/>
+  <path d="M128 102 L148 118" stroke="#0D9488" stroke-width="11" stroke-linecap="round"/>
+
+  <!-- Two Signature Orange Dots -->
+  <circle cx="107" cy="115" r="9.5" fill="#F97316"/>
+  <circle cx="149" cy="89" r="9.5" fill="#F97316"/>
+
+  <!-- Some(CS) Typography -->
+  <text x="128" y="194" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="30" fill="#0F2942" letter-spacing="-0.5">
+    <tspan font-weight="500">Some</tspan><tspan font-weight="800">(CS)</tspan>
+  </text>
+</svg>

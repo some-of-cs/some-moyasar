@@ -1,0 +1,11 @@
+{
+  "verify-git-and-gh-preflight": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "./scripts/preflight-check.sh --hook-json",
+        "timeout": 10
+      }
+    ]
+  }
+}

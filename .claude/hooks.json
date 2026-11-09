@@ -1,0 +1,18 @@
+{
+  "description": "Gate 0 preflight check ensuring git and gh (GitHub CLI) exist and are authenticated before starting the Divide-and-Conquer plugin.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "verify-git-and-gh-preflight",
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT:-${ANTIGRAVITY_PLUGIN_ROOT:-.}}/scripts/preflight-check.sh --quiet",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
