@@ -1,7 +1,7 @@
 # US-5.2.0: Single & Bulk Payouts with 20 Regulated Purpose Codes
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payouts/behaviours/payout-disbursements/`  
+> **Behavior Blueprint**: `src/resources/payouts/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -92,14 +92,16 @@ Feature: Regulated Single and Bulk Payouts
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payouts/behaviours/payout-disbursements/
-├── services/        # PayoutsService create/create_bulk/list/retrieve
-├── logic/           # Purpose serialization, destination validation, sequence formatting
-├── types/           # Payout, PayoutStatus, PayoutPurpose, PayoutDestination, BulkPayoutEntry
-└── constants/       # PAYOUTS_PATH, BULK_PATH, SEQUENCE_NUMBER_LEN (16)
+src/
+├── src/resources/payouts/payout_model.rs      # Unit 1 (feat/us-5.2.0/unit-1-payout-model)
+├── src/resources/payouts/purpose.rs           # Unit 2 (feat/us-5.2.0/unit-2-purpose-codes)
+├── src/resources/payouts/destinations.rs      # Unit 3 (feat/us-5.2.0/unit-3-destinations)
+├── src/resources/payouts/payouts_create.rs    # Unit 4 (feat/us-5.2.0/unit-4-single-payout)
+├── src/resources/payouts/payouts_bulk.rs      # Unit 5 (feat/us-5.2.0/unit-5-bulk-payout)
+├── src/resources/payouts/payouts_list.rs      # Unit 6 (feat/us-5.2.0/unit-6-payout-list-retrieve)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -129,11 +131,17 @@ pub enum PayoutPurpose {
     GovernmentPayment, InvestmentHouse, PaymentToMerchant, OwnAccountTransfer,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum PayoutDestination {
     Bank { iban: String, name: String, mobile: String, country: String, city: String },
     Wallet { mobile: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PayoutChannel {
+    Internal, Ips, Sarie, #[serde(other)] Unknown,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -176,54 +184,42 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 6-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payouts/payout_model.rs` | `Payout`, `PayoutStatus`, `PayoutChannel`, `PayoutId`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payouts/purpose.rs` | `PayoutPurpose` — all 20 regulated variants. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payouts/destinations.rs` | `PayoutDestination` bank/wallet + validation. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payouts/service.rs` | `client.payouts()` accessor. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `InvalidIban`, `InvalidMobile`, `InvalidPayoutAmount`. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payouts/mod.rs` | Feature-gated export under `payouts`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payouts/payouts_bulk.rs` | Borrow entries for validation; move into request. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payouts/payouts_create.rs` | Positive-amount guard; 16-digit sequence guard. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/payouts_test.rs` | Single + bulk across all 3 channels. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests with a 20-code reference table. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-5.2.0/unit-1-payout-model` | `src/resources/payouts/payout_model.rs` | `Payout` struct (id, channel, status: queued/initiated/paid/failed/canceled/returned, amount, message, failure_reason), `PayoutStatus` enum, `PayoutId` newtype | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-5.2.0/unit-2-purpose-codes` | `src/resources/payouts/purpose.rs` | `PayoutPurpose` enum — all 20 regulated values (bills_or_rent, payroll_benefits, payment_to_merchant, own_account_transfer, etc.), `Serialize`/`Deserialize`, doc comments per variant | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-5.2.0/unit-3-destinations` | `src/resources/payouts/destinations.rs` | `PayoutDestination` enum: `BankDestination` (iban, name, mobile, country, city), `WalletDestination` (mobile), IBAN validation, mobile format validation | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-5.2.0/unit-4-single-payout` | `src/resources/payouts/payouts_create.rs` | `CreatePayoutParams`: source_id, sequence_number (optional 16-digit), amount, purpose, destination, comment, metadata. `client.payouts().create()` | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-5.2.0/unit-5-bulk-payout` | `src/resources/payouts/payouts_bulk.rs` | `CreateBulkPayoutParams`: source_id, payouts Vec<BulkPayoutEntry>. `client.payouts().create_bulk()`, `BulkPayoutResponse` | `engineering-rust-refactoring-specialist` | `security-audit` |
+| **Unit 6** | `feat/us-5.2.0/unit-6-payout-list-retrieve` | `src/resources/payouts/payouts_list.rs` | `ListPayoutsParams`, `client.payouts().list(params)`, `client.payouts().retrieve(id)`, unit tests | `testing-api-tester` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Purpose Codes (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `Payout`, `PayoutStatus`, `PayoutChannel`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-5.2.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..6`)
+- [ ] **Unit 1 (`feat/us-5.2.0/unit-1-payout-model`)**: `Payout` struct (id, channel, status: queued/initiated/paid/failed/canceled/returned, amount, message, failure_reason), `PayoutStatus` enum, `PayoutId` newtype (Files: `src/resources/payouts/payout_model.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Purpose)**: all 20 `PayoutPurpose` variants with doc comments.  
+- [ ] **Unit 2 (`feat/us-5.2.0/unit-2-purpose-codes`)**: `PayoutPurpose` enum — all 20 regulated values (bills_or_rent, payroll_benefits, payment_to_merchant, own_account_transfer, etc.), `Serialize`/`Deserialize`, doc comments per variant (Files: `src/resources/payouts/purpose.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: 20-variant serde table.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
+- [ ] **Unit 3 (`feat/us-5.2.0/unit-3-destinations`)**: `PayoutDestination` enum: `BankDestination` (iban, name, mobile, country, city), `WalletDestination` (mobile), IBAN validation, mobile format validation (Files: `src/resources/payouts/destinations.rs`)  
+  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-5.2.0/unit-4-single-payout`)**: `CreatePayoutParams`: source_id, sequence_number (optional 16-digit), amount, purpose, destination, comment, metadata. `client.payouts().create()` (Files: `src/resources/payouts/payouts_create.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-5.2.0/unit-5-bulk-payout`)**: `CreateBulkPayoutParams`: source_id, payouts Vec<BulkPayoutEntry>. `client.payouts().create_bulk()`, `BulkPayoutResponse` (Files: `src/resources/payouts/payouts_bulk.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
+- [ ] **Unit 6 (`feat/us-5.2.0/unit-6-payout-list-retrieve`)**: `ListPayoutsParams`, `client.payouts().list(params)`, `client.payouts().retrieve(id)`, unit tests (Files: `src/resources/payouts/payouts_list.rs`)  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
 
-#### Phase 2: Destinations & Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Destinations)**: bank/wallet variants with validation.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Single)**: `POST /v1/payouts`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Bulk)**: `POST /v1/payouts/bulk` + `BulkPayoutResponse`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.4 (List/Retrieve)**: paginated list and single retrieve.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-
-#### Phase 3: Guards (PR 7–8)
-- [ ] **Task 3.1 (Amount)**: reject zero/negative.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Sequence)**: exactly 16 digits when present.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: single and bulk across internal/ips/sarie.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on purpose completeness and destination validation.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: 20-code reference table + doc-tests.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 6` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

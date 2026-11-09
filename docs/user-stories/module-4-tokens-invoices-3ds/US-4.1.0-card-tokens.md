@@ -1,7 +1,7 @@
 # US-4.1.0: Card Tokenization Service — Create, Retrieve & Delete
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/tokens/behaviours/card-tokenization/`  
+> **Behavior Blueprint**: `src/resources/tokens/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -82,14 +82,14 @@ Feature: Card Token Lifecycle
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/tokens/behaviours/card-tokenization/
-├── services/        # TokensService create/retrieve/delete
-├── logic/           # 204 empty-body handling, status normalization
-├── types/           # Token, TokenStatus, TokenId, CreateTokenParams
-└── constants/       # TOKENS_PATH, TOKEN_ID_PREFIX ("token_")
+src/
+├── src/resources/tokens/models.rs             # Unit 1 (feat/us-4.1.0/unit-1-token-model)
+├── src/resources/tokens/create.rs             # Unit 2 (feat/us-4.1.0/unit-2-token-create)
+├── src/resources/tokens/retrieve.rs           # Unit 3 (feat/us-4.1.0/unit-3-token-retrieve)
+├── src/resources/tokens/delete.rs             # Unit 4 (feat/us-4.1.0/unit-4-token-delete)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -123,7 +123,13 @@ pub struct Token {
 #[serde(rename_all = "lowercase")]
 pub enum TokenStatus { Initiated, Active, Inactive }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct TokenId(String);
+
+impl std::fmt::Display for TokenId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
+}
 
 impl TokenId {
     pub fn new(raw: impl Into<String>) -> Result<Self, MoyasarError> {
@@ -167,52 +173,36 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 4-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/tokens/models.rs` | `Token`, `TokenStatus`, `TokenId` prefix guard. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/tokens/params.rs` | `CreateTokenParams` incl. `save_only`. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/tokens/create.rs` | `POST /v1/tokens`. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/tokens/service.rs` | `client.tokens()` accessor. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `InvalidTokenId`, 404 mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/tokens/mod.rs` | Feature-gated export under `tokens`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/tokens/models.rs` | `TokenId` borrow-friendly newtype. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/tokens/delete.rs` | 204 empty-body handling without deserialization. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/tokens_test.rs` | create→retrieve→delete round-trip; 204 handling. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests for the full token lifecycle. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-4.1.0/unit-1-token-model` | `src/resources/tokens/models.rs` | `Token` struct (id: "token_...", status: initiated/active/inactive, masked card details), `TokenStatus` enum, `TokenId` newtype | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-4.1.0/unit-2-token-create` | `src/resources/tokens/create.rs` | `CreateTokenParams`: name, number, month, year, cvc, callback_url, save_only. `client.tokens().create()`, PublishableKey-accepted | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-4.1.0/unit-3-token-retrieve` | `src/resources/tokens/retrieve.rs` | `client.tokens().retrieve(id)` (`SecretKey` bound, returns masked card details for customer display), 404 mapping, unit tests | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-4.1.0/unit-4-token-delete` | `src/resources/tokens/delete.rs` | `client.tokens().delete(id)` (`DELETE /v1/tokens/:id` 204 No Content empty-body handler), token status gate helpers, unit tests | `security-appsec-engineer` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `Token`, `TokenStatus`, `TokenId` prefix validation.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-4.1.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
+- [ ] **Unit 1 (`feat/us-4.1.0/unit-1-token-model`)**: `Token` struct (id: "token_...", status: initiated/active/inactive, masked card details), `TokenStatus` enum, `TokenId` newtype (Files: `src/resources/tokens/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: `CreateTokenParams` with optional `save_only`.  
+- [ ] **Unit 2 (`feat/us-4.1.0/unit-2-token-create`)**: `CreateTokenParams`: name, number, month, year, cvc, callback_url, save_only. `client.tokens().create()`, PublishableKey-accepted (Files: `src/resources/tokens/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: masked-number regex; no PAN present.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Create)**: `POST /v1/tokens` with `pk_`.  
+- [ ] **Unit 3 (`feat/us-4.1.0/unit-3-token-retrieve`)**: `client.tokens().retrieve(id)` (`SecretKey` bound, returns masked card details for customer display), 404 mapping, unit tests (Files: `src/resources/tokens/retrieve.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Retrieve)**: `GET /v1/tokens/:id` with `sk_`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Errors)**: invalid id, 404.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-4.1.0/unit-4-token-delete`)**: `client.tokens().delete(id)` (`DELETE /v1/tokens/:id` 204 No Content empty-body handler), token status gate helpers, unit tests (Files: `src/resources/tokens/delete.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
-#### Phase 3: Delete & 204 (PR 7–8)
-- [ ] **Task 3.1 (204 Handler)**: `delete_no_content` returning `Ok(())`.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Status Mapping)**: initiated/active/inactive fixtures.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: full lifecycle round-trip.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on PAN handling.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: token lifecycle doc-tests.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

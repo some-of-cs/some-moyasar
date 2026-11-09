@@ -1,7 +1,7 @@
 # US-2.2.0: Payment Update, Capture, Void & Refund with Settlement-Window Routing
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payments/behaviours/payment-lifecycle/`  
+> **Behavior Blueprint**: `src/resources/payments/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -98,14 +98,15 @@ Feature: Payment Lifecycle Operations
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payments/behaviours/payment-lifecycle/
-├── services/        # capture(), void(), refund(), update() dispatchers
-├── logic/           # Settlement-window guards, void-or-refund routing strategy
-├── types/           # UpdatePaymentParams, CaptureParams, RefundParams, ReversalStrategy
-└── constants/       # VOID_WINDOW_SECS (7200), MADA_CAPTURE_WINDOW_DAYS (14)
+src/
+├── src/resources/payments/update.rs           # Unit 1 (feat/us-2.2.0/unit-1-update)
+├── src/resources/payments/capture.rs          # Unit 2 (feat/us-2.2.0/unit-2-capture)
+├── src/resources/payments/void.rs             # Unit 3 (feat/us-2.2.0/unit-3-void)
+├── src/resources/payments/refund.rs           # Unit 4 (feat/us-2.2.0/unit-4-refund)
+├── src/resources/payments/smart_void.rs       # Unit 5 (feat/us-2.2.0/unit-5-smart-void-refund)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -125,11 +126,13 @@ features/core/modules/payments/behaviours/payment-lifecycle/
 - **Idempotency Law**: lifecycle mutations are retried only on network errors/timeouts/5xx.
 
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReversalStrategy {
     Void,
     Refund { amount: Option<u64> },
     Auto,
 }
+pub type VoidOrRefund = ReversalStrategy;
 
 impl PaymentsService<'_> {
     pub fn plan_reversal(&self, payment: &Payment, now: DateTime<Utc>) -> ReversalStrategy {
@@ -172,54 +175,39 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 5-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payments/lifecycle.rs` | `ReversalStrategy` enum, window constants. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payments/params.rs` | `UpdatePaymentParams`, `CaptureParams`, `RefundParams`. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payments/update.rs` | `PUT /v1/payments/:id`. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payments/capture.rs` | `capture(id, Option<u64>)` full/partial. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/resources/payments/void.rs` | Void failure mapping; refund fallback trigger. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payments/refund.rs` | `refund(id, Option<u64>)` with body omission. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payments/lifecycle.rs` | Clock arithmetic without allocation. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payments/smart_void.rs` | 2-hour routing, Mada 14-day warning path. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/payment_lifecycle_test.rs` | All four operations + routing branches. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests documenting window semantics. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-2.2.0/unit-1-update` | `src/resources/payments/update.rs` | `client.payments().update(id, params)`, description + metadata mutation, empty-string metadata unset | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-2.2.0/unit-2-capture` | `src/resources/payments/capture.rs` | `client.payments().capture(id, amount_opt)`, full/partial capture of authorized holds, status → captured | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-2.2.0/unit-3-void` | `src/resources/payments/void.rs` | `client.payments().void(id)`, 2-hour unsettled-window guard, status transitions (authorized/paid/captured → voided) | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-2.2.0/unit-4-refund` | `src/resources/payments/refund.rs` | `client.payments().refund(id, amount_opt)`, full refund (omit body) vs partial (amount in body), status → refunded | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-2.2.0/unit-5-smart-void-refund` | `src/resources/payments/smart_void.rs` | `VoidOrRefund` strategy: try void first if within ~2h, else refund; 14-day Mada capture/void window; unit tests for each transition | `engineering-rust-refactoring-specialist` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Strategy & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `ReversalStrategy`, `VOID_WINDOW_SECS`, `MADA_CAPTURE_WINDOW_DAYS`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-2.2.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
+- [ ] **Unit 1 (`feat/us-2.2.0/unit-1-update`)**: `client.payments().update(id, params)`, description + metadata mutation, empty-string metadata unset (Files: `src/resources/payments/update.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: update/capture/refund param structs.  
+- [ ] **Unit 2 (`feat/us-2.2.0/unit-2-capture`)**: `client.payments().capture(id, amount_opt)`, full/partial capture of authorized holds, status → captured (Files: `src/resources/payments/capture.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: window boundary at exactly 7200s.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Update)**: `PUT` with description/metadata mutation.  
+- [ ] **Unit 3 (`feat/us-2.2.0/unit-3-void`)**: `client.payments().void(id)`, 2-hour unsettled-window guard, status transitions (authorized/paid/captured → voided) (Files: `src/resources/payments/void.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Capture)**: full vs partial capture bodies.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Void)**: empty-body POST; status transitions.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.4 (Refund)**: body omission for full refund.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-2.2.0/unit-4-refund`)**: `client.payments().refund(id, amount_opt)`, full refund (omit body) vs partial (amount in body), status → refunded (Files: `src/resources/payments/refund.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-2.2.0/unit-5-smart-void-refund`)**: `VoidOrRefund` strategy: try void first if within ~2h, else refund; 14-day Mada capture/void window; unit tests for each transition (Files: `src/resources/payments/smart_void.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
-#### Phase 3: Routing & Edge Cases (PR 7–8)
-- [ ] **Task 3.1 (Smart Routing)**: void→refund fallback on settled payments.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Mada Window)**: 14-day hold-expiry awareness and warning.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: all operations and every routing branch.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on state machine correctness.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: doc-tests covering window semantics.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

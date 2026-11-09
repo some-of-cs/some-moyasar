@@ -1,7 +1,7 @@
 # US-2.3.0: Polymorphic Payment Sources — Card, Digital Wallets & Saved Tokens
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payments/behaviours/source-request-types/`  
+> **Behavior Blueprint**: `src/resources/payments/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -97,14 +97,16 @@ Feature: Polymorphic Payment Source Request Types
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payments/behaviours/source-request-types/
-├── services/        # SourceValidator dispatch by variant
-├── logic/           # Luhn, expiry, CVC-by-brand, mobile/IBAN helpers
-├── types/           # PaymentSourceRequest, PaymentSourceResponse, CardBrand, IssuerCardType
-└── constants/       # AMEX_PREFIXES, CVC_LEN_DEFAULT, CVC_LEN_AMEX
+src/
+├── src/resources/payments/source.rs           # Unit 1 (feat/us-2.3.0/unit-1-source-trait)
+├── src/resources/payments/source_card.rs      # Unit 2 (feat/us-2.3.0/unit-2-creditcard)
+├── src/resources/payments/source_digital_wallet.rs # Unit 3 (feat/us-2.3.0/unit-3-applepay-samsungpay)
+├── src/resources/payments/source_token.rs     # Unit 4 (feat/us-2.3.0/unit-4-token-source)
+├── src/resources/payments/card_validation.rs  # Unit 5 (feat/us-2.3.0/unit-5-card-validation)
+├── src/resources/payments/source_response.rs  # Unit 6 (feat/us-2.3.0/unit-6-source-response-models)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -124,28 +126,47 @@ features/core/modules/payments/behaviours/source-request-types/
 - **Flag Applicability Law**: `3ds`/`save_card`/`manual` exist only on variants that support them.
 
 ```rust
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum PaymentSourceRequest {
-    Creditcard(CreditCardSource),
-    Applepay(ApplePaySource),
-    Samsungpay(SamsungPaySource),
+    CreditCard(CreditCardSource),
+    ApplePay(ApplePaySource),
+    SamsungPay(SamsungPaySource),
     Token(TokenSource),
+    StcPay(StcPaySource),
+    SadadBill(SadadBillSource),
 }
 
+#[derive(Clone, Serialize)]
 pub struct CreditCardSource {
     pub name: String,
     pub number: String,          // never Debug-printed
     pub month: u8,
     pub year: u16,
     pub cvc: String,             // never Debug-printed
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub statement_descriptor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub manual: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub save_card: Option<bool>,
-    #[serde(rename = "3ds")]
+    #[serde(rename = "3ds", skip_serializing_if = "Option::is_none")]
     pub three_ds: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub card_auth_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub card_auth_data: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct TokenSource {
+    pub token: String,
+    #[serde(rename = "3ds", skip_serializing_if = "Option::is_none")]
+    pub three_ds: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manual: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cvc: Option<String>,
 }
 
 pub fn luhn_valid(number: &str) -> bool {
@@ -185,58 +206,42 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 6-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payments/source.rs` | `PaymentSourceRequest`/`Response` tagged enums. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payments/source_card.rs` | `CreditCardSource` with all documented fields. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payments/source_wallet.rs` | Apple Pay / Samsung Pay variants and serialization. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payments/source_token.rs` | `TokenSource` with optional 3ds/manual/cvc. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `InvalidCardNumber`, `CardExpired`, `InvalidCvc` variants. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payments/mod.rs` | Export source types under `payments`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payments/source_card.rs` | No `Debug` derive on PAN/CVC holders; borrowed validation. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payments/card_validation.rs` | Luhn, expiry boundary, CVC-by-brand. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/source_serde_test.rs` | Roundtrip serde for every variant + issuer metadata. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests per source variant. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-2.3.0/unit-1-source-trait` | `src/resources/payments/source.rs` | `PaymentSourceRequest` tagged enum + `PaymentSourceResponse` tagged enum stubs, `Serialize`/`Deserialize` with `tag = "type"` | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-2.3.0/unit-2-creditcard` | `src/resources/payments/source_card.rs` | `CreditCardSource`: name, number, month, year, cvc (3-4 digits), statement_descriptor, manual, save_card, 3ds, card_auth_id, card_auth_data | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-2.3.0/unit-3-applepay-samsungpay` | `src/resources/payments/source_digital_wallet.rs` | `ApplePaySource`: token/cryptogram, manual, save_card, statement_descriptor. `SamsungPaySource`: mirrors with sp subtype | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-2.3.0/unit-4-token-source` | `src/resources/payments/source_token.rs` | `TokenSource`: token string, optional 3ds/manual/cvc flags, SecretKey-based charging | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-2.3.0/unit-5-card-validation` | `src/resources/payments/card_validation.rs` | Luhn checksum, expiry date validation (month 1-12, year ≥ current), cvc length by brand (3 for most, 4 for AMEX) | `engineering-rust-refactoring-specialist` | `security-audit` |
+| **Unit 6** | `feat/us-2.3.0/unit-6-source-response-models` | `src/resources/payments/source_response.rs` | `PaymentSourceResponse` tagged enum, `CardSourceResponse`, `WalletSourceResponse`, `CardBrand`, plus roundtrip JSON serde unit tests | `testing-api-tester` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Tagged Union & Card Model (PR 1–2)
-- [ ] **Task 1.1 (Enum)**: `PaymentSourceRequest`/`PaymentSourceResponse` with `tag = "type"`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-2.3.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..6`)
+- [ ] **Unit 1 (`feat/us-2.3.0/unit-1-source-trait`)**: `PaymentSourceRequest` tagged enum + `PaymentSourceResponse` tagged enum stubs, `Serialize`/`Deserialize` with `tag = "type"` (Files: `src/resources/payments/source.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Card)**: `CreditCardSource` with all documented request fields.  
+- [ ] **Unit 2 (`feat/us-2.3.0/unit-2-creditcard`)**: `CreditCardSource`: name, number, month, year, cvc (3-4 digits), statement_descriptor, manual, save_card, 3ds, card_auth_id, card_auth_data (Files: `src/resources/payments/source_card.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: serde roundtrip for the card variant.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Wallets & Token (PR 3–6)
-- [ ] **Task 2.1 (Apple Pay)**: token/cryptogram, manual, save_card, statement_descriptor.  
+- [ ] **Unit 3 (`feat/us-2.3.0/unit-3-applepay-samsungpay`)**: `ApplePaySource`: token/cryptogram, manual, save_card, statement_descriptor. `SamsungPaySource`: mirrors with sp subtype (Files: `src/resources/payments/source_digital_wallet.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Samsung Pay)**: mirror structure with `sp` gateway subtype.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Token)**: `TokenSource` with optional 3ds/manual/cvc.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.4 (Errors)**: card validation error variants.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-2.3.0/unit-4-token-source`)**: `TokenSource`: token string, optional 3ds/manual/cvc flags, SecretKey-based charging (Files: `src/resources/payments/source_token.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-2.3.0/unit-5-card-validation`)**: Luhn checksum, expiry date validation (month 1-12, year ≥ current), cvc length by brand (3 for most, 4 for AMEX) (Files: `src/resources/payments/card_validation.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
+- [ ] **Unit 6 (`feat/us-2.3.0/unit-6-source-response-models`)**: `PaymentSourceResponse` tagged enum, `CardSourceResponse`, `WalletSourceResponse`, `CardBrand`, plus roundtrip JSON serde unit tests (Files: `src/resources/payments/source_response.rs`)  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
 
-#### Phase 3: Validation & Hardening (PR 7–8)
-- [ ] **Task 3.1 (Luhn)**: checksum implementation with table tests.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Expiry)**: month/year validation against current date.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.3 (CVC)**: brand-aware length (4 for AMEX, 3 otherwise).  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.4 (Redaction)**: no `Debug` on PAN/CVC holders.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Serde Tests)**: every variant roundtrip + issuer metadata fixture.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on validation completeness.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: doc-tests per variant.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 6` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

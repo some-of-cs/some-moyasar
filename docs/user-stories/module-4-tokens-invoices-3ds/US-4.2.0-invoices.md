@@ -1,7 +1,7 @@
 # US-4.2.0: Hosted E-Invoice Service — Create, Bulk, List, Update & Cancel
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/invoices/behaviours/hosted-e-invoices/`  
+> **Behavior Blueprint**: `src/resources/invoices/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -92,14 +92,15 @@ Feature: Hosted E-Invoice Lifecycle
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/invoices/behaviours/hosted-e-invoices/
-├── services/        # InvoicesService dispatchers
-├── logic/           # Query filters, SADAD expiry synchronization
-├── types/           # Invoice, InvoiceStatus, InvoiceId, CreateInvoiceParams, ListInvoicesParams
-└── constants/       # INVOICES_PATH, CANCEL_SUFFIX
+src/
+├── src/resources/invoices/models.rs           # Unit 1 (feat/us-4.2.0/unit-1-invoice-model)
+├── src/resources/invoices/create.rs           # Unit 2 (feat/us-4.2.0/unit-2-invoice-create)
+├── src/resources/invoices/retrieve_list.rs    # Unit 3 (feat/us-4.2.0/unit-3-invoice-retrieve-list)
+├── src/resources/invoices/update.rs           # Unit 4 (feat/us-4.2.0/unit-4-invoice-update)
+├── src/resources/invoices/cancel.rs           # Unit 5 (feat/us-4.2.0/unit-5-invoice-cancel)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -129,7 +130,7 @@ pub struct Invoice {
     pub url: String,                                  // hosted payment page
     pub expired_at: Option<DateTime<Utc>>,
     pub metadata: BTreeMap<String, String>,
-    pub payments: Option<Vec<serde_json::Value>>,
+    pub payments: Option<Vec<Payment>>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -169,52 +170,39 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 5-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/invoices/models.rs` | `Invoice`, `InvoiceStatus`, `InvoiceId`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/invoices/params.rs` | `CreateInvoiceParams`, `ListInvoicesParams`. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/invoices/create.rs` | `POST /v1/invoices` and `/bulk`. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/invoices/service.rs` | `client.invoices()` accessor. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | 404 and invalid-status error mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/invoices/mod.rs` | Feature-gated export under `invoices`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/invoices/models.rs` | Borrowed metadata; no bulk cloning. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/invoices/cancel.rs` | PUT-verb cancel + terminal-state guard. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/invoices_test.rs` | create/bulk/list/update/cancel wire tests. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests incl. the PUT cancel quirk. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-4.2.0/unit-1-invoice-model` | `src/resources/invoices/models.rs` | `Invoice` struct (id, amount, currency, description, callback_url, status, hosted payment url, expired_at, created_at, associated payments) | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-4.2.0/unit-2-invoice-create` | `src/resources/invoices/create.rs` | `CreateInvoiceParams`, `client.invoices().create()`, `client.invoices().create_bulk(Vec<CreateInvoiceParams>)` | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-4.2.0/unit-3-invoice-retrieve-list` | `src/resources/invoices/retrieve_list.rs` | `client.invoices().retrieve(id)`, `client.invoices().list(params)` with metadata/status/date filters, pagination | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-4.2.0/unit-4-invoice-update` | `src/resources/invoices/update.rs` | `UpdateInvoiceParams` (`description`, `metadata`), `client.invoices().update(id, params)` (`PUT /v1/invoices/:id`), unit tests | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-4.2.0/unit-5-invoice-cancel` | `src/resources/invoices/cancel.rs` | `client.invoices().cancel(id)` via `PUT /v1/invoices/:id/cancel`, SADAD bill expiry synchronization (`sync_sadad_expiry`), unit tests | `engineering-rust-refactoring-specialist` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `Invoice`, `InvoiceStatus`, `InvoiceId`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-4.2.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
+- [ ] **Unit 1 (`feat/us-4.2.0/unit-1-invoice-model`)**: `Invoice` struct (id, amount, currency, description, callback_url, status, hosted payment url, expired_at, created_at, associated payments) (Files: `src/resources/invoices/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: create/list params with all filters.  
+- [ ] **Unit 2 (`feat/us-4.2.0/unit-2-invoice-create`)**: `CreateInvoiceParams`, `client.invoices().create()`, `client.invoices().create_bulk(Vec<CreateInvoiceParams>)` (Files: `src/resources/invoices/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: deserialization with hosted `url`.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
+- [ ] **Unit 3 (`feat/us-4.2.0/unit-3-invoice-retrieve-list`)**: `client.invoices().retrieve(id)`, `client.invoices().list(params)` with metadata/status/date filters, pagination (Files: `src/resources/invoices/retrieve_list.rs`)  
+  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-4.2.0/unit-4-invoice-update`)**: `UpdateInvoiceParams` (`description`, `metadata`), `client.invoices().update(id, params)` (`PUT /v1/invoices/:id`), unit tests (Files: `src/resources/invoices/update.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-4.2.0/unit-5-invoice-cancel`)**: `client.invoices().cancel(id)` via `PUT /v1/invoices/:id/cancel`, SADAD bill expiry synchronization (`sync_sadad_expiry`), unit tests (Files: `src/resources/invoices/cancel.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Create/Bulk)**: POST single and bulk creation.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Retrieve/List)**: GET by id and filtered list.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Update)**: PUT description/metadata.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-
-#### Phase 3: Cancel & Edge Cases (PR 7–8)
-- [ ] **Task 3.1 (PUT Cancel)**: documented non-standard verb.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (SADAD Sync)**: bill expiry ≤ invoice expiry and ≤ 29 days.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: full endpoint matrix.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on verb correctness and immutability.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: doc-tests including the PUT quirk.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

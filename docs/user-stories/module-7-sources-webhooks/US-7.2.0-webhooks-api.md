@@ -1,7 +1,7 @@
-# US-7.2.0: Webhooks API — CRUD for Merchant Webhook Endpoints
+# US-7.2.0: Webhooks Management API — Endpoint CRUD, Available Events & Delivery Attempts
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/webhooks/behaviours/webhook-endpoints-api/`  
+> **Behavior Blueprint**: `src/resources/webhooks_api/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -11,131 +11,150 @@
 ## 1. Spec Kit Specification
 
 ### 1.1 User Story Narrative
-**As a** merchant operating webhook-driven order fulfilment,  
-**I want to** register, list, update and delete webhook endpoints through `client.webhooks()` — including the `shared_secret` shown only at creation,  
-**So that** each environment (staging/production) has its own endpoint, secrets rotate safely, and I never store a secret the API will not return again.
+**As a** merchant operating webhook-driven order fulfillment,  
+**I want to** register, list, retrieve, and delete webhook endpoints (`POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/:id`, `DELETE /v1/webhooks/:id`), query canonical `available_events` (`GET /v1/webhooks/available_events`), and inspect delivery attempts (`GET /v1/webhooks/attempts`, `GET /v1/webhooks/attempts/:id`) through `client.webhooks()`,  
+**So that** I can programmatically configure HTTPS webhook listeners with a caller-supplied `shared_secret` and optional `events` filter, and diagnose failed callback deliveries.
 
 #### 1.1.1 Preconditions
-- `features = ["webhooks"]`; valid `SecretKey`.
-- An HTTPS endpoint that can accept POST callbacks.
+- `features = ["webhooks-api"]` (implies `core`, `webhook-engine`).
+- A valid `SecretKey`.
+- An HTTPS callback URL and a high-entropy `shared_secret`.
 
 #### 1.1.2 Postconditions
-- `create()` returns a `Webhook` including `shared_secret` (returned **only** on creation, per Moyasar docs).
-- `list()` returns all registered endpoints with `id`, `url`, `http_method`, `username`, `created_at`.
-- `update(id, params)` modifies url/username/password.
-- `delete(id)` returns success; subsequent `retrieve` yields 404.
+- `create(params)` sends `POST /v1/webhooks` with `http_method: "post"`, `url` (`https://`), `shared_secret`, and `events: Option<Vec<WebhookEventType>>` (omitting `events` creates a global listener) and returns `WebhookEndpoint`.
+- `list()` and `retrieve(id)` return registered `WebhookEndpoint` configurations.
+- `delete(id)` deletes the endpoint (`DELETE /v1/webhooks/:id`).
+- `available_events()` calls `GET /v1/webhooks/available_events` returning `Vec<WebhookEventType>`.
+- `list_attempts(params)` and `retrieve_attempt(id)` return `PaginatedList<WebhookAttempt>` and `WebhookAttempt`.
 
 ### 1.2 Acceptance Criteria (Gherkin Scenarios)
 
 ```gherkin
-Feature: Webhook Endpoint Management
+Feature: Webhooks Management API
 
-  Scenario: [AC-US-7.2.0-01] Create a webhook endpoint
-    Given a CreateWebhookParams with an https url and http_method POST
+  Scenario: [AC-US-7.2.0-01] Register a webhook endpoint with events filter and shared_secret
+    Given a CreateWebhookParams with an https url, shared_secret and events [PaymentPaid, PaymentFailed]
     When client.webhooks().create(params) is called
-    Then the response Webhook contains an id
-    And the response contains a shared_secret that is never returned by later calls.
+    Then the API receives POST /v1/webhooks with http_method "post", url, shared_secret and events
+    And returns a WebhookEndpoint with a UUID id.
 
-  Scenario: [AC-US-7.2.0-02] List all endpoints
-    Given two registered endpoints
-    When client.webhooks().list() is called
-    Then the response contains both endpoints
-    And no shared_secret appears in any list entry.
+  Scenario: [AC-US-7.2.0-02] Register a global listener by omitting events
+    Given a CreateWebhookParams with events None
+    When client.webhooks().create(params) is called
+    Then no "events" field is emitted in the JSON body
+    And the endpoint subscribes to all current and future webhook events.
 
-  Scenario: [AC-US-7.2.0-03] Update an endpoint url
-    Given a registered webhook
-    When client.webhooks().update(id, params) is called with a new url
-    Then the returned Webhook.url reflects the change
-    And the shared_secret is unchanged and still not returned.
+  Scenario: [AC-US-7.2.0-03] List, retrieve, and delete webhook endpoints
+    Given a registered webhook id
+    When client.webhooks().list(), .retrieve(id), and .delete(id) are called
+    Then list and retrieve return the matching WebhookEndpoint
+    And delete removes the endpoint so a subsequent retrieve returns 404 RecordNotFound.
 
-  Scenario: [AC-US-7.2.0-04] Delete an endpoint
-    Given a registered webhook
-    When client.webhooks().delete(id) is called
-    Then the API returns success
-    And a follow-up retrieve of the same id fails with 404.
+  Scenario: [AC-US-7.2.0-04] Query available webhook events and delivery attempts
+    Given webhook activity on the merchant account
+    When client.webhooks().available_events(), .list_attempts(params), and .retrieve_attempt(id) are called
+    Then available_events deserializes the 11 canonical event types (including payment_failed / payment_faild)
+    And list_attempts and retrieve_attempt return WebhookAttempt diagnostic records.
 
-  Scenario: [AC-US-7.2.0-05] Non-HTTPS endpoints are rejected
+  Scenario: [AC-US-7.2.0-05] Non-HTTPS webhook URLs are rejected client-side
     Given a CreateWebhookParams whose url uses http://
-    When create is attempted
-    Then a typed InvalidWebhookUrl error is returned
-    And no request is sent.
+    When client.webhooks().create(params) is called
+    Then Err(MoyasarError::InvalidWebhookUrl) is returned with zero network calls.
 
   Scenario: [AC-US-7.2.0-LAW] SAMA confidentiality of webhook shared secrets
-    Given a webhook shared_secret
-    When it is handled by the SDK
-    Then it is never logged, never included in Debug output, and never persisted by the SDK,
-         satisfying SAMA confidentiality requirements for shared authentication material.
+    Given a WebhookSecret inside CreateWebhookParams or WebhookEndpoint
+    When formatted via Debug
+    Then the secret is printed as "[REDACTED]" and never exposed in logs,
+         satisfying SAMA confidentiality requirements for authentication material.
 ```
 
 ### 1.3 Test Cases & Traceability Matrix
 
 | Test Case ID | Target Criterion | Test Type | Execution Level | Verification Assertion & Pass Criteria |
 | :--- | :--- | :--- | :--- | :--- |
-| `TC-7.2.0-01` | `AC-US-7.2.0-01` | Functional | Integration | id present; `shared_secret` present on create only. |
-| `TC-7.2.0-02` | `AC-US-7.2.0-02` | Functional | Unit | List fixture has no `shared_secret`. |
-| `TC-7.2.0-03` | `AC-US-7.2.0-03` | Functional | Integration | url updated; secret absent. |
-| `TC-7.2.0-04` | `AC-US-7.2.0-04` | Functional | Integration | delete succeeds; retrieve 404s. |
-| `TC-7.2.0-05` | `AC-US-7.2.0-05` | Security | Unit | `http://` rejected with zero network calls. |
-| `TC-7.2.0-LAW` | `AC-US-7.2.0-LAW` | Security | Unit / SAST | Secret absent from `Debug` and logs. |
+| `TC-7.2.0-01` | `AC-US-7.2.0-01` | Functional | Integration | `POST /v1/webhooks` body includes `shared_secret` and `events`. |
+| `TC-7.2.0-02` | `AC-US-7.2.0-02` | Functional | Unit | Omitting `events` omits `"events"` key from serialized JSON. |
+| `TC-7.2.0-03` | `AC-US-7.2.0-03` | Functional | Integration | `list`, `retrieve`, and `delete` round-trip cleanly. |
+| `TC-7.2.0-04` | `AC-US-7.2.0-04` | Functional | Integration | `available_events`, `list_attempts`, and `retrieve_attempt` deserialize. |
+| `TC-7.2.0-05` | `AC-US-7.2.0-05` | Security | Unit | `http://` URL rejected with `InvalidWebhookUrl` and zero network calls. |
+| `TC-7.2.0-LAW` | `AC-US-7.2.0-LAW` | Security | Unit / SAST | `WebhookSecret` redacts value in `Debug`. |
 
 ---
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/webhooks/behaviours/webhook-endpoints-api/
-├── services/        # WebhooksService create/list/update/delete
-├── logic/           # HTTPS enforcement, secret redaction
-├── types/           # Webhook, WebhookId, WebhookSecret, Create/UpdateWebhookParams
-└── constants/       # WEBHOOKS_PATH
+src/
+├── src/resources/webhooks_api/models.rs       # Unit 1 (feat/us-7.2.0/unit-1-webhook-model)
+├── src/resources/webhooks_api/crud.rs         # Unit 2 (feat/us-7.2.0/unit-2-webhook-create-list)
+├── src/resources/webhooks_api/events.rs       # Unit 3 (feat/us-7.2.0/unit-3-available-events)
+├── src/resources/webhooks_api/attempts.rs     # Unit 4 (feat/us-7.2.0/unit-4-delivery-attempts)
+├── src/resources/webhooks_api/retrieve_delete.rs # Unit 5 (feat/us-7.2.0/unit-5-webhook-retrieve-delete)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
-- **Tier 1 (Behaviour-Local)**: HTTPS validator.
-- **Tier 2 (Module-Shared)**: `WebhookSecret` referenced by the verification engine (US-7.3.0).
-- **Tier 3 (Feature-Shared)**: `WebhooksService` under `webhooks`.
-- **Tier 4 (Global-Shared)**: `client.webhooks()` facade.
+- **Tier 1 (Behaviour-Local)**: `validate_https_url` pre-transport check.
+- **Tier 2 (Module-Shared)**: Re-exports `WebhookEventType` from `webhook_engine` (US-7.3.0).
+- **Tier 3 (Feature-Shared)**: `WebhooksService` under `webhooks-api`.
+- **Tier 4 (Global-Shared)**: `client.webhooks()` facade accessor.
 
 ---
 
 ## 3. Technical Implementation Plan
 
 ### 3.1 Domain Invariants & Storage Schema
-- **One-Time Secret Law**: `shared_secret` appears only in the create response.
-- **HTTPS Law**: endpoint URLs must use `https://`.
-- **Redaction Law**: `WebhookSecret` has a manual `Debug` that emits `[REDACTED]`.
-- **Deletion Law**: delete is terminal; retrieve afterwards returns 404.
+- **HTTPS Law**: webhook callback URLs must start with `https://`.
+- **Global Listener Law**: `events: None` must be omitted via `#[serde(skip_serializing_if = "Option::is_none")]`.
+- **Redaction Law**: `WebhookSecret` implements a manual `fmt::Debug` that emits `"[REDACTED]"`.
 
 ```rust
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct WebhookSecret(String);
 
 impl WebhookSecret {
+    pub fn new(raw: impl Into<String>) -> Self { Self(raw.into()) }
     pub fn expose(&self) -> &str { &self.0 }
 }
 
-impl fmt::Debug for WebhookSecret {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Debug for WebhookSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("[REDACTED]")
     }
 }
 
-/// Creation response: the only shape that carries the secret.
-#[derive(Debug, Clone, Deserialize)]
-pub struct WebhookCreated {
-    pub id: WebhookId,
+#[derive(Debug, Clone, Serialize)]
+pub struct CreateWebhookParams {
+    pub http_method: String,
     pub url: String,
     pub shared_secret: WebhookSecret,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub events: Option<Vec<WebhookEventType>>,
 }
 
-/// All later responses omit the secret entirely.
 #[derive(Debug, Clone, Deserialize)]
-pub struct Webhook {
-    pub id: WebhookId,
+pub struct WebhookEndpoint {
+    pub id: Uuid,
+    pub http_method: String,
     pub url: String,
-    pub http_method: HttpMethod,
-    pub username: Option<String>,
+    pub shared_secret: Option<WebhookSecret>,
+    pub events: Option<Vec<WebhookEventType>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WebhookAttempt {
+    pub id: Uuid,
+    pub webhook_id: Option<Uuid>,
+    pub event_id: Uuid,
+    pub event_type: Option<WebhookEventType>,
+    pub response_code: Option<u16>,
+    pub response_headers: Option<serde_json::Value>,
+    pub response_body: Option<String>,
+    pub succeeded: Option<bool>,
+    pub message: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -154,13 +173,17 @@ sequenceDiagram
     participant API as api.moyasar.com
 
     Merchant->>Svc: webhooks().create(params)
-    Svc->>Svc: validate_https_url(url)
-    Svc->>API: POST /v1/webhooks
-    API-->>Svc: WebhookCreated { id, shared_secret }
-    Note over Merchant: store the secret now — it is never returned again
-    Merchant->>Svc: webhooks().list()
-    API-->>Svc: [Webhook] (no secrets)
+    Svc->>Svc: validate_https_url(&params.url)
+    Svc->>API: POST /v1/webhooks { http_method: "post", url, shared_secret, events }
+    API-->>Svc: 201 WebhookEndpoint
+    Merchant->>Svc: webhooks().available_events()
+    Svc->>API: GET /v1/webhooks/available_events
+    API-->>Svc: Vec<WebhookEventType>
+    Merchant->>Svc: webhooks().list_attempts(params)
+    Svc->>API: GET /v1/webhooks/attempts
+    API-->>Svc: PaginatedList<WebhookAttempt>
     Merchant->>Svc: webhooks().delete(id)
+    Svc->>API: DELETE /v1/webhooks/:id
     API-->>Svc: 200 OK
 ```
 
@@ -168,48 +191,39 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 5-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/webhooks/models.rs` | `Webhook`, `WebhookCreated`, `WebhookSecret`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/webhooks/params.rs` | Create/Update params. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/webhooks/crud.rs` | create/list/update/delete. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/webhooks/service.rs` | `client.webhooks()` accessor. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `InvalidWebhookUrl`, 404 mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/webhooks/mod.rs` | Feature-gated export under `webhooks`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/webhooks/models.rs` | `WebhookSecret` newtype with manual `Debug`. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/webhooks/validate.rs` | HTTPS guard; post-delete 404. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/webhooks_test.rs` | Full CRUD lifecycle. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests incl. one-time secret warning. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-7.2.0/unit-1-webhook-model` | `src/resources/webhooks_api/models.rs` | `WebhookEndpoint` struct (id, http_method, url, shared_secret, events), `WebhookAttempt` struct (id, event_id, status_code, response_body, created_at) | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-7.2.0/unit-2-webhook-create-list` | `src/resources/webhooks_api/crud.rs` | `CreateWebhookParams` (with `validate_https_url`), `client.webhooks().create()` (`POST /v1/webhooks` with `http_method`, `url`, `shared_secret`, `events`), `.list()`, unit tests | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-7.2.0/unit-3-available-events` | `src/resources/webhooks_api/events.rs` | `client.webhooks().available_events()` (`GET /v1/webhooks/available_events`), re-exporting `WebhookEventType` (all 11 variants) from `webhook_engine` | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-7.2.0/unit-4-delivery-attempts` | `src/resources/webhooks_api/attempts.rs` | `ListWebhookAttemptsParams`, `client.webhooks().list_attempts(params)`, `client.webhooks().retrieve_attempt(id)`, delivery attempt diagnostics | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-7.2.0/unit-5-webhook-retrieve-delete` | `src/resources/webhooks_api/retrieve_delete.rs` | `client.webhooks().retrieve(id)` (`GET /v1/webhooks/:id`) and `client.webhooks().delete(id)` (`DELETE /v1/webhooks/:id`), unit tests | `engineering-rust-refactoring-specialist` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `Webhook` vs `WebhookCreated` split.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-7.2.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
+- [ ] **Unit 1 (`feat/us-7.2.0/unit-1-webhook-model`)**: `WebhookEndpoint` struct (id, http_method, url, shared_secret, events), `WebhookAttempt` struct (id, event_id, status_code, response_body, created_at) (Files: `src/resources/webhooks_api/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Secret)**: `WebhookSecret` with redacting `Debug`.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
-
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (CRUD)**: create/list/update/delete.  
+- [ ] **Unit 2 (`feat/us-7.2.0/unit-2-webhook-create-list`)**: `CreateWebhookParams` (with `validate_https_url`), `client.webhooks().create()` (`POST /v1/webhooks` with `http_method`, `url`, `shared_secret`, `events`), `.list()`, unit tests (Files: `src/resources/webhooks_api/crud.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Errors)**: `InvalidWebhookUrl`, 404.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 3 (`feat/us-7.2.0/unit-3-available-events`)**: `client.webhooks().available_events()` (`GET /v1/webhooks/available_events`), re-exporting `WebhookEventType` (all 11 variants) from `webhook_engine` (Files: `src/resources/webhooks_api/events.rs`)  
+  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-7.2.0/unit-4-delivery-attempts`)**: `ListWebhookAttemptsParams`, `client.webhooks().list_attempts(params)`, `client.webhooks().retrieve_attempt(id)`, delivery attempt diagnostics (Files: `src/resources/webhooks_api/attempts.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-7.2.0/unit-5-webhook-retrieve-delete`)**: `client.webhooks().retrieve(id)` (`GET /v1/webhooks/:id`) and `client.webhooks().delete(id)` (`DELETE /v1/webhooks/:id`), unit tests (Files: `src/resources/webhooks_api/retrieve_delete.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
-#### Phase 3: Guards (PR 7–8)
-- [ ] **Task 3.1 (HTTPS)**: reject `http://` pre-transport.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (One-Time Secret)**: type split prevents accidental secret reliance.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: full lifecycle.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on secret handling.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: one-time secret warning in docs.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 
@@ -217,35 +231,31 @@ sequenceDiagram
 
 ### 5.1 Trust Boundaries & Security Actors
 - **Trust Boundaries**:
-  - `Callback Boundary`: merchant endpoints receive signed payloads.
-  - `Secret Boundary`: `shared_secret` authenticates callbacks.
-- **Authorized Principals**: merchant backend (`sk_`).
+  - `Callback Boundary`: merchant endpoints receive asynchronous payment notifications.
+  - `Secret Boundary`: `shared_secret` authenticates webhook payloads.
+- **Authorized Principals**: merchant backend (`sk_` only).
 
 ### 5.2 Threat Modeling & Abuse Matrix (STRIDE / ASVS)
 
 | Threat Vector | Severity | Vulnerability Mechanism | Mitigating Control & Security Invariant |
 | :--- | :--- | :--- | :--- |
-| **Secret Leakage** | Critical | Secret logged or re-fetched | One-time-only response type; redacting `Debug`. |
-| **Plaintext Callbacks** | Critical | `http://` endpoint receiving financial events | HTTPS-only validation before transport. |
-| **Endpoint Hijack** | High | Attacker repointing the webhook url | Update requires `sk_`; server-side ownership. |
-| **Secret Rotation Gap** | High | No rotation path | Recreate the endpoint to rotate; documented. |
-| **Deleted Endpoint Still Receiving** | Medium | Stale registration after delete | Delete is terminal; server stops delivery. |
+| **Secret Leakage** | Critical | `shared_secret` printed in `Debug` logs | `WebhookSecret` implements custom `Debug` printing `"[REDACTED]"`. |
+| **Plaintext Callbacks** | Critical | `http://` endpoint receiving financial events | `validate_https_url` rejects non-HTTPS URLs before transport. |
+| **Endpoint Hijack** | High | Unauthorized webhook registration | All `/v1/webhooks` routes require `SecretKey` (`sk_`). |
 
 ### 5.3 Cryptographic & Data Protection Controls
-- **One-Time Secret**: typed separation between create and read responses.
-- **HTTPS Enforcement**: pre-transport validation.
-- **Redacted Debug**: no accidental log exposure.
+- **HTTPS Enforcement**: pre-transport validation on callback URLs.
+- **Redacted Debug**: `WebhookSecret` never prints secret material.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Secret Test**: absent from `Debug` and list responses.
-- [ ] **HTTPS Test**: `http://` rejected with zero calls.
-- [ ] **Delete Test**: retrieve after delete returns 404.
-- [ ] **Rotation Test**: recreate yields a new secret.
+- [ ] **Secret Test**: `format!("{:?}", secret)` prints `"[REDACTED]"`.
+- [ ] **HTTPS Test**: `http://` rejected with zero network calls.
+- [ ] **Delete Test**: `retrieve(id)` after `delete(id)` returns 404.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Webhook secret handling verified against OWASP ASVS Level 2.
+- [ ] Webhook management verified against OWASP ASVS Level 2.
 - [ ] HTTPS-only enforced.
-- [ ] Zero secret leakage.
+- [ ] Zero secret leakage in `Debug` output.
 - [ ] Independent reviewer sign-off; zero open findings.
 
 ---
@@ -258,28 +268,28 @@ sequenceDiagram
 - [ ] **US-7.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-7.2.0-G1:** ≥90% line / ≥85% branch on the webhooks API module.
+- [ ] **US-7.2.0-G1:** ≥90% line / ≥85% branch on `webhooks_api`.
 
 ### G2 — Security audit
 - [ ] **US-7.2.0-G2:** Secret-handling audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-7.2.0-G3:** API module independent of the verification engine.
+- [ ] **US-7.2.0-G3:** `webhooks-api` re-uses `WebhookEventType` from `webhook-engine` without duplicate definitions.
 
 ### G-Review — Code review
-- [ ] **US-7.2.0-G-Review:** Peer review on the create/read type split.
+- [ ] **US-7.2.0-G-Review:** Peer review on all 7 endpoints and `WebhookSecret` redaction.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-7.2.0-G-Borrow:** `WebhookSecret::expose()` returns `&str` without allocation.
+- [ ] **US-7.2.0-G-Borrow:** `WebhookSecret::expose()` returns `&str` with zero allocation.
 
 ### G-Complexity — Cyclomatic complexity
 - [ ] **US-7.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-7.2.0-G-Docs:** 100% public symbols documented; one-time secret emphasized.
+- [ ] **US-7.2.0-G-Docs:** 100% public symbols documented; CRUD and attempts examples runnable.
 
 ### G-Law — Law validation
 - [ ] **US-7.2.0-G-Law:** SAMA confidentiality of shared authentication material certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-7.2.0-G4:** Full CRUD lifecycle verified against the mock server.
+- [ ] **US-7.2.0-G4:** All 7 `/v1/webhooks` endpoints verified against the mock server.

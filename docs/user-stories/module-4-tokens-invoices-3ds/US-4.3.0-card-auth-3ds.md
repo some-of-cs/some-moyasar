@@ -1,7 +1,7 @@
 # US-4.3.0: Standalone 3D Secure Card Authentication & MPI Result Extraction
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/card-auths/behaviours/standalone-3ds/`  
+> **Behavior Blueprint**: `src/resources/card_auths/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -83,14 +83,13 @@ Feature: Standalone 3D Secure Card Authentication
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/card-auths/behaviours/standalone-3ds/
-├── services/        # CardAuthsService create/retrieve
-├── logic/           # MPI result normalization, frictionless detection
-├── types/           # CardAuthentication, CardAuthStatus, CardAuthResult, CardAuthId
-└── constants/       # CARD_AUTHS_PATH, CARD_AUTH_ID_PREFIX ("ca_")
+src/
+├── src/resources/card_auths/models.rs         # Unit 1 (feat/us-4.3.0/unit-1-card-auth-model)
+├── src/resources/card_auths/create.rs         # Unit 2 (feat/us-4.3.0/unit-2-card-auth-create)
+├── src/resources/card_auths/retrieve.rs       # Unit 3 (feat/us-4.3.0/unit-3-card-auth-retrieve)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -118,10 +117,9 @@ pub struct CardAuthentication {
     pub result: Option<CardAuthResult>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct CardAuthResult {
     pub eci: Option<String>,
-    #[serde(skip)]                              // never logged
     pub authentication_value: Option<String>,
     pub ds_transaction_id: Option<String>,
     pub version: Option<String>,
@@ -130,11 +128,31 @@ pub struct CardAuthResult {
     pub is_frictionless: Option<bool>,
 }
 
+impl std::fmt::Debug for CardAuthResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CardAuthResult")
+            .field("eci", &self.eci)
+            .field("authentication_value", &self.authentication_value.as_ref().map(|_| "[REDACTED]"))
+            .field("ds_transaction_id", &self.ds_transaction_id)
+            .field("version", &self.version)
+            .field("transaction_status", &self.transaction_status)
+            .field("auth_scheme", &self.auth_scheme)
+            .field("is_frictionless", &self.is_frictionless)
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum CardAuthStatus { Authenticated, Failed, #[serde(other)] Unknown }
+pub enum CardAuthStatus { Initiated, Authenticated, Failed, #[serde(other)] Unknown }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct CardAuthId(String);
+
+impl std::fmt::Display for CardAuthId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
+}
 
 impl CardAuthId {
     pub fn new(raw: impl Into<String>) -> Result<Self, MoyasarError> {
@@ -169,52 +187,33 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 3-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/card_auths/models.rs` | `CardAuthentication`, `CardAuthStatus`, `CardAuthResult`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/card_auths/params.rs` | `CreateCardAuthParams` with card details. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/card_auths/create.rs` | `POST /v1/card_auths`. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/card_auths/service.rs` | `client.card_auths()` accessor. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `InvalidCardAuthId`, authentication-failed mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/card_auths/mod.rs` | Feature-gated export under `card-auth`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/card_auths/models.rs` | `CardAuthId` newtype; no result cloning. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/card_auths/retrieve.rs` | Failed-auth path; single-use id guard. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/card_auths_test.rs` | create→retrieve→charge-with-auth-id round-trip. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests for both `card_auth_id` and `card_auth_data`. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-4.3.0/unit-1-card-auth-model` | `src/resources/card_auths/models.rs` | `CardAuthentication` struct (id: "ca_...", status: authenticated/failed, transaction_url, result fields) | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-4.3.0/unit-2-card-auth-create` | `src/resources/card_auths/create.rs` | `CreateCardAuthParams`: amount, currency, callback_url, card details. `client.card_auths().create()` | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-4.3.0/unit-3-card-auth-retrieve` | `src/resources/card_auths/retrieve.rs` | `client.card_auths().retrieve(id)`, MPI result extraction (`eci`, `authentication_value`, `ds_transaction_id`), `card_auth_id`/`card_auth_data` bridging to Payment create, unit tests | `engineering-backend-architect` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `CardAuthentication`, `CardAuthResult`, `CardAuthStatus`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-4.3.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
+- [ ] **Unit 1 (`feat/us-4.3.0/unit-1-card-auth-model`)**: `CardAuthentication` struct (id: "ca_...", status: authenticated/failed, transaction_url, result fields) (Files: `src/resources/card_auths/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: `CreateCardAuthParams` with card fields.  
+- [ ] **Unit 2 (`feat/us-4.3.0/unit-2-card-auth-create`)**: `CreateCardAuthParams`: amount, currency, callback_url, card details. `client.card_auths().create()` (Files: `src/resources/card_auths/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: MPI result fixture deserialization.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Create)**: `POST /v1/card_auths`.  
+- [ ] **Unit 3 (`feat/us-4.3.0/unit-3-card-auth-retrieve`)**: `client.card_auths().retrieve(id)`, MPI result extraction (`eci`, `authentication_value`, `ds_transaction_id`), `card_auth_id`/`card_auth_data` bridging to Payment create, unit tests (Files: `src/resources/card_auths/retrieve.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Retrieve)**: `GET /v1/card_auths/:id`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Errors)**: invalid id and failed-auth mapping.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
 
-#### Phase 3: Bridging & Guards (PR 7–8)
-- [ ] **Task 3.1 (card_auth_id)**: wire `ca_...` into payment source.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (card_auth_data)**: forward external MPI JSON verbatim.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: full authenticate→charge cycle.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on CAVV handling.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: both bridge paths documented.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

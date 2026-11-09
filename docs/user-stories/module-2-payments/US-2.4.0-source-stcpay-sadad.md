@@ -1,7 +1,7 @@
 # US-2.4.0: STC Pay OTP Flow & SADAD Bill Sources
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payments/behaviours/source-stcpay-sadad/`  
+> **Behavior Blueprint**: `src/resources/payments/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -91,14 +91,14 @@ Feature: STC Pay and SADAD Bill Payment Sources
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payments/behaviours/source-stcpay-sadad/
-├── services/        # StcPayOtpCompleter, SadadBillCreator
-├── logic/           # Mobile normalization, SADAD expiry capping
-├── types/           # StcPaySource, SadadBillSource, StcPayResponse, SadadBillResponse
-└── constants/       # SADAD_MAX_EXPIRY_DAYS (29), STC_PAY_PATH
+src/
+├── src/resources/payments/source_stcpay.rs    # Unit 1 (feat/us-2.4.0/unit-1-stcpay-source)
+├── src/resources/payments/stcpay_otp.rs       # Unit 2 (feat/us-2.4.0/unit-2-stcpay-otp)
+├── src/resources/payments/source_sadad.rs     # Unit 3 (feat/us-2.4.0/unit-3-sadad-source)
+├── src/resources/payments/sadad_expiry.rs     # Unit 4 (feat/us-2.4.0/unit-4-sadad-expiry-guard)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -131,8 +131,22 @@ impl StcPaySource {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
 pub struct SadadBillSource {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expired_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub biller_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SadadBillSourceResponse {
+    pub provider_name: Option<String>,
+    pub biller_code: String,
+    pub sadad_number: String,
+    pub gateway_id: Option<String>,
+    pub expired_at: Option<DateTime<Utc>>,
+    pub message: Option<String>,
 }
 
 impl SadadBillSource {
@@ -171,52 +185,36 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 4-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payments/source_stcpay.rs` | `StcPaySource`, mobile normalization. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payments/source_sadad.rs` | `SadadBillSource`, expiry validation. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payments/stcpay_otp.rs` | `verify_stc_otp` posting to `transaction_url`. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payments/service.rs` | `verify_stc_otp` on `PaymentsService`. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `InvalidMobile`, `SadadExpiryTooFar` variants. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payments/mod.rs` | Export both source variants. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payments/source_stcpay.rs` | Normalization without intermediate allocations. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payments/source_sadad.rs` | 29-day cap, invoice-expiry interaction. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/stcpay_sadad_test.rs` | Sandbox numbers 0515555555/58/59, biller 007. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests for OTP flow and SADAD creation. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-2.4.0/unit-1-stcpay-source` | `src/resources/payments/source_stcpay.rs` | `StcPaySource`: mobile (+966/05/00966 formats), cashier, branch. Mobile validation via regex | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-2.4.0/unit-2-stcpay-otp` | `src/resources/payments/stcpay_otp.rs` | `client.payments().verify_stc_otp(url, otp)`, POST to `transaction_url`, otp_value injection, status: initiated → paid/failed | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-2.4.0/unit-3-sadad-source` | `src/resources/payments/source_sadad.rs` | `SadadBillSource` request (`expired_at`, optional sandbox `biller_code`) and `SadadBillSourceResponse` (`biller_code` 901/902/007, `sadad_number`, `provider_name`) | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-2.4.0/unit-4-sadad-expiry-guard` | `src/resources/payments/sadad_expiry.rs` | SADAD 29-day maximum expiry validator, invoice-expiry cap helper, and sandbox unit tests (STC Pay 0515555555/58/59, SADAD biller 007) | `security-appsec-engineer` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Source Models (PR 1–2)
-- [ ] **Task 1.1 (STC Pay)**: `StcPaySource` with three accepted mobile formats.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-2.4.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
+- [ ] **Unit 1 (`feat/us-2.4.0/unit-1-stcpay-source`)**: `StcPaySource`: mobile (+966/05/00966 formats), cashier, branch. Mobile validation via regex (Files: `src/resources/payments/source_stcpay.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (SADAD)**: `SadadBillSource` with optional `expired_at`.  
+- [ ] **Unit 2 (`feat/us-2.4.0/unit-2-stcpay-otp`)**: `client.payments().verify_stc_otp(url, otp)`, POST to `transaction_url`, otp_value injection, status: initiated → paid/failed (Files: `src/resources/payments/stcpay_otp.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: mobile normalization table; expiry boundary tests.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: OTP & Endpoints (PR 3–6)
-- [ ] **Task 2.1 (OTP)**: `verify_stc_otp(url, otp)` posting `otp_value`.  
+- [ ] **Unit 3 (`feat/us-2.4.0/unit-3-sadad-source`)**: `SadadBillSource` request (`expired_at`, optional sandbox `biller_code`) and `SadadBillSourceResponse` (`biller_code` 901/902/007, `sadad_number`, `provider_name`) (Files: `src/resources/payments/source_sadad.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Errors)**: `InvalidMobile`, `SadadExpiryTooFar`.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Exports)**: feature-gated module wiring.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-2.4.0/unit-4-sadad-expiry-guard`)**: SADAD 29-day maximum expiry validator, invoice-expiry cap helper, and sandbox unit tests (STC Pay 0515555555/58/59, SADAD biller 007) (Files: `src/resources/payments/sadad_expiry.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
-#### Phase 3: Edge Cases (PR 7–8)
-- [ ] **Task 3.1 (Expiry Cap)**: reject > 29 days; respect invoice expiry.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Biller Codes)**: accept 901/902/007; reject others.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Sandbox Tests)**: STC Pay sandbox numbers and SADAD biller 007.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on OTP flow and expiry logic.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: doc-tests for both flows.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

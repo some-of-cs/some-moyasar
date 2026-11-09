@@ -1,7 +1,7 @@
 # US-2.1.0: Payment Creation, Retrieval & Filtered Listing
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payments/behaviours/payment-crud/`  
+> **Behavior Blueprint**: `src/resources/payments/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -82,14 +82,15 @@ Feature: Payment Creation, Retrieval and Listing
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payments/behaviours/payment-crud/
-├── services/        # PaymentsService accessor, create/retrieve/list dispatchers
-├── logic/           # CreatePaymentParams builder, ListParams query serialization
-├── types/           # Payment, PaymentStatus, PaymentId, CreatePaymentParams, ListParams
-└── constants/       # PAYMENTS_PATH, DEFAULT_PAGE_SIZE
+src/
+├── src/resources/payments/models.rs           # Unit 1 (feat/us-2.1.0/unit-1-payment-model)
+├── src/resources/payments/params.rs           # Unit 2 (feat/us-2.1.0/unit-2-create-params)
+├── src/resources/payments/create.rs           # Unit 3 (feat/us-2.1.0/unit-3-create-endpoint)
+├── src/resources/payments/retrieve.rs         # Unit 4 (feat/us-2.1.0/unit-4-retrieve-endpoint)
+├── src/resources/payments/list.rs             # Unit 5 (feat/us-2.1.0/unit-5-list-endpoint)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -109,7 +110,11 @@ features/core/modules/payments/behaviours/payment-crud/
 - **Bracket Notation Law**: metadata query filters use `metadata[key]=value`.
 
 ```rust
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PaymentId(pub Uuid);
+
+#[derive(Clone, Deserialize)]
 pub struct Payment {
     pub id: Uuid,
     pub status: PaymentStatus,
@@ -124,16 +129,43 @@ pub struct Payment {
     pub currency: Currency,
     pub description: Option<String>,
     pub source: PaymentSourceResponse,
+    #[serde(default)]
     pub metadata: BTreeMap<String, String>,
+    pub splits: Option<Vec<PaymentSplitResponse>>,
     pub callback_url: Option<String>,
+    pub invoice_id: Option<Uuid>,
+    pub ip: Option<String>,
+    pub captured_at: Option<DateTime<Utc>>,
+    pub refunded_at: Option<DateTime<Utc>>,
+    pub voided_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+impl std::fmt::Debug for Payment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Payment")
+            .field("id", &self.id)
+            .field("status", &self.status)
+            .field("amount", &self.amount)
+            .field("currency", &self.currency)
+            .field("metadata_keys", &self.metadata.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PaymentStatus {
-    Initiated, Paid, Authorized, Failed, Verified, Expired,
+    Initiated,
+    Paid,
+    Authorized,
+    Captured,
+    Voided,
+    Refunded,
+    Failed,
+    Verified,
+    Expired,
     #[serde(other)]
     Unknown,
 }
@@ -166,56 +198,39 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 5-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payments/models.rs` | `Payment`, `PaymentStatus`, `PaymentId`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payments/params.rs` | `CreatePaymentParams` builder, `ListParams` with filters. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payments/create.rs` | `POST /v1/payments`, body serialization, `given_id` injection. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payments/service.rs` | `client.payments()` returning `PaymentsService<'a>`. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/resources/payments/retrieve.rs` | 404 → `RecordNotFound`; 401/403 mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payments/mod.rs` | Feature-gated `payments` module export. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payments/models.rs` | `PaymentId` newtype; borrowed description access. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payments/list.rs` | Bracket-notation metadata filters; unknown status fallback. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/payments_crud_test.rs` | Create/retrieve/list against mock; filter assertions. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md`, `src/resources/payments/` | Doc-tests, feature flags, README quick-start. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-2.1.0/unit-1-payment-model` | `src/resources/payments/models.rs` | `Payment` struct (all fields: id, amount, amount_format, fee, fee_format, status, source, metadata, splits, timestamps, callback_url, invoice_id, ip) | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-2.1.0/unit-2-create-params` | `src/resources/payments/params.rs` | `CreatePaymentParams::builder()` (amount, currency, description, callback_url, given_id, source, metadata, splits, sender), `Serialize` | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-2.1.0/unit-3-create-endpoint` | `src/resources/payments/create.rs` | `client.payments().create(params)`, `given_id` injection, response deserialization, wire tests with mock | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-2.1.0/unit-4-retrieve-endpoint` | `src/resources/payments/retrieve.rs` | `client.payments().retrieve(id)` / `.fetch(id)`, `PaymentId` newtype, 404 → record_not_found | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-2.1.0/unit-5-list-endpoint` | `src/resources/payments/list.rs` | `client.payments().list(ListParams)`, query param serialization (page, id, status, created[gt/lt], metadata[key]), return `PaginatedList<Payment>` | `engineering-rust-refactoring-specialist` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `Payment` with dual minor-unit/formatted fields, `PaymentStatus`, `PaymentId`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-2.1.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
+- [ ] **Unit 1 (`feat/us-2.1.0/unit-1-payment-model`)**: `Payment` struct (all fields: id, amount, amount_format, fee, fee_format, status, source, metadata, splits, timestamps, callback_url, invoice_id, ip) (Files: `src/resources/payments/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: `CreatePaymentParams::builder()` with required-field enforcement.  
+- [ ] **Unit 2 (`feat/us-2.1.0/unit-2-create-params`)**: `CreatePaymentParams::builder()` (amount, currency, description, callback_url, given_id, source, metadata, splits, sender), `Serialize` (Files: `src/resources/payments/params.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (List Params)**: `ListParams` with status/date/metadata filters.  
+- [ ] **Unit 3 (`feat/us-2.1.0/unit-3-create-endpoint`)**: `client.payments().create(params)`, `given_id` injection, response deserialization, wire tests with mock (Files: `src/resources/payments/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.4 (Unit Tests)**: Dual-field deserialization across all monetary fields.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-2.1.0/unit-4-retrieve-endpoint`)**: `client.payments().retrieve(id)` / `.fetch(id)`, `PaymentId` newtype, 404 → record_not_found (Files: `src/resources/payments/retrieve.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-2.1.0/unit-5-list-endpoint`)**: `client.payments().list(ListParams)`, query param serialization (page, id, status, created[gt/lt], metadata[key]), return `PaginatedList<Payment>` (Files: `src/resources/payments/list.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
-#### Phase 2: Endpoints & Service Accessor (PR 3–6)
-- [ ] **Task 2.1 (Create)**: `POST /v1/payments` with `given_id` body injection.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Retrieve)**: `GET /v1/payments/:id`, 404 → `RecordNotFound`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (List)**: `GET /v1/payments` returning `PaginatedList<Payment>`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.4 (Accessor)**: zero-cost `PaymentsService<'a>(&'a MoyasarClient)`.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-
-#### Phase 3: Edge Cases & Hardening (PR 7–8)
-- [ ] **Task 3.1 (Borrow Audit)**: eliminate deep clones in model accessors.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Filters)**: bracket-notation `metadata[key]` serialization tests.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: create/retrieve/list end-to-end against mock server.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on state handling and query serialization.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: doc-tests and README quick-start.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 
@@ -273,7 +288,7 @@ sequenceDiagram
 - [ ] **US-2.1.0-G3:** Resource module depends only on the kernel; zero cross-resource coupling.
 
 ### G-Review — Code review
-- [ ] **US-2.1.0-G-Review:** Peer review by `agency-code-reviewer`.
+- [ ] **US-2.1.0-G-Review:** Peer review by `code-reviewer`.
 
 ### G-Borrow — Rust zero-clone validation
 - [ ] **US-2.1.0-G-Borrow:** `PaymentsService` borrows the client; zero deep clones.

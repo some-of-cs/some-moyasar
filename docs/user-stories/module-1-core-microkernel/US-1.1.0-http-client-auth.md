@@ -1,7 +1,7 @@
 # US-1.1.0: Thread-Safe MoyasarClient Concurrency & Key-Type Isolation
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/microkernel/behaviours/client-concurrency/`  
+> **Behavior Blueprint**: `src/kernel/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -83,14 +83,13 @@ Feature: MoyasarClient Thread Safety and Key-Type Isolation
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/microkernel/behaviours/client-concurrency/
-├── services/        # MoyasarClient core struct, ClientInner, HTTP execution engine
-├── logic/           # Basic Auth encoder, key zeroizer, header injection
-├── types/           # MoyasarClientConfig, SecretKey, PublishableKey, KeyMode
-└── constants/       # DEFAULT_API_BASE, DEFAULT_TIMEOUT_SECS
+src/
+├── src/kernel/auth.rs                         # Unit 1 (feat/us-1.1.0/unit-1-key-types)
+├── src/kernel/client.rs                       # Unit 2 (feat/us-1.1.0/unit-2-http-client)
+├── src/kernel/transport.rs                    # Unit 3 (feat/us-1.1.0/unit-3-auth-encoding)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -110,8 +109,27 @@ features/core/modules/microkernel/behaviours/client-concurrency/
 - **Redaction Law**: `#[derive(Debug)]` is forbidden on any struct holding key material.
 
 ```rust
+pub trait AuthKey: Send + Sync + 'static {
+    fn expose_secret(&self) -> &str;
+}
+pub trait SecretAuthKey: AuthKey {}
+pub trait PublishableAuthKey: AuthKey {}
+
 pub struct SecretKey(SecretString);
 pub struct PublishableKey(SecretString);
+
+impl AuthKey for SecretKey {
+    fn expose_secret(&self) -> &str { self.0.expose_secret() }
+}
+impl SecretAuthKey for SecretKey {}
+
+impl AuthKey for PublishableKey {
+    fn expose_secret(&self) -> &str { self.0.expose_secret() }
+}
+impl PublishableAuthKey for PublishableKey {}
+
+#[derive(Clone)]
+pub struct MoyasarClient<K: AuthKey = SecretKey>(Arc<ClientInner<K>>);
 
 impl SecretKey {
     pub fn new(raw: &str) -> Result<Self, MoyasarError> {
@@ -156,58 +174,33 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 3-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Microkernel Domain Logic** | `src/kernel/client.rs` | `MoyasarClient`, `ClientInner`, `Send + Sync` assertions. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Key Types & Config** | `src/kernel/auth.rs` | `SecretKey`, `PublishableKey`, prefix validation, `ZeroizeOnDrop`. | `security-identity-access-engineer` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/kernel/transport.rs` | `Authorization: Basic base64("{key}:")` injection. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Concurrency Engine** | `src/kernel/client.rs` | Lock-free distribution across Tokio workers; pool tuning. | `engineering-backend-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy & Redaction** | `src/kernel/auth.rs`, `error.rs` | Sanitized `Debug` on all key structs. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/lib.rs` | Feature-gated accessor mounting; `prelude` wiring. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/kernel/types.rs` | Zero-clone borrowing discipline; newtype key wrappers. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Key-Type Compile Guards** | `tests/ui/publishable_rejected.rs` | `trybuild` compile-fail proof that `pk_` cannot reach secret routes. | `agency-code-reviewer` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/client_concurrency_test.rs` | 10k-task concurrency against mock TCP server; zero growth. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md`, `src/kernel/` | Public API docs, doc-tests, Cargo feature flags. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-1.1.0/unit-1-key-types` | `src/kernel/auth.rs` | `SecretKey` (`sk_test_`/`sk_live_`), `PublishableKey` (`pk_test_`/`pk_live_`), `ZeroizeOnDrop`, parsing validation, unit tests | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-1.1.0/unit-2-http-client` | `src/kernel/client.rs` | `MoyasarClient::builder()`, reqwest `Client` pool, base URL, default/configured headers, `max_network_retries`, `build()?` | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-1.1.0/unit-3-auth-encoding` | `src/kernel/transport.rs` | `TryFrom<&SecretKey>` / `TryFrom<&PublishableKey>` for `HeaderValue`, `Authorization: Basic base64("{key}:")` encoding, retry/timeout transport adapter, doc-tests | `engineering-backend-architect` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Core Client Struct & Secret Management (PR 1–2)
-- [ ] **Task 1.1 (Types)**: Define `ClientInner`, `MoyasarClientConfig`, `SecretKey`, `PublishableKey` with `Zeroize` on drop.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-1.1.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
+- [ ] **Unit 1 (`feat/us-1.1.0/unit-1-key-types`)**: `SecretKey` (`sk_test_`/`sk_live_`), `PublishableKey` (`pk_test_`/`pk_live_`), `ZeroizeOnDrop`, parsing validation, unit tests (Files: `src/kernel/auth.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Constants)**: Pin `DEFAULT_API_BASE` (`https://api.moyasar.com/v1`) and `DEFAULT_TIMEOUT_SECS` (30).  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Logic)**: `MoyasarClient::builder(key).build()` wrapping `Arc<ClientInner>`.  
+- [ ] **Unit 2 (`feat/us-1.1.0/unit-2-http-client`)**: `MoyasarClient::builder()`, reqwest `Client` pool, base URL, default/configured headers, `max_network_retries`, `build()?` (Files: `src/kernel/client.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.4 (Unit Tests)**: Debug redaction assertions.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Auth Encoding & Transport Adapters (PR 3–6)
-- [ ] **Task 2.1 (Basic Auth)**: Implement `base64("{api_key}:")` encoder; assert trailing colon.  
+- [ ] **Unit 3 (`feat/us-1.1.0/unit-3-auth-encoding`)**: `TryFrom<&SecretKey>` / `TryFrom<&PublishableKey>` for `HeaderValue`, `Authorization: Basic base64("{key}:")` encoding, retry/timeout transport adapter, doc-tests (Files: `src/kernel/transport.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Header Injection)**: Inject `Authorization`, `Content-Type`, `Accept` on every builder.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Facade Routing)**: Borrowed `&MoyasarClient` accessors with zero allocation.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.4 (Integration Tests)**: Mock-server header and timeout assertions.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
 
-#### Phase 3: Zero-Clone Hardening & Compile Guards (PR 7–8)
-- [ ] **Task 3.1 (Borrow Check)**: Audit for deep `.clone()` on client instances.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Compile Guards)**: `trybuild` UI tests for key-type rejection.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 3.3 (Stress Testing)**: 10,000 Tokio tasks sharing one client; zero contention.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Security Verification & Release Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Secret Scan)**: Memory dump inspection for zero plaintext key leaks.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: Peer review for lock-free concurrency and Rust 2024 idioms.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: Doc-tests for `MoyasarClient` and both key types.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 
@@ -269,7 +262,7 @@ sequenceDiagram
 - [ ] **US-1.1.0-G3:** Microkernel compliance; zero monolithic codegen in core.
 
 ### G-Review — Code review
-- [ ] **US-1.1.0-G-Review:** Peer review by `agency-code-reviewer` across correctness, security, performance.
+- [ ] **US-1.1.0-G-Review:** Peer review by `code-reviewer` across correctness, security, performance.
 
 ### G-Borrow — Rust zero-clone validation
 - [ ] **US-1.1.0-G-Borrow:** Zero unauthorized deep `.clone()`; `Arc::clone` only.

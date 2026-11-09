@@ -1,7 +1,7 @@
 # US-2.5.0: Marketplace Payment Splits & Account Funding Transactions
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payments/behaviours/marketplace-splits-aft/`  
+> **Behavior Blueprint**: `src/resources/payments/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -90,14 +90,14 @@ Feature: Marketplace Splits and Account Funding Transactions
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payments/behaviours/marketplace-splits-aft/
-├── services/        # SplitValidator, AftSenderBuilder
-├── logic/           # Sum validation, fee-source resolution, refundable defaults
-├── types/           # PaymentSplitRequest, PaymentSplitResponse, SplitRecipientType, AftSender
-└── constants/       # MAX_SPLITS_PER_PAYMENT
+src/
+├── src/resources/payments/splits.rs           # Unit 1 (feat/us-2.5.0/unit-1-split-types)
+├── src/resources/payments/split_validation.rs # Unit 2 (feat/us-2.5.0/unit-2-split-validation)
+├── src/resources/payments/aft.rs              # Unit 3 (feat/us-2.5.0/unit-3-aft-sender)
+├── src/resources/payments/splits_response.rs  # Unit 4 (feat/us-2.5.0/unit-4-split-response-helpers)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -136,12 +136,29 @@ pub fn validate_splits(splits: &[PaymentSplitRequest], total: u64) -> Result<(),
     if splits.iter().any(|s| s.amount == 0) {
         return Err(MoyasarError::InvalidSplitAmount);
     }
-    let sum: u64 = splits.iter().map(|s| s.amount).sum();
+    if splits.iter().filter(|s| s.fee_source == Some(true)).count() > 1 {
+        return Err(MoyasarError::MultipleFeeSources);
+    }
+    let sum = splits.iter().try_fold(0u64, |acc, s| acc.checked_add(s.amount))
+        .ok_or(MoyasarError::SplitTotalExceedsAmount)?;
     if sum > total {
         return Err(MoyasarError::SplitTotalExceedsAmount);
     }
     Ok(())
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AftSender {
+    pub first_name: String,
+    pub last_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nationality: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_number: Option<String>,
+}
+pub type AfTSender = AftSender;
 ```
 
 ### 3.2 Activity & Interaction Diagram
@@ -166,52 +183,36 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 4-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payments/splits.rs` | `PaymentSplitRequest`/`Response`, `SplitRecipientType`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payments/aft.rs` | `AftSender` struct and integration. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payments/params.rs` | `splits` and `sender` fields on create params. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payments/service.rs` | Split-aware create path. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `SplitTotalExceedsAmount`, `InvalidSplitAmount`. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payments/mod.rs` | Export split and AFT types. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payments/splits.rs` | Borrowed validation; no split cloning. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payments/split_validation.rs` | Sum/zero/negative guards; refundable default. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/splits_aft_test.rs` | Two-way split and AFT sender wire tests. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests for splits and AFT. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-2.5.0/unit-1-split-types` | `src/resources/payments/splits.rs` | `PaymentSplitRequest`, `SplitRecipientType` enum (`Entity`, `Platform`, `Beneficiary`), `fee_source`/`refundable` defaults | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-2.5.0/unit-2-split-validation` | `src/resources/payments/split_validation.rs` | `validate_splits` with `checked_add` sum guard (`sum <= total`), zero-amount guard, single `fee_source` check, unit tests | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-2.5.0/unit-3-aft-sender` | `src/resources/payments/aft.rs` | `AftSender` struct (`first_name`, `last_name`, optional identification fields) and `AfTSender` alias | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-2.5.0/unit-4-split-response-helpers` | `src/resources/payments/splits_response.rs` | `PaymentSplitResponse` struct, proportional refund cascade calculator, and 2-way split + AFT unit tests | `security-appsec-engineer` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Split & AFT Models (PR 1–2)
-- [ ] **Task 1.1 (Splits)**: `PaymentSplitRequest`/`Response`, `SplitRecipientType`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-2.5.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
+- [ ] **Unit 1 (`feat/us-2.5.0/unit-1-split-types`)**: `PaymentSplitRequest`, `SplitRecipientType` enum (`Entity`, `Platform`, `Beneficiary`), `fee_source`/`refundable` defaults (Files: `src/resources/payments/splits.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (AFT)**: `AftSender` with identification fields.  
+- [ ] **Unit 2 (`feat/us-2.5.0/unit-2-split-validation`)**: `validate_splits` with `checked_add` sum guard (`sum <= total`), zero-amount guard, single `fee_source` check, unit tests (Files: `src/resources/payments/split_validation.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: serde roundtrip for splits and sender.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Wiring & Errors (PR 3–6)
-- [ ] **Task 2.1 (Params)**: attach `splits`/`sender` to create params.  
+- [ ] **Unit 3 (`feat/us-2.5.0/unit-3-aft-sender`)**: `AftSender` struct (`first_name`, `last_name`, optional identification fields) and `AfTSender` alias (Files: `src/resources/payments/aft.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Errors)**: split validation error variants.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Exports)**: feature-gated module wiring.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-2.5.0/unit-4-split-response-helpers`)**: `PaymentSplitResponse` struct, proportional refund cascade calculator, and 2-way split + AFT unit tests (Files: `src/resources/payments/splits_response.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
-#### Phase 3: Validation (PR 7–8)
-- [ ] **Task 3.1 (Sum Guard)**: reject sum > amount; reject zero/negative.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Defaults)**: `refundable` defaults to true; `fee_source` resolution.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: two-way split and AFT sender end-to-end.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on split arithmetic and refund cascade.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: doc-tests for splits and AFT.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

@@ -99,3 +99,11 @@ feat/us-<M>.<S>.0-<slug>
 ```
 
 e.g. `feat/us-7.3.0-webhook-verification-engine`.
+
+## 2. The 10-PR Vertical Slicing Framework (Rust SDK Adaptation)
+
+Under the `some-divide-and-conquer` dynamic decomposition engine ([`DECOMPOSITION_ROADMAP.md`](../architecture/DECOMPOSITION_ROADMAP.md) and [`.agents/rules/02-monolith-to-units-decomposition.md`](../../.agents/rules/02-monolith-to-units-decomposition.md)), each User Story (`feat/us-M.S.0-<slug>`) is dynamically sized via $S_{\text{story}}$ into $K \in [3, 6]$ parallel, non-blocking Implementation Units (`feat/us-M.S.0/unit-1-<scope>` through `unit-K-<scope>`):
+
+1. **Base Branch Scaffolding**: Before spawning unit worktrees, the Module/Story Leader provisions `Cargo.toml`, `src/lib.rs`, `src/kernel/mod.rs`, `src/resources/mod.rs`, and the domain's `mod.rs` + `service.rs` facade on the base branch.
+2. **Disjoint File Ownership (Invariant 2)**: Every unit $u_i \in \{1..K\}$ owns an exclusive set of production `.rs` files and never appends to a sibling unit's file in the same wave.
+3. **Pure Deliverable Production Only (Invariant 1)**: Every unit ships real production Rust code plus colocated `#[cfg(test)]` unit tests; story-wide integration wire tests execute after all $K$ units merge into the story branch.

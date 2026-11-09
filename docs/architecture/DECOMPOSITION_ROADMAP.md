@@ -45,7 +45,7 @@ $$S_{\text{1.1}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-1.1.0/unit-1-key-types` | `src/kernel/auth.rs` | `SecretKey` (`sk_test_`/`sk_live_`), `PublishableKey` (`pk_test_`/`pk_live_`), `ZeroizeOnDrop`, parsing validation, unit tests |
 | Unit 2 | `feat/us-1.1.0/unit-2-http-client` | `src/kernel/client.rs` | `MoyasarClient::builder()`, reqwest `Client` pool, base URL, default/configured headers, `max_network_retries`, `build()?` |
-| Unit 3 | `feat/us-1.1.0/unit-3-auth-encoding` | `src/kernel/auth.rs` (append) + `src/kernel/client.rs` (append) | `impl HeaderValue` for key types, `Authorization: Basic base64("{key}:")` encoding, `<SecretKey as Debug>` safety, doc-tests |
+| Unit 3 | `feat/us-1.1.0/unit-3-auth-encoding` | `src/kernel/transport.rs` | `TryFrom<&SecretKey>` / `TryFrom<&PublishableKey>` for `HeaderValue`, `Authorization: Basic base64("{key}:")` encoding, retry/timeout transport adapter, doc-tests |
 
 ---
 
@@ -69,10 +69,10 @@ $$S_{\text{1.2}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 3 = \text
 | Unit | Branch | Owner Files | Deliverables |
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-1.2.0/unit-1-given-id-policy` | `src/kernel/idempotency.rs` | `GivenIdPolicy` enum (Random/Deterministic), UUIDv4 generation, `given_id` injection into JSON bodies |
-| Unit 2 | `feat/us-1.2.0/unit-2-uuidv5-hashing` | `src/kernel/idempotency.rs` (append) | `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")` for subscription billing, roundtrip tests |
+| Unit 2 | `feat/us-1.2.0/unit-2-uuidv5-hashing` | `src/kernel/idempotency_v5.rs` | `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")` deterministic derivation for subscription billing, roundtrip tests |
 | Unit 3 | `feat/us-1.2.0/unit-3-metadata` | `src/kernel/metadata.rs` | `Metadata` map: `insert`/`remove`/`get`, validation on key count/length/value, empty-string key unset, unit tests for boundary conditions |
 | Unit 4 | `feat/us-1.2.0/unit-4-pagination-types` | `src/kernel/pagination.rs` | `PaginatedList<T>`, `Meta` struct (current_page, next_page, prev_page, total_pages, total_count), `Deserialize` |
-| Unit 5 | `feat/us-1.2.0/unit-5-pagination-stream` | `src/kernel/pagination.rs` (append) | `Paginator<T>::into_stream()` with `futures::Stream`, auto-page following next_page, unit tests covering 1-page and multi-page responses |
+| Unit 5 | `feat/us-1.2.0/unit-5-pagination-stream` | `src/kernel/paginator_stream.rs` | `Paginator<T>::into_stream()` with `futures::Stream`, auto-page following next_page, unit tests covering 1-page and multi-page responses |
 
 ---
 
@@ -96,8 +96,8 @@ $$S_{\text{1.3}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | Unit | Branch | Owner Files | Deliverables |
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-1.3.0/unit-1-error-enum` | `src/kernel/error.rs` | `MoyasarError` enum, `ApiErrorType`, `thiserror` derive, `From<reqwest::Error>`, `Deserialize` for error payloads |
-| Unit 2 | `feat/us-1.3.0/unit-2-field-errors` | `src/kernel/error.rs` (append) | Field-level validation error map, `ResponseCode` ISO 8583 lookup table, `Display` impl |
-| Unit 3 | `feat/us-1.3.0/unit-3-currency-prelude` | `src/kernel/types.rs` + `src/lib.rs` | `Amount` newtype, `Currency` enum (SAR, USD, KWD, …), `prelude` module exporting all core types, `lib.rs` feature-gated module declarations |
+| Unit 2 | `feat/us-1.3.0/unit-2-field-errors` | `src/kernel/response_code.rs` | `FieldError` dual map/array deserializer, `ResponseCode` ISO 8583 lookup table with custom `Unknown(String)` deserializer, `Display` impl |
+| Unit 3 | `feat/us-1.3.0/unit-3-currency-prelude` | `src/kernel/types.rs` + `src/prelude.rs` | `Amount` newtype, `Currency` enum (SAR, USD, KWD, JPY, …), `RecipientType` enum, `prelude` module exporting all core types |
 
 ---
 
@@ -186,7 +186,7 @@ $$S_{\text{2.3}} = 0.35\cdot 4 + 0.25\cdot 3 + 0.20\cdot 3 + 0.20\cdot 2 = \text
 | Unit 3 | `feat/us-2.3.0/unit-3-applepay-samsungpay` | `src/resources/payments/source_digital_wallet.rs` | `ApplePaySource`: token/cryptogram, manual, save_card, statement_descriptor. `SamsungPaySource`: mirrors with sp subtype |
 | Unit 4 | `feat/us-2.3.0/unit-4-token-source` | `src/resources/payments/source_token.rs` | `TokenSource`: token string, optional 3ds/manual/cvc flags, SecretKey-based charging |
 | Unit 5 | `feat/us-2.3.0/unit-5-card-validation` | `src/resources/payments/card_validation.rs` | Luhn checksum, expiry date validation (month 1-12, year ≥ current), cvc length by brand (3 for most, 4 for AMEX) |
-| Unit 6 | `feat/us-2.3.0/unit-6-source-serialization-tests` | `src/resources/payments/source_serde_tests.rs` | Roundtrip JSON tests for each source variant (serialize + deserialize), edge cases (null fields, missing optional) |
+| Unit 6 | `feat/us-2.3.0/unit-6-source-response-models` | `src/resources/payments/source_response.rs` | `PaymentSourceResponse` tagged enum, `CardSourceResponse`, `WalletSourceResponse`, `CardBrand`, plus roundtrip JSON serde unit tests |
 
 ---
 
@@ -211,8 +211,8 @@ $$S_{\text{2.4}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 2 = \text
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-2.4.0/unit-1-stcpay-source` | `src/resources/payments/source_stcpay.rs` | `StcPaySource`: mobile (+966/05/00966 formats), cashier, branch. Mobile validation via regex |
 | Unit 2 | `feat/us-2.4.0/unit-2-stcpay-otp` | `src/resources/payments/stcpay_otp.rs` | `client.payments().verify_stc_otp(url, otp)`, POST to `transaction_url`, otp_value injection, status: initiated → paid/failed |
-| Unit 3 | `feat/us-2.4.0/unit-3-sadad-source` | `src/resources/payments/source_sadad.rs` | `SadadBillSource`: expired_at (optional, max 29d), biller_code (901/902/007), sadad_number, provider_name |
-| Unit 4 | `feat/us-2.4.0/unit-4-stcpay-sadad-tests` | `src/resources/payments/source_stcpay_sadad_tests.rs` | Mock tests for STC Pay sandbox numbers (0515555555 unregistered, 0515555558 exhausted OTP, 0515555559 cooldown), SADAD sandbox biller_code 007 |
+| Unit 3 | `feat/us-2.4.0/unit-3-sadad-source` | `src/resources/payments/source_sadad.rs` | `SadadBillSource` request (`expired_at`, optional sandbox `biller_code`) and `SadadBillSourceResponse` (`biller_code` 901/902/007, `sadad_number`, `provider_name`) |
+| Unit 4 | `feat/us-2.4.0/unit-4-sadad-expiry-guard` | `src/resources/payments/sadad_expiry.rs` | SADAD 29-day maximum expiry validator, invoice-expiry cap helper, and sandbox unit tests (STC Pay 0515555555/58/59, SADAD biller 007) |
 
 ---
 
@@ -235,10 +235,10 @@ $$S_{\text{2.5}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 2 = \text
 
 | Unit | Branch | Owner Files | Deliverables |
 | :--- | :--- | :--- | :--- |
-| Unit 1 | `feat/us-2.5.0/unit-1-split-types` | `src/resources/payments/splits.rs` | `PaymentSplitRequest`, `PaymentSplitResponse`, `SplitRecipientType` enum, `fee_source`/`refundable` defaults |
-| Unit 2 | `feat/us-2.5.0/unit-2-split-validation` | `src/resources/payments/split_validation.rs` | Split total must not exceed payment amount, zero/negative guard, unit tests |
-| Unit 3 | `feat/us-2.5.0/unit-3-aft-sender` | `src/resources/payments/aft.rs` | `AfTSender` struct: first_name, last_name, optional id fields, integration into `CreatePaymentParams` |
-| Unit 4 | `feat/us-2.5.0/unit-4-splits-aft-integration` | `src/resources/payments/splits_aft_tests.rs` | End-to-end wire tests: payment with 2-way split (Beneficiary + Platform), payment with single split + AFT sender |
+| Unit 1 | `feat/us-2.5.0/unit-1-split-types` | `src/resources/payments/splits.rs` | `PaymentSplitRequest`, `SplitRecipientType` enum (`Entity`, `Platform`, `Beneficiary`), `fee_source`/`refundable` defaults |
+| Unit 2 | `feat/us-2.5.0/unit-2-split-validation` | `src/resources/payments/split_validation.rs` | `validate_splits` with `checked_add` sum guard (`sum <= total`), zero-amount guard, single `fee_source` check, unit tests |
+| Unit 3 | `feat/us-2.5.0/unit-3-aft-sender` | `src/resources/payments/aft.rs` | `AftSender` struct (`first_name`, `last_name`, optional identification fields) and `AfTSender` alias |
+| Unit 4 | `feat/us-2.5.0/unit-4-split-response-helpers` | `src/resources/payments/splits_response.rs` | `PaymentSplitResponse` struct, proportional refund cascade calculator, and 2-way split + AFT unit tests |
 
 ---
 
@@ -271,7 +271,7 @@ $$S_{\text{3.1}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | Unit 1 | `feat/us-3.1.0/unit-1-intent-model` | `src/resources/payment_intents/models.rs` | `PaymentIntent` struct (id, amount, currency, description, callback_url, status, client_secret, expires_at, created_at), `PaymentIntentStatus` enum |
 | Unit 2 | `feat/us-3.1.0/unit-2-create-cancel` | `src/resources/payment_intents/create.rs` | `CreatePaymentIntentParams`, `client.payment_intents().create()`, `client.payment_intents().cancel(id)` returning 400 on already cancelled/fulfilled/expired |
 | Unit 3 | `feat/us-3.1.0/unit-3-expiry-guard` | `src/resources/payment_intents/expiry.rs` | `PaymentIntent::is_usable(&self) -> bool` — status==Created AND Utc::now() < expires_at. Document pitfalls: status stays "created" past expiry |
-| Unit 4 | `feat/us-3.1.0/unit-4-retrieve-tests` | `src/resources/payment_intents/retrieve.rs` + tests | `client.payment_intents().retrieve(id)`, 403 if pk_ queries intent with client_secret, 404 handling, wire tests with mock |
+| Unit 4 | `feat/us-3.1.0/unit-4-retrieve-endpoint` | `src/resources/payment_intents/retrieve.rs` | `client.payment_intents().retrieve(id)` (`SecretKey` bound), `IntentId` newtype, 403/404 handling, unit tests |
 
 ---
 
@@ -294,10 +294,10 @@ $$S_{\text{3.2}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 2 = \text
 
 | Unit | Branch | Owner Files | Deliverables |
 | :--- | :--- | :--- | :--- |
-| Unit 1 | `feat/us-3.2.0/unit-1-fulfill-params` | `src/resources/payment_intents/fulfill.rs` | `FulfillIntentParams`: client_secret, source (all payment sources), metadata, save_card, manual, 3ds |
-| Unit 2 | `feat/us-3.2.0/unit-2-fulfill-endpoint` | `src/resources/payment_intents/fulfill.rs` (append) | `client.payment_intents().fulfill(id, params)`, PublishableKey enforcement, locked-param assertion in wire tests |
-| Unit 3 | `feat/us-3.2.0/unit-3-fulfill-lifecycle` | `src/resources/payment_intents/lifecycle.rs` | Post-fulfillment: intent status → fulfilled, Payment object returned, `fulfilled ≠ paid` documentation, check Payment status separately |
-| Unit 4 | `feat/us-3.2.0/unit-4-fulfill-tests` | `src/resources/payment_intents/fulfill_tests.rs` | Mock tests: fulfillment with valid client_secret, rejection with altered amount, expired intent rejection, pk_ authorization enforcement |
+| Unit 1 | `feat/us-3.2.0/unit-1-fulfill-params` | `src/resources/payment_intents/fulfill_params.rs` | `FulfillIntentParams` (`client_secret` redacted in `Debug`, `source`, `metadata`, `save_card`, `manual`, `3ds`) |
+| Unit 2 | `feat/us-3.2.0/unit-2-fulfill-endpoint` | `src/resources/payment_intents/fulfill.rs` | `client.payment_intents().fulfill(id, params)` (`PublishableKey` compatible), returning `Payment` |
+| Unit 3 | `feat/us-3.2.0/unit-3-fulfill-lifecycle` | `src/resources/payment_intents/lifecycle.rs` | `FulfillmentOutcome` enum (`Paid`, `Authorized`, `RequiresAction`, `Failed`) derived from returned `Payment` (`fulfilled ≠ paid`) |
+| Unit 4 | `feat/us-3.2.0/unit-4-fulfill-guard` | `src/resources/payment_intents/fulfill_guard.rs` | Pre-fulfillment `is_usable()` and `client_secret` format guard, locked-param schema assertions, and fulfillment unit tests |
 
 ---
 
@@ -329,8 +329,8 @@ $$S_{\text{4.1}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-4.1.0/unit-1-token-model` | `src/resources/tokens/models.rs` | `Token` struct (id: "token_...", status: initiated/active/inactive, masked card details), `TokenStatus` enum, `TokenId` newtype |
 | Unit 2 | `feat/us-4.1.0/unit-2-token-create` | `src/resources/tokens/create.rs` | `CreateTokenParams`: name, number, month, year, cvc, callback_url, save_only. `client.tokens().create()`, PublishableKey-accepted |
-| Unit 3 | `feat/us-4.1.0/unit-3-token-retrieve-delete` | `src/resources/tokens/retrieve_delete.rs` | `client.tokens().retrieve(id)` (returns masked card for display), `client.tokens().delete(id)` (204 No Content, empty response) |
-| Unit 4 | `feat/us-4.1.0/unit-4-token-lifecycle-tests` | `src/resources/tokens/tests.rs` | Wire tests: create→initiated, save_card integration flow, active after verification, inactive after card expiry, delete→204 |
+| Unit 3 | `feat/us-4.1.0/unit-3-token-retrieve` | `src/resources/tokens/retrieve.rs` | `client.tokens().retrieve(id)` (`SecretKey` bound, returns masked card details for customer display), 404 mapping, unit tests |
+| Unit 4 | `feat/us-4.1.0/unit-4-token-delete` | `src/resources/tokens/delete.rs` | `client.tokens().delete(id)` (`DELETE /v1/tokens/:id` 204 No Content empty-body handler), token status gate helpers, unit tests |
 
 ---
 
@@ -345,19 +345,19 @@ $$S_{\text{4.1}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | $D_3$ Complexity | 2 | Simple CRUD + bulk creation |
 | $D_4$ Orthogonality | 2 | `invoices.rs` |
 
-$$S_{\text{4.2}} = 0.35\cdot 4 + 0.25\cdot 3 + 0.20\cdot 2 + 0.20\cdot 2 = \textbf{2.75}$$
+$$S_{\text{4.2}} = 0.35\cdot 4 + 0.25\cdot 3 + 0.20\cdot 2 + 0.20\cdot 2 = \textbf{2.95}$$
 
 | Result | $K$ Units |
 | :--- | :---: |
-| **Score 2.75 → 5 units** | **5** |
+| **Score 2.95 → 5 units** | **5** |
 
 | Unit | Branch | Owner Files | Deliverables |
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-4.2.0/unit-1-invoice-model` | `src/resources/invoices/models.rs` | `Invoice` struct (id, amount, currency, description, callback_url, status, hosted payment url, expired_at, created_at, associated payments) |
 | Unit 2 | `feat/us-4.2.0/unit-2-invoice-create` | `src/resources/invoices/create.rs` | `CreateInvoiceParams`, `client.invoices().create()`, `client.invoices().create_bulk(Vec<CreateInvoiceParams>)` |
 | Unit 3 | `feat/us-4.2.0/unit-3-invoice-retrieve-list` | `src/resources/invoices/retrieve_list.rs` | `client.invoices().retrieve(id)`, `client.invoices().list(params)` with metadata/status/date filters, pagination |
-| Unit 4 | `feat/us-4.2.0/unit-4-invoice-update-cancel` | `src/resources/invoices/update_cancel.rs` | `client.invoices().update(id, params)` (description, metadata), `client.invoices().cancel(id)` via `PUT /v1/invoices/:id/cancel` |
-| Unit 5 | `feat/us-4.2.0/unit-5-invoice-tests` | `src/resources/invoices/tests.rs` | Wire tests: create with SADAD expiry sync, bulk creation, cancel via PUT, status transitions |
+| Unit 4 | `feat/us-4.2.0/unit-4-invoice-update` | `src/resources/invoices/update.rs` | `UpdateInvoiceParams` (`description`, `metadata`), `client.invoices().update(id, params)` (`PUT /v1/invoices/:id`), unit tests |
+| Unit 5 | `feat/us-4.2.0/unit-5-invoice-cancel` | `src/resources/invoices/cancel.rs` | `client.invoices().cancel(id)` via `PUT /v1/invoices/:id/cancel`, SADAD bill expiry synchronization (`sync_sadad_expiry`), unit tests |
 
 ---
 
@@ -372,17 +372,17 @@ $$S_{\text{4.2}} = 0.35\cdot 4 + 0.25\cdot 3 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | $D_3$ Complexity | 2 | MPI result deserialization |
 | $D_4$ Orthogonality | 1 | `card_auths.rs` (single file) |
 
-$$S_{\text{4.3}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 1 = \textbf{1.85}$$
+$$S_{\text{4.3}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 1 = \textbf{1.80}$$
 
 | Result | $K$ Units |
 | :--- | :---: |
-| **Score 1.85 → 3 units** | **3** |
+| **Score 1.80 → 3 units** | **3** |
 
 | Unit | Branch | Owner Files | Deliverables |
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-4.3.0/unit-1-card-auth-model` | `src/resources/card_auths/models.rs` | `CardAuthentication` struct (id: "ca_...", status: authenticated/failed, transaction_url, result fields) |
 | Unit 2 | `feat/us-4.3.0/unit-2-card-auth-create` | `src/resources/card_auths/create.rs` | `CreateCardAuthParams`: amount, currency, callback_url, card details. `client.card_auths().create()` |
-| Unit 3 | `feat/us-4.3.0/unit-3-card-auth-retrieve` | `src/resources/card_auths/retrieve.rs` + tests | `client.card_auths().retrieve(id)`, MPI result extraction (eci, cavv, ds_transaction_id), `card_auth_id`/`card_auth_data` bridging to Payment create |
+| Unit 3 | `feat/us-4.3.0/unit-3-card-auth-retrieve` | `src/resources/card_auths/retrieve.rs` | `client.card_auths().retrieve(id)`, MPI result extraction (`eci`, `authentication_value`, `ds_transaction_id`), `card_auth_id`/`card_auth_data` bridging to Payment create, unit tests |
 
 ---
 
@@ -414,8 +414,8 @@ $$S_{\text{5.1}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-5.1.0/unit-1-payout-account-model` | `src/resources/payouts/models.rs` | `PayoutAccount` struct (id, account_type bank/wallet, currency, properties, created_at), `PayoutAccountId` newtype |
 | Unit 2 | `feat/us-5.1.0/unit-2-payout-account-create` | `src/resources/payouts/accounts_create.rs` | `CreatePayoutAccountParams` (account_type, properties like iban, credentials), `client.payout_accounts().create()` |
-| Unit 3 | `feat/us-5.1.0/unit-3-payout-account-list` | `src/resources/payouts/accounts_list.rs` | `client.payout_accounts().list()`, `client.payout_accounts().retrieve(id)`, pagination |
-| Unit 4 | `feat/us-5.1.0/unit-4-payout-account-tests` | `src/resources/payouts/accounts_tests.rs` | Wire tests: create bank account with IBAN, create wallet account, list/retrieve, validation failures |
+| Unit 3 | `feat/us-5.1.0/unit-3-payout-account-list` | `src/resources/payouts/accounts_list.rs` | `ListPayoutAccountsParams`, `client.payout_accounts().list(params)`, pagination unit tests |
+| Unit 4 | `feat/us-5.1.0/unit-4-payout-account-retrieve` | `src/resources/payouts/accounts_retrieve.rs` | `client.payout_accounts().retrieve(id)`, Saudi IBAN validator (`validate_sa_iban`), unit tests |
 
 ---
 
@@ -443,7 +443,9 @@ $$S_{\text{5.2}} = 0.35\cdot 4 + 0.25\cdot 3 + 0.20\cdot 3 + 0.20\cdot 3 = \text
 | Unit 3 | `feat/us-5.2.0/unit-3-destinations` | `src/resources/payouts/destinations.rs` | `PayoutDestination` enum: `BankDestination` (iban, name, mobile, country, city), `WalletDestination` (mobile), IBAN validation, mobile format validation |
 | Unit 4 | `feat/us-5.2.0/unit-4-single-payout` | `src/resources/payouts/payouts_create.rs` | `CreatePayoutParams`: source_id, sequence_number (optional 16-digit), amount, purpose, destination, comment, metadata. `client.payouts().create()` |
 | Unit 5 | `feat/us-5.2.0/unit-5-bulk-payout` | `src/resources/payouts/payouts_bulk.rs` | `CreateBulkPayoutParams`: source_id, payouts Vec<BulkPayoutEntry>. `client.payouts().create_bulk()`, `BulkPayoutResponse` |
-| Unit 6 | `feat/us-5.2.0/unit-6-payout-list-tests` | `src/resources/payouts/payouts_list.rs` + tests | `client.payouts().list()`, `client.payouts().retrieve(id)`, wire tests for single & bulk across all 3 channels---
+| Unit 6 | `feat/us-5.2.0/unit-6-payout-list-retrieve` | `src/resources/payouts/payouts_list.rs` | `ListPayoutsParams`, `client.payouts().list(params)`, `client.payouts().retrieve(id)`, unit tests |
+
+---
 
 ## Module 6: Settlements, Transfers & Ledger
 
@@ -473,9 +475,9 @@ $$S_{\text{6.1}} = 0.35\cdot 4 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-6.1.0/unit-1-settlement-model` | `src/resources/settlements/models.rs` | `Settlement` struct (recipient_type, currency, source_currency, invoicing_currency, amount, fee, tax, invoicing_fee, invoicing_tax, invoicing_ex_rate, reference, settlement_count, invoice_url PDF, csv_list_url, pdf_list_url) |
 | Unit 2 | `feat/us-6.1.0/unit-2-settlement-list` | `src/resources/settlements/list.rs` | `client.settlements().list(params)` with id/created[gt/lt]/page filters, pagination |
-| Unit 3 | `feat/us-6.1.0/unit-3-settlement-retrieve` | `src/resources/settlements/retrieve.rs` | `client.settlements().retrieve(id)`, `client.settlements().list_lines(id, params)`, `SettlementLine` struct |
-| Unit 4 | `feat/us-6.1.0/unit-4-settlement-balance` | `src/resources/settlements/balance.rs` | `client.settlements().fetch_balance()`, `MerchantBalance` struct (available, pending, reserved amounts) |
-| Unit 5 | `feat/us-6.1.0/unit-5-settlement-tests` | `src/resources/settlements/tests.rs` | Wire tests: list with date range, retrieve with invoice_url, lines pagination, balance fetch |
+| Unit 3 | `feat/us-6.1.0/unit-3-settlement-retrieve` | `src/resources/settlements/retrieve.rs` | `client.settlements().retrieve(id)`, `Settlement::net()` breakdown helper, 404 mapping, unit tests |
+| Unit 4 | `feat/us-6.1.0/unit-4-settlement-balance` | `src/resources/settlements/balance.rs` | `client.settlements().fetch_balance()`, `MerchantBalance` struct (available, pending, reserved amounts), unit tests |
+| Unit 5 | `feat/us-6.1.0/unit-5-settlement-lines` | `src/resources/settlements/lines.rs` | `SettlementLine` struct, `ListSettlementLinesParams`, `client.settlements().list_lines(id, params)`, unit tests |
 
 ---
 
@@ -501,13 +503,13 @@ $$S_{\text{6.2}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | Unit 1 | `feat/us-6.2.0/unit-1-transfer-models` | `src/resources/settlements/transfer_models.rs` | `Transfer` struct, `TransferLine` struct, `TransferId` newtype |
 | Unit 2 | `feat/us-6.2.0/unit-2-transfer-endpoints` | `src/resources/settlements/transfers.rs` | `client.transfers().list()`, `client.transfers().retrieve(id)`, `client.transfers().list_lines(id, params)` |
 | Unit 3 | `feat/us-6.2.0/unit-3-internal-txn-model` | `src/resources/settlements/internal_txn_models.rs` | `InternalTransaction` struct (recipient_type, recipient_id, amount, transfer_id, settled_at, metadata), `InternalTransactionId` newtype |
-| Unit 4 | `feat/us-6.2.0/unit-4-internal-txn-endpoints` | `src/resources/settlements/internal_transactions.rs` + tests | `client.internal_transactions().list(params)` with id/currency/created_at/updated_at/settled_at filters, wire tests |
+| Unit 4 | `feat/us-6.2.0/unit-4-internal-txn-endpoints` | `src/resources/settlements/internal_transactions.rs` | `ListInternalTransactionsParams`, `client.internal_transactions().list(params)` with id/currency/created_at/updated_at/settled_at filters, unit tests |
 
 ---
 
 ## Module 7: Sources, Apple Pay & Webhooks
 
-**Feature flags:** `sources`, `webhooks-api`, `webhook-engine` (opt-in)  
+**Feature flags:** `webhook-engine` (default on), `sources` (opt-in), `webhooks-api` (opt-in)  
 **Branch:** `feat/module-7-sources-webhooks`  
 **Depends on:** Module 1 (Core)  
 **Domain:** Pre-charge BIN/IIN issuer lookup, Apple Pay Web Merchant session initiation, CRUD webhook endpoint management, delivery attempt inspection, and the constant-time webhook verification engine.
@@ -533,7 +535,7 @@ $$S_{\text{7.1}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-7.1.0/unit-1-issuer-lookup` | `src/resources/sources/issuer.rs` | `IssuerMetadata`: issuer_name, issuer_country, issuer_card_type (debit/credit/charge_card/unspecified), issuer_card_category, first_digits, last_digits. `client.sources().get_issuer(params)` |
 | Unit 2 | `feat/us-7.1.0/unit-2-applepay-session` | `src/resources/sources/apple_pay.rs` | `ApplePayMerchantSession`: epochTimestamp, expiresAt, merchantSessionIdentifier, nonce, merchantIdentifier, domainName, displayName, signature, operationalAnalyticsIdentifier. `client.apple_pay().initiate_session(params)` |
-| Unit 3 | `feat/us-7.1.0/unit-3-sources-tests` | `src/resources/sources/tests.rs` | Wire tests: BIN 6-digit lookup returns mada, 8-digit lookup, full PAN lookup, Apple Pay session initiation with mock |
+| Unit 3 | `feat/us-7.1.0/unit-3-sources-service` | `src/resources/sources/service.rs` | `SourcesService` (`client.sources()`) and `ApplePayService` (`client.apple_pay()`) facades, publishable-key enforcement guard, unit tests |
 
 ---
 
@@ -557,10 +559,10 @@ $$S_{\text{7.2}} = 0.35\cdot 4 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | Unit | Branch | Owner Files | Deliverables |
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-7.2.0/unit-1-webhook-model` | `src/resources/webhooks_api/models.rs` | `WebhookEndpoint` struct (id, http_method, url, shared_secret, events), `WebhookAttempt` struct (id, event_id, status_code, response_body, created_at) |
-| Unit 2 | `feat/us-7.2.0/unit-2-webhook-crud` | `src/resources/webhooks_api/crud.rs` | `client.webhooks().create()` (POST with http_method=post, url, shared_secret, optional events filter), `.list()`, `.retrieve(id)`, `.delete(id)` |
-| Unit 3 | `feat/us-7.2.0/unit-3-available-events` | `src/resources/webhooks_api/events.rs` | `client.webhooks().available_events()` returning canonical event list, `WebhookEventType` enum (all 11 variants) |
-| Unit 4 | `feat/us-7.2.0/unit-4-delivery-attempts` | `src/resources/webhooks_api/attempts.rs` | `client.webhooks().list_attempts(params)`, `client.webhooks().retrieve_attempt(id)`, delivery attempt diagnostics |
-| Unit 5 | `feat/us-7.2.0/unit-5-webhooks-api-tests` | `src/resources/webhooks_api/tests.rs` | Wire tests: create with events filter, create global listener (no events), list, delete, available_events returns payment_failed + payment_faild |
+| Unit 2 | `feat/us-7.2.0/unit-2-webhook-create-list` | `src/resources/webhooks_api/crud.rs` | `CreateWebhookParams` (with `validate_https_url`), `client.webhooks().create()` (`POST /v1/webhooks` with `http_method`, `url`, `shared_secret`, `events`), `.list()`, unit tests |
+| Unit 3 | `feat/us-7.2.0/unit-3-available-events` | `src/resources/webhooks_api/events.rs` | `client.webhooks().available_events()` (`GET /v1/webhooks/available_events`), re-exporting `WebhookEventType` (all 11 variants) from `webhook_engine` |
+| Unit 4 | `feat/us-7.2.0/unit-4-delivery-attempts` | `src/resources/webhooks_api/attempts.rs` | `ListWebhookAttemptsParams`, `client.webhooks().list_attempts(params)`, `client.webhooks().retrieve_attempt(id)`, delivery attempt diagnostics |
+| Unit 5 | `feat/us-7.2.0/unit-5-webhook-retrieve-delete` | `src/resources/webhooks_api/retrieve_delete.rs` | `client.webhooks().retrieve(id)` (`GET /v1/webhooks/:id`) and `client.webhooks().delete(id)` (`DELETE /v1/webhooks/:id`), unit tests |
 
 ---
 
@@ -585,11 +587,15 @@ $$S_{\text{7.3}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 4 + 0.20\cdot 2 = \text
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-7.3.0/unit-1-webhook-event-types` | `src/webhook_engine/event_types.rs` | `WebhookEventType` enum with `#[serde(rename = "payment_failed", alias = "payment_faild")]`, all 11 event variants, `WebhookEvent` struct (id, event_type, created_at, secret_token [Debug-redacted], account_name, live, data as Value) |
 | Unit 2 | `feat/us-7.3.0/unit-2-constant-time-verifier` | `src/webhook_engine/verifier.rs` | `ConstantTimeSecretVerifier::new(shared_secret, tolerance)` — HMAC-SHA256 with domain-separation key "some-moyasar-webhook-domain-v1", 32-byte digest comparison via `subtle::ConstantTimeEq` |
-| Unit 3 | `feat/us-7.3.0/unit-3-timestamp-validation` | `src/webhook_engine/verifier.rs` (append) | `validate_timestamp(tolerance: Duration)`, 4-hour default tolerance to accommodate 6-attempt retry schedule (1m+10m+30m+1h+2h = 3h41m) |
-| Unit 4 | `feat/us-7.3.0/unit-4-deduplication` | `src/webhook_engine/deduplication.rs` | `WebhookDeduplicator` trait (async, keyed by event.id UUID), `NoopDeduplicator` default, integration point for Redis/PostgreSQL backends |
-| Unit 5 | `feat/us-7.3.0/unit-5-webhook-tests` | `src/webhook_engine/tests.rs` | Cryptographic tests: correct secret → Ok, wrong secret → SecretMismatch, expired timestamp → TimestampOutOfRange, payment_faild deserialization, constant-time leakage tests (byte-timing assertions) |## Module 8: Cross-Cutting — Stripe Compat, some-payment Trait & Test Fixtures
+| Unit 3 | `feat/us-7.3.0/unit-3-timestamp-validation` | `src/webhook_engine/timestamp.rs` | `REPLAY_TOLERANCE` (4h default for 3h41m retry ladder), `validate_timestamp_at(now, tolerance)` guarding against stale and future-skewed events |
+| Unit 4 | `feat/us-7.3.0/unit-4-deduplication` | `src/webhook_engine/deduplication.rs` | `WebhookDeduplicator` trait (async, keyed by `event.id` UUID), `NoopDeduplicator` and `InMemoryDeduplicator`, integration point for Redis/PostgreSQL |
+| Unit 5 | `feat/us-7.3.0/unit-5-webhook-payload-extractors` | `src/webhook_engine/payload.rs` | Typed `WebhookEvent` payload extractors (`into_payment()`, `into_card_auth()`) and cryptographic/replay-ladder unit tests |
 
-**Feature flags:** `stripe-compat`, `some-payment-trait`, `async-stream` (all opt-in)  
+---
+
+## Module 8: Cross-Cutting — Stripe Compat, some-payment Trait & Test Fixtures
+
+**Feature flags:** `stripe-compat`, `some-payments-trait` (alias `some-payment-trait`), `test-utils`, `async-stream` (all opt-in)  
 **Branch:** `feat/module-8-cross-cutting`  
 **Depends on:** Modules 1-7 (all prior modules)  
 **Domain:** Stripe-parity compatibility layer (refunds, customers, subscriptions with pro-rata refunds), `some-payment` unified gateway trait adapter, auto-pagination `Stream`, and test-utils feature with deterministic mock fixtures.
@@ -616,7 +622,7 @@ $$S_{\text{8.1}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 2 = \text
 | Unit 1 | `feat/us-8.1.0/unit-1-refunds-service` | `src/stripe_compat/refunds.rs` | `RefundsService`, `RefundCreateParams` (payment_id, amount optional, prefer_void_if_unsettled), `RefundReceipt` (payment_id, refunded_amount, refunded_format, refunded_at, split_reversal_flags) |
 | Unit 2 | `feat/us-8.1.0/unit-2-refund-strategy` | `src/stripe_compat/refund_strategy.rs` | Smart routing: void within 2h → POST /void, else → POST /refund, partial amounts always → refund. Unit tests per strategy branch |
 | Unit 3 | `feat/us-8.1.0/unit-3-customer-vault` | `src/stripe_compat/customers.rs` | `CustomerVault` trait: `associate(customer_id, token_id)`, `resolve_tokens(customer_id) -> Vec<TokenId>`, `deactivate(token_id)`. `customer_id` injected into payment metadata |
-| Unit 4 | `feat/us-8.1.0/unit-4-refunds-customers-tests` | `src/stripe_compat/tests/refunds_customers_tests.rs` | Wire tests: full refund → Refunded receipt, partial refund, void fallback for unsettled, customer→token association + metadata injection |
+| Unit 4 | `feat/us-8.1.0/unit-4-in-memory-customer-vault` | `src/stripe_compat/in_memory_vault.rs` | Thread-safe `InMemoryCustomerVault` reference implementation of `CustomerVault`, customer metadata injector, and refund/customer unit tests |
 
 ---
 
@@ -629,13 +635,13 @@ $$S_{\text{8.1}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 2 = \text
 | $D_1$ Surface | 3 | subscription cycles, pro-rata refunds |
 | $D_2$ Volume | 2 | ~450 LOC |
 | $D_3$ Complexity | 3 | Pro-rata math, idempotent UUIDv5, void window |
-| $D_4$ Orthogonality | 2 | `subscriptions.rs` |
+| $D_4$ Orthogonality | 3 | `subscriptions_model.rs`, `subscriptions_billing.rs`, `pro_rata.rs`, `subscriptions_refund.rs`, `subscription_plan.rs` |
 
-$$S_{\text{8.2}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 2 = \textbf{2.55}$$
+$$S_{\text{8.2}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 3 = \textbf{2.75}$$
 
 | Result | $K$ Units |
 | :--- | :---: |
-| **Score 2.55 → 5 units** | **5** |
+| **Score 2.75 → 5 units** | **5** |
 
 | Unit | Branch | Owner Files | Deliverables |
 | :--- | :--- | :--- | :--- |
@@ -643,7 +649,7 @@ $$S_{\text{8.2}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 2 = \text
 | Unit 2 | `feat/us-8.2.0/unit-2-subscription-billing` | `src/stripe_compat/subscriptions_billing.rs` | `client.subscriptions().charge_cycle(sub_id, cycle_index, amount, token_id)`, deterministic UUIDv5: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")`, token status check before charge |
 | Unit 3 | `feat/us-8.2.0/unit-3-pro-rata-calculator` | `src/stripe_compat/pro_rata.rs` | `pro_rata_refund(amount, period_start, period_end, canceled_at) -> u64` — exact halala calculation: `ceil(amount * remaining / total)`, unit tests for 30-day, 365-day, leap-year periods |
 | Unit 4 | `feat/us-8.2.0/unit-4-cycle-refund` | `src/stripe_compat/subscriptions_refund.rs` | `client.subscriptions().refund_cycle(params)`: locate cycle Payment, compute pro-rata, execute refund/void with smart routing, `SubscriptionCycleRefundResult` (action, amount, payment_id) |
-| Unit 5 | `feat/us-8.2.0/unit-5-subscription-tests` | `src/stripe_compat/tests/subscriptions_tests.rs` | Wire tests: cycle charge with UUIDv5 idempotency, charge retry returns same Payment, pro-rata 10/30 days = 2/3 refund, full refund within 2h → void, double-charge prevention |
+| Unit 5 | `feat/us-8.2.0/unit-5-subscription-plan` | `src/stripe_compat/subscription_plan.rs` | `SubscriptionPlan`, `PlanInterval` (`Day`, `Week`, `Month`, `Year`), billing period boundary calculator (`next_period_bounds`), and subscription cycle unit tests |
 
 ---
 
@@ -668,7 +674,7 @@ $$S_{\text{8.3}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | :--- | :--- | :--- | :--- |
 | Unit 1 | `feat/us-8.3.0/unit-1-unified-trait` | `src/unified.rs` | `impl UnifiedPaymentGateway for MoyasarClient`: create_intent, charge_saved_token, refund_or_void, verify_webhook. Normalization: idempotency_key → given_id, webhook verification via ConstantTimeSecretVerifier |
 | Unit 2 | `feat/us-8.3.0/unit-2-test-fixtures` | `src/test_utils/fixtures.rs` | Deterministic JSON fixtures: all 11 webhook event types (including payment_faild), STC Pay mock responses (0515555555, 0515555558, 0515555559), SADAD sandbox biller 007, ISO 8583 response codes |
-| Unit 3 | `feat/us-8.3.0/unit-3-mock-responder` | `src/test_utils/mock.rs` + feature gate | `test-utils` feature flag, local mock HTTP responders, `MoyasarMockServer` for CI integration, example in README |
+| Unit 3 | `feat/us-8.3.0/unit-3-mock-responder` | `src/test_utils/mock.rs` | `MoyasarMockServer` local HTTP mock responder and route handlers under `test-utils` feature flag, conformance unit tests |
 
 ---
 
@@ -690,8 +696,8 @@ $$S_{\text{8.3}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | 3: Payment Intents | 3.2 Fulfillment & Browser Flow | 2.20 | 4 |
 | **Module 3 subtotal** | | | **8** |
 | 4: Tokens, Invoices, 3DS | 4.1 Card Tokenization | 2.35 | 4 |
-| 4: Tokens, Invoices, 3DS | 4.2 Hosted E-Invoices | 2.75 | 5 |
-| 4: Tokens, Invoices, 3DS | 4.3 3D Secure Card Auth | 1.85 | 3 |
+| 4: Tokens, Invoices, 3DS | 4.2 Hosted E-Invoices | 2.95 | 5 |
+| 4: Tokens, Invoices, 3DS | 4.3 3D Secure Card Auth | 1.80 | 3 |
 | **Module 4 subtotal** | | | **12** |
 | 5: Payouts | 5.1 Payout Accounts | 2.35 | 4 |
 | 5: Payouts | 5.2 Single & Bulk Payouts | 3.35 | 6 |
@@ -704,7 +710,7 @@ $$S_{\text{8.3}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 | 7: Sources & Webhooks | 7.3 Webhook Verification Engine | 2.75 | 5 |
 | **Module 7 subtotal** | | | **13** |
 | 8: Cross-Cutting | 8.1 Stripe-Compat Refunds & Customers | 2.20 | 4 |
-| 8: Cross-Cutting | 8.2 Stripe-Compat Subscriptions | 2.55 | 5 |
+| 8: Cross-Cutting | 8.2 Stripe-Compat Subscriptions | 2.75 | 5 |
 | 8: Cross-Cutting | 8.3 some-payment Trait & Test Fixtures | 2.00 | 3 |
 | **Module 8 subtotal** | | | **12** |
 | **TOTAL** | **8 Modules, 23 Stories** | | **99 units** |
@@ -718,19 +724,23 @@ $$S_{\text{8.3}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 ```mermaid
 flowchart TD
     M1["Module 1: Core Microkernel (11u)"] --> M2["Module 2: Payments Service (24u)"]
-    M1 --> M4["Module 4: Tokens, Invoices, 3DS (12u)"]
     M1 --> M5["Module 5: Payouts (10u)"]
     M1 --> M6["Module 6: Settlements & Ledger (9u)"]
     M1 --> M7["Module 7: Sources & Webhooks (13u)"]
     M2 --> M3["Module 3: Payment Intents (8u)"]
+    M2 --> M4["Module 4: Tokens, Invoices, 3DS (12u)"]
     M2 --> M8["Module 8: Cross-Cutting (12u)"]
+    M3 --> M8
     M4 --> M8
+    M5 --> M8
+    M7 --> M8
 ```
 
-- **Phase 1:** M1 runs first (no deps)
-- **Phase 2 (parallel):** M2, M4, M5, M6, M7 fire simultaneously after M1 merges (6 modules)
-- **Phase 3 (parallel):** M3 (depends on M2), M8 (depends on M2+M4)
-- M5, M6, M7 are leaf modules — nothing depends on them
+- **Phase 1 (Core Foundation):** M1 runs first (`US-1.3.0` error/currency types first, then `US-1.1.0` and `US-1.2.0` in parallel).
+- **Phase 2 (Parallel Domain Wave 1 — 4 modules):** M2 (`US-2.3.0`, `US-2.4.0`, `US-2.5.0` source/split types first, then `US-2.1.0`, then `US-2.2.0`), M5 (`US-5.1.0` then `US-5.2.0`), M6 (`US-6.1.0` and `US-6.2.0` in parallel), and M7 (`US-7.1.0` and `US-7.3.0` in parallel, then `US-7.2.0`) fire simultaneously after M1 merges.
+- **Phase 3 (Parallel Domain Wave 2 — 2 modules):** M3 (`US-3.1.0` then `US-3.2.0`) and M4 (`US-4.1.0`, `US-4.2.0`, `US-4.3.0` in parallel) fire simultaneously after M2 merges.
+- **Phase 4 (Cross-Cutting Integration):** M8 (`US-8.1.0` then `US-8.2.0`, in parallel with `US-8.3.0`) fires after M2, M3, M4, M5, and M7 merge.
+- **Base Branch Scaffolding Rule:** Before spawning parallel unit worktrees for any module or story, the Leader commits `Cargo.toml`, `src/lib.rs`, `src/kernel/mod.rs`, `src/resources/mod.rs`, and the target module's `mod.rs` + `service.rs` facade declarations on the base branch so all $K$ units compile and pass `G0` independently in parallel.
 
 ---
 

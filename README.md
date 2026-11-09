@@ -119,12 +119,12 @@ async fn main() -> Result<(), MoyasarError> {
         .currency(Currency::SAR)
         .description("Annual Pro Plan + Vendor Split")
         .callback_url("https://merchant.example/payments/callback")
-        .source(PaymentSourceRequest::Token {
+        .source(PaymentSourceRequest::Token(TokenSource {
             token: "token_qbmmXzo97AESrZLS6KpWvof6uK2hAKcQGfEcKg".into(),
             three_ds: Some(false),
             manual: Some(false),
             cvc: None,
-        })
+        }))
         .splits(vec![
             PaymentSplitRequest {
                 amount: 13500,

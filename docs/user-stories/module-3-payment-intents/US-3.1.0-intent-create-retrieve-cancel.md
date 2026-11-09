@@ -1,7 +1,7 @@
 # US-3.1.0: Payment Intent Creation, Retrieval, Cancellation & Expiry Guards
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payment-intents/behaviours/intent-lifecycle/`  
+> **Behavior Blueprint**: `src/resources/payment_intents/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -89,14 +89,14 @@ Feature: Payment Intent Lifecycle Management
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payment-intents/behaviours/intent-lifecycle/
-├── services/        # PaymentIntentsService dispatchers
-├── logic/           # is_usable() expiry guard, status transition checks
-├── types/           # PaymentIntent, PaymentIntentStatus, CreatePaymentIntentParams
-└── constants/       # INTENT_EXPIRY_SECS (3600)
+src/
+├── src/resources/payment_intents/models.rs    # Unit 1 (feat/us-3.1.0/unit-1-intent-model)
+├── src/resources/payment_intents/create.rs    # Unit 2 (feat/us-3.1.0/unit-2-create-cancel)
+├── src/resources/payment_intents/expiry.rs    # Unit 3 (feat/us-3.1.0/unit-3-expiry-guard)
+├── src/resources/payment_intents/retrieve.rs  # Unit 4 (feat/us-3.1.0/unit-4-retrieve-endpoint)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -116,18 +116,32 @@ features/core/modules/payment-intents/behaviours/intent-lifecycle/
 - **Secret Law**: `client_secret` appears only in create/retrieve responses; `Debug` must redact it.
 
 ```rust
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct PaymentIntent {
     pub id: Uuid,
     pub status: PaymentIntentStatus,
     pub amount: u64,
+    pub amount_format: Option<String>,
     pub currency: Currency,
     pub description: Option<String>,
     pub callback_url: String,
-    #[serde(skip_serializing)]           // never re-emitted into logs
     pub client_secret: String,
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+impl std::fmt::Debug for PaymentIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PaymentIntent")
+            .field("id", &self.id)
+            .field("status", &self.status)
+            .field("amount", &self.amount)
+            .field("currency", &self.currency)
+            .field("client_secret", &"[REDACTED]")
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
 }
 
 impl PaymentIntent {
@@ -178,54 +192,36 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 4-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payment_intents/models.rs` | `PaymentIntent`, `PaymentIntentStatus`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payment_intents/params.rs` | `CreatePaymentIntentParams` (four locked fields). | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payment_intents/create.rs` | `POST /v1/payment_intents`; `POST /:id/cancel`. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payment_intents/service.rs` | `client.payment_intents()` accessor. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `IntentNotCancelable` mapping, non-retryable. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payment_intents/mod.rs` | Feature-gated export under `payment-intents`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payment_intents/models.rs` | `is_usable()` on `&self`; no allocation. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payment_intents/expiry.rs` | Silent-expiry guard; boundary at exactly +3600s. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/intent_lifecycle_test.rs` | Create→retrieve→cancel; 400 on already-canceled. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests incl. the expiry pitfall. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-3.1.0/unit-1-intent-model` | `src/resources/payment_intents/models.rs` | `PaymentIntent` struct (id, amount, currency, description, callback_url, status, client_secret, expires_at, created_at), `PaymentIntentStatus` enum | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-3.1.0/unit-2-create-cancel` | `src/resources/payment_intents/create.rs` | `CreatePaymentIntentParams`, `client.payment_intents().create()`, `client.payment_intents().cancel(id)` returning 400 on already cancelled/fulfilled/expired | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-3.1.0/unit-3-expiry-guard` | `src/resources/payment_intents/expiry.rs` | `PaymentIntent::is_usable(&self) -> bool` — status==Created AND Utc::now() < expires_at. Document pitfalls: status stays "created" past expiry | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-3.1.0/unit-4-retrieve-endpoint` | `src/resources/payment_intents/retrieve.rs` | `client.payment_intents().retrieve(id)` (`SecretKey` bound), `IntentId` newtype, 403/404 handling, unit tests | `security-appsec-engineer` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `PaymentIntent`, `PaymentIntentStatus`, `INTENT_EXPIRY_SECS`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-3.1.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
+- [ ] **Unit 1 (`feat/us-3.1.0/unit-1-intent-model`)**: `PaymentIntent` struct (id, amount, currency, description, callback_url, status, client_secret, expires_at, created_at), `PaymentIntentStatus` enum (Files: `src/resources/payment_intents/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: `CreatePaymentIntentParams` with the four locked fields.  
+- [ ] **Unit 2 (`feat/us-3.1.0/unit-2-create-cancel`)**: `CreatePaymentIntentParams`, `client.payment_intents().create()`, `client.payment_intents().cancel(id)` returning 400 on already cancelled/fulfilled/expired (Files: `src/resources/payment_intents/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: deserialization incl. `client_secret`.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
+- [ ] **Unit 3 (`feat/us-3.1.0/unit-3-expiry-guard`)**: `PaymentIntent::is_usable(&self) -> bool` — status==Created AND Utc::now() < expires_at. Document pitfalls: status stays "created" past expiry (Files: `src/resources/payment_intents/expiry.rs`)  
+  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-3.1.0/unit-4-retrieve-endpoint`)**: `client.payment_intents().retrieve(id)` (`SecretKey` bound), `IntentId` newtype, 403/404 handling, unit tests (Files: `src/resources/payment_intents/retrieve.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
-#### Phase 2: Endpoints & Accessor (PR 3–6)
-- [ ] **Task 2.1 (Create)**: `POST /v1/payment_intents`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Retrieve)**: `GET /v1/payment_intents/:id`, 404 mapping.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Cancel)**: `POST /:id/cancel`, `intent_not_cancelable` mapping.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.4 (Accessor)**: zero-cost `PaymentIntentsService<'a>`.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-
-#### Phase 3: Expiry Guard (PR 7–8)
-- [ ] **Task 3.1 (is_usable)**: `status == Created && now < expires_at`.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Boundary Tests)**: exactly at expiry, just before, just after.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: full create→retrieve→cancel cycle.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on expiry semantics.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: document the silent-expiry pitfall.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

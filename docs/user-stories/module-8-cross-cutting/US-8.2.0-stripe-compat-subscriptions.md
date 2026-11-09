@@ -1,7 +1,7 @@
-# US-8.2.0: Stripe Compatibility Layer — Plans, Subscriptions & Invoices
+# US-8.2.0: Stripe Compatibility Layer — Subscriptions, Deterministic UUIDv5 Billing & Pro-Rata Refunds
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/compat/behaviours/stripe-subscriptions/`  
+> **Behavior Blueprint**: `src/stripe_compat/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -11,151 +11,147 @@
 ## 1. Spec Kit Specification
 
 ### 1.1 User Story Narrative
-**As a** merchant with recurring billing already modelled in Stripe terms,  
-**I want to** manage plans, subscriptions and subscription invoices through `client.plans()`, `client.subscriptions()` and `client.subscription_invoices()` using Stripe-shaped params,  
-**So that** my recurring-revenue code migrates without a rewrite, while the SDK absorbs Moyasar's differences (plan `interval` naming, subscription status set, invoice linkage) and rejects anything it cannot faithfully translate.
+**As a** SaaS or subscription merchant billing customers in Saudi Arabia,  
+**I want to** execute recurring off-session token charges via `client.subscriptions().charge_cycle(...)` using deterministic UUIDv5 `given_id` idempotency (`Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")`) and issue full, partial, or exact pro-rata unused-time refunds via `client.subscriptions().refund_cycle(...)` with automatic ~2-hour void fallback,  
+**So that** distributed billing workers never double-charge a subscriber for the same cycle on retry, and mid-cycle cancellations refund the exact unused halalas (`ceil(amount * remaining / total)`) without floating-point rounding errors.
 
 #### 1.1.1 Preconditions
-- `features = ["compat-stripe"]` (implies `core`, `payments`, `invoices`).
-- A valid `SecretKey` with subscriptions entitlement.
-- A customer id (US-8.1.0) for subscription creation.
+- `features = ["stripe-compat"]` (implies `core`, `payments`, `tokens`, `invoices`).
+- A valid `SecretKey`.
+- An active saved card `TokenId` (`TokenStatus::Active` from `US-4.1.0`).
 
 #### 1.1.2 Postconditions
-- `plans().create/retrieve/update/delete/list` operate on Moyasar plans with Stripe field names.
-- `subscriptions().create/retrieve/update/cancel/list` return a Stripe-shaped `Subscription` with `status`, `current_period_start/end`, `plan_id`, `customer_id`.
-- `subscription_invoices().list()` filters by subscription and returns Stripe-shaped invoices.
-- Cancel is explicit (`cancel_at_period_end` vs immediate) and never silently immediate.
+- `charge_cycle(...)` verifies that the saved token is `TokenStatus::Active`, derives `given_id = Uuid::new_v5(&MOYASAR_SUBSCRIPTION_NAMESPACE, "{sub_id}:{cycle_index}")`, and submits an off-session `POST /v1/payments` charge with `PaymentSourceRequest::Token` (`three_ds: Some(false)`).
+- `pro_rata_refund(amount, period_start, period_end, canceled_at)` calculates `ceil(amount * remaining_secs / total_secs)` using exact 128-bit integer arithmetic (`u128`).
+- `refund_cycle(SubscriptionCycleRefundParams)` resolves the refund amount according to `RefundStrategy` (`Full`, `Partial { amount_halalas }`, or `ProRata { canceled_at }`), executes smart void-or-refund routing (`POST /v1/payments/:id/void` if full reversal within ~2h, else `POST /v1/payments/:id/refund`), and returns `SubscriptionCycleRefundResult`.
 
 ### 1.2 Acceptance Criteria (Gherkin Scenarios)
 
 ```gherkin
-Feature: Stripe-Compatible Subscriptions
+Feature: Deterministic Subscription Billing and Pro-Rata Cycle Refunds
 
-  Scenario: [AC-US-8.2.0-01] Create a plan with a billing interval
-    Given a CreatePlanParams with amount, currency and interval month
-    When client.plans().create(params) is called
-    Then the returned Plan exposes id, amount, currency and interval
-    And interval serializes to the documented wire value.
+  Scenario: [AC-US-8.2.0-01] Off-session cycle charge uses deterministic UUIDv5 given_id
+    Given subscription "sub_pro_9921" at cycle_index 4 and an active token "token_abc"
+    When client.subscriptions().charge_cycle(...) is called twice across worker retries
+    Then both requests emit the exact same deterministic UUIDv5 given_id in POST /v1/payments
+    And Moyasar deduplicates the retry so the subscriber is charged at most once.
 
-  Scenario: [AC-US-8.2.0-02] Create a subscription for a customer
-    Given a customer id and a plan id
-    When client.subscriptions().create(params) is called
-    Then the returned Subscription.status is one of the documented statuses
-    And current_period_start and current_period_end are populated.
+  Scenario: [AC-US-8.2.0-02] Inactive or unverified token is rejected before charging
+    Given a token whose status is Initiated or Inactive
+    When client.subscriptions().charge_cycle(...) is called
+    Then the SDK rejects the charge before calling POST /v1/payments.
 
-  Scenario: [AC-US-8.2.0-03] Cancel at period end is distinct from immediate cancel
-    Given an active subscription
-    When cancel is requested with cancel_at_period_end true
-    Then the request body carries that flag
-    And the subscription remains active until current_period_end.
+  Scenario: [AC-US-8.2.0-03] Exact integer ceiling pro-rata refund calculation
+    Given a 30-day billing cycle (2,592,000 seconds) paid at 29,900 halalas (299.00 SAR)
+    When canceled exactly 10 days into the cycle (20 days remaining)
+    Then pro_rata_refund computes ceil(29900 * 1728000 / 2592000) == 19934 halalas
+    And uses integer u128 arithmetic with zero f64 conversion.
 
-  Scenario: [AC-US-8.2.0-04] Immediate cancel is explicit
-    Given an active subscription
-    When cancel is requested with cancel_at_period_end false
-    Then the subscription transitions to canceled immediately
-    And the response status reflects the terminal state.
+  Scenario: [AC-US-8.2.0-04] Full cycle cancellation within 2 hours routes to void
+    Given a subscription cycle paid 20 minutes ago
+    When client.subscriptions().refund_cycle(params) is called with RefundStrategy::Full
+    Then the SDK executes POST /v1/payments/:id/void
+    And returns SubscriptionCycleRefundResult with action Voided.
 
-  Scenario: [AC-US-8.2.0-05] List subscription invoices
-    Given a subscription with generated invoices
-    When client.subscription_invoices().list({ subscription_id }) is called
-    Then only invoices for that subscription are returned
-    And each invoice exposes amount, status and period bounds.
+  Scenario: [AC-US-8.2.0-05] SubscriptionPlan computes accurate billing period boundaries
+    Given a SubscriptionPlan with PlanInterval::Month
+    When next_period_bounds(period_start) is computed across standard and leap-year months
+    Then current_period_start and current_period_end reflect exact UTC timestamps.
 
-  Scenario: [AC-US-8.2.0-06] Unsupported Stripe subscription fields are rejected
-    Given a param set containing a Stripe-only subscription field
-    When the request is built
-    Then a typed UnsupportedCompatField error names the field
-    And no request is sent.
-
-  Scenario: [AC-US-8.2.0-LAW] SAMA recurring-charge consent and disclosure
-    Given any subscription
-    When it is created or cancelled
-    Then the plan amount, currency and interval are recorded and cancellation takes effect at a disclosed date,
-         satisfying SAMA recurring-payment consent and disclosure requirements.
+  Scenario: [AC-US-8.2.0-LAW] SAMA recurring-charge idempotency and pro-rata refund fairness
+    Given any recurring subscription charge or mid-cycle cancellation
+    When executed by the SDK
+    Then cycle idempotency prevents duplicate debits and ceiling rounding favors the consumer on fractional halalas,
+         satisfying SAMA recurring-payment consumer protection requirements.
 ```
 
 ### 1.3 Test Cases & Traceability Matrix
 
 | Test Case ID | Target Criterion | Test Type | Execution Level | Verification Assertion & Pass Criteria |
 | :--- | :--- | :--- | :--- | :--- |
-| `TC-8.2.0-01` | `AC-US-8.2.0-01` | Functional | Unit | Interval wire value correct. |
-| `TC-8.2.0-02` | `AC-US-8.2.0-02` | Functional | Integration | Status in set; period bounds present. |
-| `TC-8.2.0-03` | `AC-US-8.2.0-03` | Functional | Unit | `cancel_at_period_end: true` on the wire. |
-| `TC-8.2.0-04` | `AC-US-8.2.0-04` | Functional | Integration | Immediate cancel → terminal status. |
-| `TC-8.2.0-05` | `AC-US-8.2.0-05` | Functional | Unit | Filter encoded; invoice fields present. |
-| `TC-8.2.0-06` | `AC-US-8.2.0-06` | Validation | Unit | Typed error; zero calls. |
-| `TC-8.2.0-LAW` | `AC-US-8.2.0-LAW` | Compliance | Static / Audit | Amount/interval recorded; cancel date disclosed. |
+| `TC-8.2.0-01` | `AC-US-8.2.0-01` | Functional | Integration | Identical UUIDv5 `given_id` sent on retry for `sub_id:cycle_index`. |
+| `TC-8.2.0-02` | `AC-US-8.2.0-02` | Security | Unit | Inactive token rejected pre-charge. |
+| `TC-8.2.0-03` | `AC-US-8.2.0-03` | Functional | Unit | 30-day, 365-day, and leap-year pro-rata ceiling math exact to 1 halala. |
+| `TC-8.2.0-04` | `AC-US-8.2.0-04` | Functional | Integration | Unsettled full refund routes to `/void`; pro-rata partial routes to `/refund`. |
+| `TC-8.2.0-05` | `AC-US-8.2.0-05` | Functional | Unit | `SubscriptionPlan` period calculation across `Day`, `Week`, `Month`, `Year`. |
+| `TC-8.2.0-LAW` | `AC-US-8.2.0-LAW` | Compliance | Static / Audit | Zero `f64` in pro-rata math; deterministic UUIDv5 enforced. |
 
 ---
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/compat/behaviours/stripe-subscriptions/
-├── services/        # PlansService, SubscriptionsService, SubscriptionInvoicesService
-├── logic/           # Interval mapping, cancel-mode resolution
-├── types/           # Plan, Subscription, SubscriptionInvoice, SubscriptionStatus
-└── constants/       # PLANS_PATH, SUBSCRIPTIONS_PATH, SUBSCRIPTION_INVOICES_PATH
+src/
+├── src/stripe_compat/subscriptions_model.rs   # Unit 1 (feat/us-8.2.0/unit-1-subscription-model)
+├── src/stripe_compat/subscriptions_billing.rs # Unit 2 (feat/us-8.2.0/unit-2-subscription-billing)
+├── src/stripe_compat/pro_rata.rs              # Unit 3 (feat/us-8.2.0/unit-3-pro-rata-calculator)
+├── src/stripe_compat/subscriptions_refund.rs  # Unit 4 (feat/us-8.2.0/unit-4-cycle-refund)
+├── src/stripe_compat/subscription_plan.rs     # Unit 5 (feat/us-8.2.0/unit-5-subscription-plan)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
-- **Tier 1 (Behaviour-Local)**: interval mapping.
-- **Tier 2 (Module-Shared)**: `Subscription` shared with the compat invoice layer.
-- **Tier 3 (Feature-Shared)**: three services under `compat-stripe`.
-- **Tier 4 (Global-Shared)**: `client.plans()`, `client.subscriptions()`, `client.subscription_invoices()`.
+- **Tier 1 (Behaviour-Local)**: 128-bit integer ceiling pro-rata calculator (`pro_rata_refund`).
+- **Tier 2 (Module-Shared)**: Reuses `RefundsService` smart void/refund routing from `US-8.1.0`.
+- **Tier 3 (Feature-Shared)**: `SubscriptionsService`, `RefundStrategy`, `SubscriptionPlan` under `stripe-compat`.
+- **Tier 4 (Global-Shared)**: `client.subscriptions()` facade accessor.
 
 ---
 
 ## 3. Technical Implementation Plan
 
 ### 3.1 Domain Invariants & Storage Schema
-- **Cancel Explicitness Law**: `cancel_at_period_end` must be explicit; no default that silently cancels immediately.
-- **Interval Law**: intervals map to documented wire values (`day` | `week` | `month` | `year`).
-- **Status Law**: `SubscriptionStatus` is a closed set with an `Unknown` fallback for forward compatibility.
-- **Linkage Law**: every subscription invoice references its subscription.
+- **Deterministic Cycle Law**: `given_id = Uuid::new_v5(&MOYASAR_SUBSCRIPTION_NAMESPACE, format!("{sub_id}:{cycle_index}").as_bytes())`.
+- **Integer Ceiling Pro-Rata Law**: $\text{Refund}_{\text{pro-rata}} = \lceil \text{Amount}_{\text{paid}} \times \frac{T_{\text{end}} - T_{\text{cancel}}}{T_{\text{end}} - T_{\text{start}}} \rceil$ computed via `(amount as u128 * remaining as u128 + total as u128 - 1) / total as u128`.
+- **Active Token Law**: `charge_cycle` verifies `TokenStatus::Active` before submitting an off-session charge.
 
 ```rust
-#[derive(Debug, Clone, Deserialize)]
-pub struct Plan {
-    pub id: Uuid,
-    pub amount: u64,
-    pub currency: Currency,
-    pub interval: PlanInterval,
-    pub description: Option<String>,
-    pub created_at: DateTime<Utc>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RefundStrategy {
+    Full,
+    Partial { amount_halalas: u64 },
+    ProRata { canceled_at: DateTime<Utc> },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionCycleRefundParams {
+    pub subscription_id: String,
+    pub cycle_payment_id: Uuid,
+    pub period_start: DateTime<Utc>,
+    pub period_end: DateTime<Utc>,
+    pub strategy: RefundStrategy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PlanInterval { Day, Week, Month, Year }
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct Subscription {
-    pub id: Uuid,
-    pub customer_id: Uuid,
-    pub plan_id: Uuid,
-    pub status: SubscriptionStatus,
-    pub current_period_start: DateTime<Utc>,
-    pub current_period_end: DateTime<Utc>,
-    pub cancel_at_period_end: bool,
+pub enum ReversalAction {
+    Voided,
+    Refunded,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SubscriptionStatus {
-    Active, Trialing, PastDue, Canceled, Incomplete, #[serde(other)] Unknown,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionCycleRefundResult {
+    pub payment_id: Uuid,
+    pub action: ReversalAction,
+    pub amount_reversed: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CancelMode { AtPeriodEnd, Immediate }
-
-impl CancelMode {
-    /// Explicit by construction: no silent default.
-    pub fn cancel_at_period_end(self) -> bool {
-        matches!(self, Self::AtPeriodEnd)
+pub fn pro_rata_refund(
+    amount: u64,
+    period_start: DateTime<Utc>,
+    period_end: DateTime<Utc>,
+    canceled_at: DateTime<Utc>,
+) -> Result<u64, MoyasarError> {
+    let total = (period_end - period_start).num_seconds();
+    if total <= 0 {
+        return Err(MoyasarError::InvalidPayoutAmount);
     }
+    let remaining = (period_end - canceled_at).num_seconds().clamp(0, total);
+    if remaining == 0 {
+        return Ok(0);
+    }
+    let num = (amount as u128) * (remaining as u128) + (total as u128) - 1;
+    Ok((num / (total as u128)) as u64)
 }
 ```
 
@@ -164,69 +160,60 @@ impl CancelMode {
 ```mermaid
 sequenceDiagram
     autonumber
-    actor App as Migrated App
-    participant C as Compat Layer
+    actor Scheduler as Billing Worker
+    participant Sub as SubscriptionsService
+    participant Calc as pro_rata_refund
     participant API as api.moyasar.com
 
-    App->>C: plans().create({ amount, interval: month })
-    C->>API: POST /v1/plans
-    API-->>C: Plan
-    App->>C: subscriptions().create({ customer_id, plan_id })
-    C->>API: POST /v1/subscriptions
-    API-->>C: Subscription { status: active, current_period_end }
-    App->>C: subscriptions().cancel(id, CancelMode::AtPeriodEnd)
-    C->>API: POST /v1/subscriptions/:id/cancel { cancel_at_period_end: true }
-    API-->>C: Subscription (still active until period end)
+    Scheduler->>Sub: charge_cycle("sub_99", 4, 29900, SAR, "token_abc")
+    Sub->>API: GET /v1/tokens/token_abc (verify status == active)
+    Sub->>Sub: Uuid::new_v5(&NAMESPACE, "sub_99:4") -> given_id
+    Sub->>API: POST /v1/payments { given_id, amount: 29900, source: { type: "token", 3ds: false } }
+    API-->>Sub: 201 Payment { status: paid }
+    Scheduler->>Sub: refund_cycle({ strategy: ProRata { canceled_at } })
+    Sub->>API: GET /v1/payments/:id
+    Sub->>Calc: pro_rata_refund(29900, start, end, canceled_at) -> 19934
+    Sub->>API: POST /v1/payments/:id/refund { amount: 19934 }
+    API-->>Sub: Payment { status: refunded, refunded: 19934 }
 ```
 
 ---
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 5-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/compat/plan.rs` | `Plan`, `PlanInterval`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/compat/subscription_params.rs` | Create/update/cancel params. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/compat/plans.rs` | Plan CRUD endpoints. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/compat/mod.rs` | Three service accessors. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `UnsupportedCompatField`, invalid-interval. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/lib.rs` | Feature-gated exports. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/compat/subscriptions.rs` | Borrow params; no cloning of ids. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/compat/subscription_cancel.rs` | Explicit `CancelMode`; no silent default. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/compat_subscriptions_test.rs` | Plan → subscription → cancel → invoices. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Recurring-billing migration guide. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-8.2.0/unit-1-subscription-model` | `src/stripe_compat/subscriptions_model.rs` | `SubscriptionCycle`, `SubscriptionCycleId`, `Subscription`, `RefundStrategy` enum (Full, Partial, ProRata { canceled_at }) | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-8.2.0/unit-2-subscription-billing` | `src/stripe_compat/subscriptions_billing.rs` | `client.subscriptions().charge_cycle(sub_id, cycle_index, amount, token_id)`, deterministic UUIDv5: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")`, token status check before charge | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-8.2.0/unit-3-pro-rata-calculator` | `src/stripe_compat/pro_rata.rs` | `pro_rata_refund(amount, period_start, period_end, canceled_at) -> u64` — exact halala calculation: `ceil(amount * remaining / total)`, unit tests for 30-day, 365-day, leap-year periods | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-8.2.0/unit-4-cycle-refund` | `src/stripe_compat/subscriptions_refund.rs` | `client.subscriptions().refund_cycle(params)`: locate cycle Payment, compute pro-rata, execute refund/void with smart routing, `SubscriptionCycleRefundResult` (action, amount, payment_id) | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-8.2.0/unit-5-subscription-plan` | `src/stripe_compat/subscription_plan.rs` | `SubscriptionPlan`, `PlanInterval` (`Day`, `Week`, `Month`, `Year`), billing period boundary calculator (`next_period_bounds`), and subscription cycle unit tests | `engineering-rust-refactoring-specialist` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Types & Params (PR 1–2)
-- [ ] **Task 1.1 (Plan/Subscription Types)**: structs + status enum.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-8.2.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
+- [ ] **Unit 1 (`feat/us-8.2.0/unit-1-subscription-model`)**: `SubscriptionCycle`, `SubscriptionCycleId`, `Subscription`, `RefundStrategy` enum (Full, Partial, ProRata { canceled_at }) (Files: `src/stripe_compat/subscriptions_model.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: create/update/cancel params.  
+- [ ] **Unit 2 (`feat/us-8.2.0/unit-2-subscription-billing`)**: `client.subscriptions().charge_cycle(sub_id, cycle_index, amount, token_id)`, deterministic UUIDv5: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")`, token status check before charge (Files: `src/stripe_compat/subscriptions_billing.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 3 (`feat/us-8.2.0/unit-3-pro-rata-calculator`)**: `pro_rata_refund(amount, period_start, period_end, canceled_at) -> u64` — exact halala calculation: `ceil(amount * remaining / total)`, unit tests for 30-day, 365-day, leap-year periods (Files: `src/stripe_compat/pro_rata.rs`)  
+  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-8.2.0/unit-4-cycle-refund`)**: `client.subscriptions().refund_cycle(params)`: locate cycle Payment, compute pro-rata, execute refund/void with smart routing, `SubscriptionCycleRefundResult` (action, amount, payment_id) (Files: `src/stripe_compat/subscriptions_refund.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-8.2.0/unit-5-subscription-plan`)**: `SubscriptionPlan`, `PlanInterval` (`Day`, `Week`, `Month`, `Year`), billing period boundary calculator (`next_period_bounds`), and subscription cycle unit tests (Files: `src/stripe_compat/subscription_plan.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Plans)**: full CRUD.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Subscriptions)**: create/retrieve/update/list.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Subscription Invoices)**: filtered list.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-
-#### Phase 3: Guards (PR 7–8)
-- [ ] **Task 3.1 (Cancel Mode)**: explicit enum, no default.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Unsupported Fields)**: typed rejection.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: full recurring lifecycle.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on cancel semantics.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: recurring-billing migration guide.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 
@@ -234,35 +221,30 @@ sequenceDiagram
 
 ### 5.1 Trust Boundaries & Security Actors
 - **Trust Boundaries**:
-  - `Recurring Charge Boundary`: future charges occur without the cardholder present.
-  - `Cancellation Boundary`: a wrong cancel mode changes billing behaviour.
-- **Authorized Principals**: merchant backend (`sk_`).
+  - `Off-Session Charge Boundary`: recurring debits execute without cardholder interaction.
+  - `Refund Calculation Boundary`: pro-rata arithmetic determines consumer refund value.
+- **Authorized Principals**: merchant billing backend (`sk_` only).
 
 ### 5.2 Threat Modeling & Abuse Matrix (STRIDE / ASVS)
 
 | Threat Vector | Severity | Vulnerability Mechanism | Mitigating Control & Security Invariant |
 | :--- | :--- | :--- | :--- |
-| **Silent Immediate Cancel** | High | Default cancel mode terminates service unexpectedly | `CancelMode` is a required explicit enum. |
-| **Interval Misinterpretation** | High | `month` mapped to `day`, over-charging | Closed `PlanInterval` enum with wire-value tests. |
-| **Unsupported Field Drop** | High | Stripe field ignored, wrong billing terms | Typed `UnsupportedCompatField` rejection. |
-| **Orphaned Invoice** | Medium | Invoice not linked to a subscription | `subscription_id` required on list filters. |
-| **Status Misread** | Medium | Unknown status treated as active | `Unknown` variant forces explicit handling. |
+| **Double Billing on Retry** | Critical | Worker timeout triggers duplicate cycle charge | Deterministic UUIDv5 `given_id` (`{sub_id}:{cycle_index}`) enforces server-side idempotency. |
+| **Integer Overflow / Float Drift** | High | `u64` overflow or `f64` rounding error in pro-rata math | Exact `u128` ceiling division with clamped `[0, total]` bounds. |
+| **Charging Revoked Token** | High | Off-session charge attempted on inactive/deleted token | Pre-charge `TokenStatus::Active` verification gate. |
 
 ### 5.3 Cryptographic & Data Protection Controls
-- **Explicit Cancel Semantics**: no implicit defaults.
-- **Closed Enums**: intervals and statuses are exhaustive.
-- **Linkage Enforcement**: invoices always reference a subscription.
+- **UUIDv5 Determinism**: RFC 4122 SHA-1 namespace hashing for cycle idempotency.
+- **128-Bit Integer Math**: overflow-proof ceiling division.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Cancel Test**: both modes produce distinct wire bodies.
-- [ ] **Interval Test**: all four intervals map correctly.
-- [ ] **Unsupported Test**: typed error, zero calls.
-- [ ] **Status Test**: `Unknown` never treated as active.
+- [ ] **Idempotency Test**: retrying `charge_cycle` with identical `(sub_id, cycle_index)` produces identical `given_id`.
+- [ ] **Pro-Rata Overflow Test**: large amounts (`u64::MAX / 2`) do not overflow `u128` intermediate math.
+- [ ] **Active Token Test**: `TokenStatus::Inactive` aborts `charge_cycle` before `POST /v1/payments`.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Recurring-billing controls verified against OWASP ASVS Level 2.
-- [ ] Cancel semantics certified.
-- [ ] Zero silent field drops.
+- [ ] Subscription billing and pro-rata refunds verified against OWASP ASVS Level 2.
+- [ ] Zero floating-point arithmetic in money calculations.
 - [ ] Independent reviewer sign-off; zero open findings.
 
 ---
@@ -275,28 +257,28 @@ sequenceDiagram
 - [ ] **US-8.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-8.2.0-G1:** ≥90% line / ≥85% branch on the compat subscriptions module.
+- [ ] **US-8.2.0-G1:** ≥90% line / ≥85% branch on `stripe_compat` subscriptions.
 
 ### G2 — Security audit
 - [ ] **US-8.2.0-G2:** Recurring-billing audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-8.2.0-G3:** Compat subscriptions depend on kernel + invoices only.
+- [ ] **US-8.2.0-G3:** `stripe_compat` subscriptions compose cleanly over `core` (`idempotency`), `payments`, and `tokens`.
 
 ### G-Review — Code review
-- [ ] **US-8.2.0-G-Review:** Peer review on cancel semantics and interval mapping.
+- [ ] **US-8.2.0-G-Review:** Peer review on `u128` pro-rata ceiling math and UUIDv5 derivation.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-8.2.0-G-Borrow:** Params borrowed during mapping.
+- [ ] **US-8.2.0-G-Borrow:** Subscription IDs and token IDs borrowed during request construction.
 
 ### G-Complexity — Cyclomatic complexity
 - [ ] **US-8.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-8.2.0-G-Docs:** 100% public symbols documented; migration guide published.
+- [ ] **US-8.2.0-G-Docs:** 100% public symbols documented; subscription cycle charge and pro-rata refund examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-8.2.0-G-Law:** SAMA recurring-charge consent and disclosure certified.
+- [ ] **US-8.2.0-G-Law:** SAMA recurring-payment idempotency and pro-rata consumer protection certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-8.2.0-G4:** Plan → subscription → cancel → invoices verified against the mock server.
+- [ ] **US-8.2.0-G4:** Cycle billing, retry deduplication, pro-rata refund, and 2h void fallback verified against mock server.

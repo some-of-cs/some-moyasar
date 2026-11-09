@@ -1,7 +1,7 @@
 # US-6.2.0: Transfers & Internal Transactions Ledger
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/settlements/behaviours/transfers-ledger/`  
+> **Behavior Blueprint**: `src/resources/settlements/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -80,14 +80,14 @@ Feature: Transfers and Internal Transactions
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/settlements/behaviours/transfers-ledger/
-├── services/        # TransfersService, InternalTransactionsService
-├── logic/           # Timestamp-window filter serialization
-├── types/           # Transfer, TransferLine, InternalTransaction, TransferId, InternalTransactionId
-└── constants/       # TRANSFERS_PATH, INTERNAL_TXNS_PATH
+src/
+├── src/resources/settlements/transfer_models.rs # Unit 1 (feat/us-6.2.0/unit-1-transfer-models)
+├── src/resources/settlements/transfers.rs     # Unit 2 (feat/us-6.2.0/unit-2-transfer-endpoints)
+├── src/resources/settlements/internal_txn_models.rs # Unit 3 (feat/us-6.2.0/unit-3-internal-txn-model)
+├── src/resources/settlements/internal_transactions.rs # Unit 4 (feat/us-6.2.0/unit-4-internal-txn-endpoints)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -131,7 +131,24 @@ impl InternalTransaction {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Transfer {
     pub id: TransferId,
+    pub recipient_type: Option<RecipientType>,
+    pub recipient_id: Option<Uuid>,
     pub amount: u64,
+    pub fee: Option<u64>,
+    pub tax: Option<u64>,
+    pub currency: Currency,
+    pub reference: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransferLine {
+    pub id: Option<Uuid>,
+    pub internal_transaction_id: Option<Uuid>,
+    pub payment_id: Option<Uuid>,
+    pub amount: u64,
+    pub fee: Option<u64>,
+    pub tax: Option<u64>,
     pub currency: Currency,
     pub created_at: DateTime<Utc>,
 }
@@ -161,48 +178,36 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 4-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/settlements/transfer_models.rs` | `Transfer`, `TransferLine`, `TransferId`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/settlements/ledger_params.rs` | Filter params for both services. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/settlements/transfers.rs` | `GET /v1/transfers` + lines. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/settlements/service.rs` | `client.transfers()`, `client.internal_transactions()`. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | 404 and bad-filter mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/settlements/mod.rs` | Export both sub-services. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/settlements/internal_txn_models.rs` | `InternalTransactionId` newtype. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/settlements/internal_transactions.rs` | Unsettled vs settled fixtures; `is_settled()`. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/transfers_ledger_test.rs` | Transfer/line/internal-txn wire tests. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests tracing payment → transfer. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-6.2.0/unit-1-transfer-models` | `src/resources/settlements/transfer_models.rs` | `Transfer` struct, `TransferLine` struct, `TransferId` newtype | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-6.2.0/unit-2-transfer-endpoints` | `src/resources/settlements/transfers.rs` | `client.transfers().list()`, `client.transfers().retrieve(id)`, `client.transfers().list_lines(id, params)` | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-6.2.0/unit-3-internal-txn-model` | `src/resources/settlements/internal_txn_models.rs` | `InternalTransaction` struct (recipient_type, recipient_id, amount, transfer_id, settled_at, metadata), `InternalTransactionId` newtype | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-6.2.0/unit-4-internal-txn-endpoints` | `src/resources/settlements/internal_transactions.rs` | `ListInternalTransactionsParams`, `client.internal_transactions().list(params)` with id/currency/created_at/updated_at/settled_at filters, unit tests | `security-appsec-engineer` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Transfer Types)**: `Transfer`, `TransferLine`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-6.2.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
+- [ ] **Unit 1 (`feat/us-6.2.0/unit-1-transfer-models`)**: `Transfer` struct, `TransferLine` struct, `TransferId` newtype (Files: `src/resources/settlements/transfer_models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Internal Txn Types)**: `InternalTransaction`, `is_settled()`.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Params)**: filter structs for both services.  
+- [ ] **Unit 2 (`feat/us-6.2.0/unit-2-transfer-endpoints`)**: `client.transfers().list()`, `client.transfers().retrieve(id)`, `client.transfers().list_lines(id, params)` (Files: `src/resources/settlements/transfers.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Transfers)**: list, retrieve, list_lines.  
+- [ ] **Unit 3 (`feat/us-6.2.0/unit-3-internal-txn-model`)**: `InternalTransaction` struct (recipient_type, recipient_id, amount, transfer_id, settled_at, metadata), `InternalTransactionId` newtype (Files: `src/resources/settlements/internal_txn_models.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Internal Txns)**: list with timestamp windows.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-6.2.0/unit-4-internal-txn-endpoints`)**: `ListInternalTransactionsParams`, `client.internal_transactions().list(params)` with id/currency/created_at/updated_at/settled_at filters, unit tests (Files: `src/resources/settlements/internal_transactions.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
-#### Phase 3: Edge Cases (PR 7–8)
-- [ ] **Task 3.1 (Settled/Unsettled)**: fixtures for both linkage states.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: all ledger endpoints.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on linkage semantics.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: funds-flow trace example.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

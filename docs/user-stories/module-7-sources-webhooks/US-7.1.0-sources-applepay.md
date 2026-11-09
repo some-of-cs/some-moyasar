@@ -1,7 +1,7 @@
-# US-7.1.0: Generic Sources & Apple Pay Initiation
+# US-7.1.0: BIN/IIN Card Issuer Lookup & Apple Pay Merchant Session Initiation
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/sources/behaviours/generic-sources-applepay/`  
+> **Behavior Blueprint**: `src/resources/sources/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -11,128 +11,135 @@
 ## 1. Spec Kit Specification
 
 ### 1.1 User Story Narrative
-**As a** checkout engineer adding new payment rails,  
-**I want to** create and fetch generic `Source` objects (`POST /v1/sources`, `GET /v1/sources/:id`), complete Apple Pay sessions via `POST /v1/sources/:id/update`, and initiate Apple Pay merchant validation through `GET /v1/applepay/initiate`,  
-**So that** I can onboard rails beyond the typed `SourceRequest` enum without an SDK release, and Apple Pay domain validation works from a publishable key on the frontend.
+**As a** checkout engineer building a custom storefront in Saudi Arabia,  
+**I want to** inspect card BINs (`POST /v1/source/issuer` via `client.sources().get_issuer(params)`) to retrieve `IssuerMetadata` (`issuer_name`, `issuer_country`, `issuer_card_type`, `issuer_card_category`, `first_digits`, `last_digits`) and initiate signed Apple Pay Web Merchant sessions (`POST /v1/applepay/initiate` via `client.apple_pay().initiate_session(params)`),  
+**So that** I can dynamically distinguish local `mada` debit cards from international credit cards before charging the customer and complete Apple Pay Web Merchant validation from a publishable key without managing a dedicated Apple Developer certificate.
 
 #### 1.1.1 Preconditions
-- `features = ["sources"]`.
-- `SecretKey` for source creation; `PublishableKey` is permitted for `GET /v1/applepay/initiate` only.
+- `features = ["sources"]` (implies `core`).
+- Either `SecretKey` or `PublishableKey` for `client.sources().get_issuer(params)`.
+- `PublishableKey` for `client.apple_pay().initiate_session(params)`.
 
 #### 1.1.2 Postconditions
-- `create()` returns a `Source` with `id`, `type`, `status`, `amount`, `given_id`.
-- `retrieve(id)` returns the same `Source`.
-- `update(id, params)` accepts Apple Pay payment-session data and returns the updated `Source`.
-- `applepay_initiate()` returns a validation URL, and rejects `sk_` when a `pk_` is required by policy.
+- `client.sources().get_issuer(params)` sends `POST /v1/source/issuer` with 6–8 BIN digits (or full PAN) and returns `IssuerMetadata`.
+- `client.apple_pay().initiate_session(params)` sends `POST /v1/applepay/initiate` with `validation_url`, `display_name`, `domain_name`, and `publishable_api_key` and returns `ApplePayMerchantSession`.
+- Attempting to call `initiate_session` with a `SecretKey` is rejected before any network call (`KeyTypeMismatch`).
 
 ### 1.2 Acceptance Criteria (Gherkin Scenarios)
 
 ```gherkin
-Feature: Generic Sources and Apple Pay
+Feature: BIN/IIN Issuer Lookup and Apple Pay Merchant Session Initiation
 
-  Scenario: [AC-US-7.1.0-01] Create a generic source
-    Given a CreateSourceParams with type, amount and currency
-    When client.sources().create(params) is called
-    Then the API returns a Source with a UUID id
-    And the Source.type echoes the requested type.
+  Scenario: [AC-US-7.1.0-01] Lookup a 6-digit or 8-digit BIN for a mada debit card
+    Given an IssuerLookupParams with first_digits "420132"
+    When client.sources().get_issuer(params) is called
+    Then the API sends POST /v1/source/issuer
+    And the returned IssuerMetadata reports issuer_country "SA" and issuer_card_type Debit.
 
-  Scenario: [AC-US-7.1.0-02] Retrieve a source by id
-    Given an existing source id
-    When client.sources().retrieve(id) is called
-    Then the returned Source.id equals the requested id
-    And a 404 maps to RecordNotFound.
+  Scenario: [AC-US-7.1.0-02] Reject BIN input shorter than 6 digits before transport
+    Given an IssuerLookupParams with first_digits "1234"
+    When client.sources().get_issuer(params) is called
+    Then a typed validation error is returned with zero network calls.
 
-  Scenario: [AC-US-7.1.0-03] Update a source with Apple Pay session data
-    Given an Apple Pay source awaiting merchant validation
-    When client.sources().update(id, params) is called with the session payload
-    Then the request is POST /v1/sources/:id/update
-    And the returned Source reflects the updated state.
+  Scenario: [AC-US-7.1.0-03] Initiate an Apple Pay Web Merchant session with a publishable key
+    Given a client configured with a PublishableKey and ApplePayInitiateParams
+    When client.apple_pay().initiate_session(params) is called
+    Then the API sends POST /v1/applepay/initiate
+    And the returned ApplePayMerchantSession contains merchantSessionIdentifier, nonce, merchantIdentifier, domainName, displayName and signature.
 
-  Scenario: [AC-US-7.1.0-04] Initiate Apple Pay merchant validation with a publishable key
-    Given a client configured with a publishable key
-    When client.applepay().initiate() is called
-    Then the request is GET /v1/applepay/initiate
-    And the response contains a validation url.
-
-  Scenario: [AC-US-7.1.0-05] Secret key is rejected on Apple Pay initiate
-    Given a client configured with a secret key
-    When client.applepay().initiate() is called
+  Scenario: [AC-US-7.1.0-04] Secret key is rejected on Apple Pay session initiation
+    Given a client configured with a SecretKey
+    When client.apple_pay().initiate_session(params) is called
     Then a typed KeyTypeMismatch error is returned before any network call.
 
-  Scenario: [AC-US-7.1.0-LAW] PCI-DSS scoping for Apple Pay token handling
-    Given any Apple Pay flow
-    When the encrypted payment token is transmitted
-    Then the raw DPAN is never persisted or logged and only the opaque token is forwarded,
-         satisfying PCI-DSS SAQ A-EP scoping for tokenized wallets.
+  Scenario: [AC-US-7.1.0-LAW] PCI-DSS scoping for BIN lookup and Apple Pay session tokens
+    Given any BIN lookup or Apple Pay initiation
+    When the request and response are logged via Debug
+    Then full PAN digits are never emitted in logs and Apple Pay cryptographic signatures remain unmodified,
+         satisfying PCI-DSS 4.0 SAQ A-EP scoping requirements.
 ```
 
 ### 1.3 Test Cases & Traceability Matrix
 
 | Test Case ID | Target Criterion | Test Type | Execution Level | Verification Assertion & Pass Criteria |
 | :--- | :--- | :--- | :--- | :--- |
-| `TC-7.1.0-01` | `AC-US-7.1.0-01` | Functional | Integration | Source with UUID id; type echoed. |
-| `TC-7.1.0-02` | `AC-US-7.1.0-02` | Functional | Integration | Matching id; 404 → `RecordNotFound`. |
-| `TC-7.1.0-03` | `AC-US-7.1.0-03` | Functional | Unit | Path/verb verified; payload forwarded. |
-| `TC-7.1.0-04` | `AC-US-7.1.0-04` | Functional | Integration | pk_ accepted; validation url returned. |
-| `TC-7.1.0-05` | `AC-US-7.1.0-05` | Security | Unit | `KeyTypeMismatch` with zero network calls. |
-| `TC-7.1.0-LAW` | `AC-US-7.1.0-LAW` | Compliance | Static / Audit | No DPAN retained; token forwarded opaquely. |
+| `TC-7.1.0-01` | `AC-US-7.1.0-01` | Functional | Integration | 6-digit and 8-digit BIN returns `IssuerMetadata` with `Debit`. |
+| `TC-7.1.0-02` | `AC-US-7.1.0-02` | Validation | Unit | `<6` digits rejected pre-transport. |
+| `TC-7.1.0-03` | `AC-US-7.1.0-03` | Functional | Integration | `ApplePayMerchantSession` camelCase fields deserialize cleanly. |
+| `TC-7.1.0-04` | `AC-US-7.1.0-04` | Security | Unit | `KeyTypeMismatch` returned with zero network calls. |
+| `TC-7.1.0-LAW` | `AC-US-7.1.0-LAW` | Compliance | Static / Audit | No full PAN retained or printed in `Debug`. |
 
 ---
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/sources/behaviours/generic-sources-applepay/
-├── services/        # SourcesService create/retrieve/update, ApplePayService initiate
-├── logic/           # Key-type guard for applepay initiate
-├── types/           # Source, SourceId, CreateSourceParams, UpdateSourceParams, ApplePaySession
-└── constants/       # SOURCES_PATH, UPDATE_SUFFIX, APPLEPAY_INITIATE_PATH
+src/
+├── src/resources/sources/issuer.rs            # Unit 1 (feat/us-7.1.0/unit-1-issuer-lookup)
+├── src/resources/sources/apple_pay.rs         # Unit 2 (feat/us-7.1.0/unit-2-applepay-session)
+├── src/resources/sources/service.rs           # Unit 3 (feat/us-7.1.0/unit-3-sources-service)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
-- **Tier 1 (Behaviour-Local)**: Apple Pay session payload passthrough.
-- **Tier 2 (Module-Shared)**: `SourceId` referenced by `SourceRequest`.
-- **Tier 3 (Feature-Shared)**: services under `sources`.
-- **Tier 4 (Global-Shared)**: `client.sources()` / `client.applepay()` facades.
+- **Tier 1 (Behaviour-Local)**: BIN length validation and Apple Pay camelCase serde mapping.
+- **Tier 2 (Module-Shared)**: `IssuerCardType` shared across card metadata helpers.
+- **Tier 3 (Feature-Shared)**: `SourcesService` and `ApplePayService` under `sources`.
+- **Tier 4 (Global-Shared)**: `client.sources()` and `client.apple_pay()` facade accessors.
 
 ---
 
 ## 3. Technical Implementation Plan
 
 ### 3.1 Domain Invariants & Storage Schema
-- **Key Law**: `GET /v1/applepay/initiate` is a publishable-key route; `sk_` must be rejected client-side.
-- **Opaque Token Law**: Apple Pay tokens are forwarded verbatim and never inspected or logged.
-- **Type Law**: `Source.type` is an open string, not a closed enum — new rails need no SDK change.
-- **Id Law**: `SourceId` is a UUID.
+- **BIN Length Law**: `first_digits` must contain at least 6 ASCII digits.
+- **Key Law**: `/v1/applepay/initiate` requires a `PublishableKey`; `/v1/source/issuer` accepts either `SecretKey` or `PublishableKey`.
+- **CamelCase Session Law**: Apple Pay Web Merchant session JSON uses camelCase keys (`epochTimestamp`, `expiresAt`, `merchantSessionIdentifier`).
 
 ```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssuerCardType {
+    Debit,
+    Credit,
+    ChargeCard,
+    Unspecified,
+    #[serde(other)]
+    Unknown,
+}
+
 #[derive(Debug, Clone, Deserialize)]
-pub struct Source {
-    pub id: Uuid,
-    pub r#type: String,               // open string by design
-    pub status: String,
-    pub amount: u64,
-    pub currency: Currency,
-    pub given_id: Option<String>,
-    pub created_at: DateTime<Utc>,
+pub struct IssuerMetadata {
+    pub issuer_name: Option<String>,
+    pub issuer_country: Option<String>,
+    pub issuer_card_type: IssuerCardType,
+    pub issuer_card_category: Option<String>,
+    pub first_digits: String,
+    pub last_digits: Option<String>,
 }
 
-impl SourcesService<'_> {
-    /// PUT-free: Apple Pay completes via POST /v1/sources/:id/update.
-    pub async fn update(&self, id: Uuid, p: &UpdateSourceParams)
-        -> Result<Source, MoyasarError>
-    {
-        self.client.post(&format!("{SOURCES_PATH}/{id}{UPDATE_SUFFIX}"), p).await
-    }
+#[derive(Debug, Clone, Serialize)]
+pub struct ApplePayInitiateParams {
+    pub validation_url: String,
+    pub display_name: String,
+    pub domain_name: String,
+    pub publishable_api_key: String,
 }
 
-impl ApplePayService<'_> {
-    pub async fn initiate(&self) -> Result<ApplePaySession, MoyasarError> {
-        self.client.require_publishable_key()?;   // fails fast, no network call
-        self.client.get(APPLEPAY_INITIATE_PATH).await
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplePayMerchantSession {
+    pub epoch_timestamp: u64,
+    pub expires_at: u64,
+    pub merchant_session_identifier: String,
+    pub nonce: String,
+    pub merchant_identifier: String,
+    pub domain_name: String,
+    pub display_name: String,
+    pub signature: String,
+    pub operational_analytics_identifier: Option<String>,
+    pub retries: Option<u32>,
 }
 ```
 
@@ -141,66 +148,49 @@ impl ApplePayService<'_> {
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Frontend
-    actor Merchant
-    participant Svc as Sources / ApplePay
+    actor Checkout as Storefront Checkout
+    participant Src as SourcesService / ApplePayService
     participant API as api.moyasar.com
 
-    Merchant->>Svc: sources().create(params)
-    Svc->>API: POST /v1/sources
-    API-->>Svc: Source { id, type }
-    Frontend->>Svc: applepay().initiate()   (pk_)
-    Svc->>API: GET /v1/applepay/initiate
-    API-->>Frontend: validation url → Apple
-    Frontend->>Svc: sources().update(id, session)
-    Svc->>API: POST /v1/sources/:id/update
-    API-->>Svc: Source (ready for charge)
+    Checkout->>Src: client.sources().get_issuer({ first_digits: "420132" })
+    Src->>API: POST /v1/source/issuer
+    API-->>Src: IssuerMetadata { issuer_card_type: debit, issuer_country: "SA" }
+    Checkout->>Src: client.apple_pay().initiate_session(params) (pk_)
+    Src->>API: POST /v1/applepay/initiate
+    API-->>Checkout: ApplePayMerchantSession { merchantSessionIdentifier, signature, ... }
 ```
 
 ---
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 3-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/sources/models.rs` | `Source` with open-string type. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/sources/params.rs` | Create/Update params. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/sources/sources.rs` | create/retrieve/update endpoints. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/sources/service.rs` | `client.sources()` and `client.applepay()`. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `KeyTypeMismatch`, 404 mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/sources/mod.rs` | Feature-gated export under `sources`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/sources/models.rs` | Borrowed session payload; no cloning. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/sources/applepay.rs` | pk_-only guard for initiate. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/sources_test.rs` | Full Apple Pay handshake simulation. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests for both key types. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-7.1.0/unit-1-issuer-lookup` | `src/resources/sources/issuer.rs` | `IssuerMetadata`: issuer_name, issuer_country, issuer_card_type (debit/credit/charge_card/unspecified), issuer_card_category, first_digits, last_digits. `client.sources().get_issuer(params)` | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-7.1.0/unit-2-applepay-session` | `src/resources/sources/apple_pay.rs` | `ApplePayMerchantSession`: epochTimestamp, expiresAt, merchantSessionIdentifier, nonce, merchantIdentifier, domainName, displayName, signature, operationalAnalyticsIdentifier. `client.apple_pay().initiate_session(params)` | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-7.1.0/unit-3-sources-service` | `src/resources/sources/service.rs` | `SourcesService` (`client.sources()`) and `ApplePayService` (`client.apple_pay()`) facades, publishable-key enforcement guard, unit tests | `engineering-backend-architect` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Source Type)**: open-string `type`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-7.1.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
+- [ ] **Unit 1 (`feat/us-7.1.0/unit-1-issuer-lookup`)**: `IssuerMetadata`: issuer_name, issuer_country, issuer_card_type (debit/credit/charge_card/unspecified), issuer_card_category, first_digits, last_digits. `client.sources().get_issuer(params)` (Files: `src/resources/sources/issuer.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: create/update param structs.  
+- [ ] **Unit 2 (`feat/us-7.1.0/unit-2-applepay-session`)**: `ApplePayMerchantSession`: epochTimestamp, expiresAt, merchantSessionIdentifier, nonce, merchantIdentifier, domainName, displayName, signature, operationalAnalyticsIdentifier. `client.apple_pay().initiate_session(params)` (Files: `src/resources/sources/apple_pay.rs`)  
+  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 3 (`feat/us-7.1.0/unit-3-sources-service`)**: `SourcesService` (`client.sources()`) and `ApplePayService` (`client.apple_pay()`) facades, publishable-key enforcement guard, unit tests (Files: `src/resources/sources/service.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
 
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Sources CRUD)**: create/retrieve/update.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Apple Pay)**: `GET /v1/applepay/initiate`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-
-#### Phase 3: Guards (PR 7–8)
-- [ ] **Task 3.1 (Key Guard)**: reject `sk_` on initiate before transport.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: create → initiate → update handshake.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on key-type guard.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: frontend/backend split documented.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 
@@ -208,35 +198,30 @@ sequenceDiagram
 
 ### 5.1 Trust Boundaries & Security Actors
 - **Trust Boundaries**:
-  - `Wallet Boundary`: Apple Pay token originates in a customer device.
-  - `Public Key Boundary`: `pk_` is exposed to browsers.
-- **Authorized Principals**: `sk_` (backend), `pk_` (browser, initiate only).
+  - `Wallet Boundary`: Apple Pay merchant validation URL originates from Apple's PKPaymentAuthorizationController.
+  - `Public Key Boundary`: `pk_` is used for browser-originated Apple Pay session initiation.
+- **Authorized Principals**: `sk_` or `pk_` for BIN lookup; `pk_` for Apple Pay session initiation.
 
 ### 5.2 Threat Modeling & Abuse Matrix (STRIDE / ASVS)
 
 | Threat Vector | Severity | Vulnerability Mechanism | Mitigating Control & Security Invariant |
 | :--- | :--- | :--- | :--- |
-| **Secret Key in Browser** | Critical | `sk_` shipped to frontend for initiate | `require_publishable_key()` guard fails fast. |
-| **Token Tampering** | High | Modifying the Apple Pay token | Token forwarded opaquely; server validates cryptographically. |
-| **DPAN Exposure** | Critical | Device PAN stored or logged | Never deserialized into a typed field; opaque JSON only. |
-| **Source Spoofing** | Medium | Guessing source ids | UUID ids + server-side authorization. |
-| **Session Replay** | High | Reusing an Apple Pay session | Session validated once; server rejects replays. |
+| **Secret Key in Browser** | Critical | `sk_` shipped to frontend for Apple Pay initiate | `PublishableKey` guard rejects `sk_` on `initiate_session`. |
+| **PAN Leakage in BIN Lookup** | Critical | Full PAN logged during issuer lookup | Redacted `Debug` on lookup params; only 6–8 BIN digits required. |
+| **SSRF via validation_url** | High | Arbitrary non-Apple `validation_url` forwarded | Require `https://` scheme on `validation_url`. |
 
 ### 5.3 Cryptographic & Data Protection Controls
-- **Key-Type Guard**: publishable-only enforcement.
-- **Opaque Token**: no inspection of wallet payloads.
-- **UUID Ids**: non-sequential.
+- **Key-Type Guard**: publishable-key enforcement on Apple Pay initiation.
+- **PAN Minimization**: only 6–8 BIN digits needed for issuer identification.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Key Guard Test**: `sk_` rejected with zero network calls.
-- [ ] **Token Test**: wallet payload never `Debug`-printed.
-- [ ] **Tenant Test**: foreign source id yields typed error.
-- [ ] **Replay Test**: reused session rejected by server.
+- [ ] **Key Guard Test**: `sk_` rejected on `initiate_session` with zero network calls.
+- [ ] **PAN Redaction Test**: lookup request struct never prints full PAN in `Debug`.
+- [ ] **Validation URL Test**: `http://` `validation_url` rejected pre-transport.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Wallet flow verified against OWASP ASVS Level 2.
+- [ ] Wallet and BIN lookup flows verified against OWASP ASVS Level 2.
 - [ ] Zero secret-key exposure to frontend.
-- [ ] Zero DPAN retention.
 - [ ] Independent reviewer sign-off; zero open findings.
 
 ---
@@ -249,28 +234,28 @@ sequenceDiagram
 - [ ] **US-7.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-7.1.0-G1:** ≥90% line / ≥85% branch on the sources module.
+- [ ] **US-7.1.0-G1:** ≥90% line / ≥85% branch on the `sources` module.
 
 ### G2 — Security audit
 - [ ] **US-7.1.0-G2:** Wallet/key audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-7.1.0-G3:** Sources module has no dependency on payouts or settlements.
+- [ ] **US-7.1.0-G3:** `sources` module depends only on `core`.
 
 ### G-Review — Code review
-- [ ] **US-7.1.0-G-Review:** Peer review on the key-type guard and token opacity.
+- [ ] **US-7.1.0-G-Review:** Peer review on key-type guard and camelCase session deserialization.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-7.1.0-G-Borrow:** Session payload passed by reference.
+- [ ] **US-7.1.0-G-Borrow:** Lookup and session params passed by reference.
 
 ### G-Complexity — Cyclomatic complexity
 - [ ] **US-7.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-7.1.0-G-Docs:** 100% public symbols documented; both key types demonstrated.
+- [ ] **US-7.1.0-G-Docs:** 100% public symbols documented; BIN lookup and Apple Pay examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-7.1.0-G-Law:** PCI-DSS SAQ A-EP wallet scoping certified.
+- [ ] **US-7.1.0-G-Law:** PCI-DSS SAQ A-EP wallet and BIN scoping certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-7.1.0-G4:** Create → initiate → update verified against the mock server.
+- [ ] **US-7.1.0-G4:** BIN lookup (`POST /v1/source/issuer`) and Apple Pay session initiation (`POST /v1/applepay/initiate`) verified against mock server.

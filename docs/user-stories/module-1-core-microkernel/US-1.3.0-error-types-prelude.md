@@ -1,7 +1,7 @@
 # US-1.3.0: Typed Error Pipeline, ISO 8583 Response Codes & Currency Types
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/microkernel/behaviours/error-types-prelude/`  
+> **Behavior Blueprint**: `src/kernel/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -82,14 +82,13 @@ Feature: Typed Error Pipeline and Currency Safety
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/microkernel/behaviours/error-types-prelude/
-├── services/        # ErrorMapper (HTTP status -> MoyasarError)
-├── logic/           # ResponseCode lookup, retryability classification, exponent math
-├── types/           # MoyasarError, ApiErrorType, FieldError, ResponseCode, Amount, Currency
-└── constants/       # ISO_8583_CODES, CURRENCY_EXPONENTS
+src/
+├── src/kernel/error.rs                        # Unit 1 (feat/us-1.3.0/unit-1-error-enum)
+├── src/kernel/response_code.rs                # Unit 2 (feat/us-1.3.0/unit-2-field-errors)
+├── src/kernel/types.rs + src/prelude.rs       # Unit 3 (feat/us-1.3.0/unit-3-currency-prelude)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -120,20 +119,72 @@ pub enum MoyasarError {
     },
     #[error("network error: {0}")]
     Network(#[from] reqwest::Error),
+    #[error("request timed out")]
+    Timeout,
+    #[error("server error ({status}): {message}")]
+    ServerError { status: u16, message: String },
     #[error("invalid API key")]
     InvalidKey,
+    #[error("key type mismatch for endpoint")]
+    KeyTypeMismatch,
+    #[error("invalid base URL (HTTPS required)")]
+    InvalidBaseUrl,
     #[error("metadata exceeds 30 keys")]
     MetadataTooManyKeys,
     #[error("metadata key exceeds 40 characters")]
     MetadataKeyTooLong,
     #[error("metadata value exceeds 500 characters")]
     MetadataValueTooLong,
+    #[error("invalid card number (Luhn check failed)")]
+    InvalidCardNumber,
+    #[error("card is expired")]
+    CardExpired,
+    #[error("invalid CVC length")]
+    InvalidCvc,
+    #[error("invalid Saudi mobile number")]
+    InvalidMobile,
+    #[error("SADAD bill expiry exceeds 29 days")]
+    SadadExpiryTooFar,
+    #[error("split amount must be positive")]
+    InvalidSplitAmount,
+    #[error("split total exceeds payment amount")]
+    SplitTotalExceedsAmount,
+    #[error("at most one split may specify fee_source: true")]
+    MultipleFeeSources,
+    #[error("invalid token id prefix (expected token_)")]
+    InvalidTokenId,
+    #[error("invalid card auth id prefix (expected ca_)")]
+    InvalidCardAuthId,
+    #[error("invalid Saudi IBAN (expected SA + 22 digits)")]
+    InvalidIban,
+    #[error("invalid payout amount or sequence number")]
+    InvalidPayoutAmount,
+    #[error("webhook endpoint URL must use HTTPS")]
+    InvalidWebhookUrl,
 }
 
 impl MoyasarError {
     pub fn is_retryable(&self) -> bool {
         matches!(self, Self::Network(_) | Self::Timeout | Self::ServerError { .. })
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResponseCode {
+    IssuerApproved,
+    ReferToCardIssuer,
+    InvalidMerchant,
+    DoNotHonor,
+    InsufficientFunds,
+    ExpiredCard,
+    IncorrectPin,
+    ExceedsWithdrawalLimit,
+    RestrictedCard,
+    SecurityViolation,
+    ExceedsFrequencyLimit,
+    IssuerOrSwitchInoperative,
+    SystemMalfunction,
+    Unknown(String),
 }
 ```
 
@@ -159,56 +210,33 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 3-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/kernel/error.rs` | `MoyasarError` enum, `ApiErrorType`, `thiserror` derives. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request/Response Modeling** | `src/kernel/error.rs` | `FieldError`, error payload `Deserialize`. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/kernel/error.rs` | HTTP status → variant mapping (`ErrorMapper`). | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/kernel/types.rs` | `Amount`, `Currency` with exponent table. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy & Redaction** | `src/kernel/error.rs` | `Display`/`Debug` redaction; `is_retryable()`. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/lib.rs` | `prelude` module exporting all core types. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/kernel/types.rs` | `Amount` as `Copy` newtype; no boxing. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/kernel/error.rs` | Unknown ISO 8583 codes; unknown error types; no panic. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/error_mapping_test.rs` | Fixture-driven 400/401/403/404/422/5xx mapping tests. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests for error matching and currency conversion. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-1.3.0/unit-1-error-enum` | `src/kernel/error.rs` | `MoyasarError` enum, `ApiErrorType`, `thiserror` derive, `From<reqwest::Error>`, `Deserialize` for error payloads | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-1.3.0/unit-2-field-errors` | `src/kernel/response_code.rs` | `FieldError` dual map/array deserializer, `ResponseCode` ISO 8583 lookup table with custom `Unknown(String)` deserializer, `Display` impl | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-1.3.0/unit-3-currency-prelude` | `src/kernel/types.rs` + `src/prelude.rs` | `Amount` newtype, `Currency` enum (SAR, USD, KWD, JPY, …), `RecipientType` enum, `prelude` module exporting all core types | `engineering-backend-architect` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Error Enum & Payload Modeling (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `MoyasarError`, `ApiErrorType` with all documented classifications.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-1.3.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
+- [ ] **Unit 1 (`feat/us-1.3.0/unit-1-error-enum`)**: `MoyasarError` enum, `ApiErrorType`, `thiserror` derive, `From<reqwest::Error>`, `Deserialize` for error payloads (Files: `src/kernel/error.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Payload)**: `FieldError` struct and error-body `Deserialize`.  
+- [ ] **Unit 2 (`feat/us-1.3.0/unit-2-field-errors`)**: `FieldError` dual map/array deserializer, `ResponseCode` ISO 8583 lookup table with custom `Unknown(String)` deserializer, `Display` impl (Files: `src/kernel/response_code.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: Fixture-driven deserialization for each error type.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Status Mapping & Currency Types (PR 3–6)
-- [ ] **Task 2.1 (Mapper)**: 400/401/403/404/422/5xx → variant dispatch.  
+- [ ] **Unit 3 (`feat/us-1.3.0/unit-3-currency-prelude`)**: `Amount` newtype, `Currency` enum (SAR, USD, KWD, JPY, …), `RecipientType` enum, `prelude` module exporting all core types (Files: `src/kernel/types.rs` + `src/prelude.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (ISO 8583)**: `ResponseCode` enum with `"00"` = `IssuerApproved` and `Unknown(String)` fallback.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Currency)**: `Amount`/`Currency` with exponent table (SAR=2, KWD=3, JPY=0).  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.4 (Prelude)**: `prelude::*` re-exports.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
 
-#### Phase 3: Redaction & Edge Cases (PR 7–8)
-- [ ] **Task 3.1 (Redaction)**: `Display`/`Debug` never emit credentials or PAN.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Retryability)**: `is_retryable()` classification tests.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.3 (Unknown Codes)**: No-panic guarantees for unknown ISO 8583 and error types.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: Full status-code matrix against mock server.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: Peer review on exhaustiveness and redaction.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: Doc-tests for error matching and currency conversion.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

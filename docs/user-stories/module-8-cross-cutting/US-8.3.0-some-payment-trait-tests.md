@@ -1,7 +1,7 @@
-# US-8.3.0: `some-payment` Provider Trait & Cross-Provider Conformance Suite
+# US-8.3.0: `some-payments` Unified Gateway Trait Adapter & Deterministic `test-utils` Mock Suite
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/compat/behaviours/some-payment-trait/`  
+> **Behavior Blueprint**: `src/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -11,175 +11,115 @@
 ## 1. Spec Kit Specification
 
 ### 1.1 User Story Narrative
-**As a** platform engineer who must support more than one payment provider,  
-**I want to** program against a single `PaymentProvider` trait from the `some-payment` crate, with Moyasar as one implementation, and run one shared conformance suite against every implementation,  
-**So that** swapping or adding a provider is a dependency change rather than a rewrite, and every provider is proven to honour the same money, idempotency and error semantics.
+**As a** multi-gateway platform engineer integrating `some-moyasar` alongside `some-stripe` and `some-paymob` inside the `some-payments` ecosystem,  
+**I want to** program against the `UnifiedPaymentGateway` trait (`create_intent`, `charge_saved_token`, `refund_or_void`, `verify_webhook`) implemented for `MoyasarClient` in `src/unified.rs`, and run offline CI tests against `MoyasarMockServer` and deterministic JSON fixtures in `src/test_utils/` (`test-utils` feature flag),  
+**So that** cross-gateway checkout, off-session token charging, smart reversals, and constant-time webhook verification work uniformly across providers, and every Moyasar edge case (all 11 webhook events including `payment_faild`, STC Pay sandbox numbers `0515555555`/`0515555558`/`0515555559`, SADAD biller `007`, and ISO 8583 response codes) is deterministically testable offline.
 
 #### 1.1.1 Preconditions
-- `features = ["some-payment"]` (implies `core`, `payments`).
-- The `some-payment` crate providing the `PaymentProvider` trait.
-- A `MoyasarProvider` adapter wrapping `MoyasarClient`.
+- `features = ["some-payments-trait"]` (alias `some-payment-trait`; implies `core`, `payments`, `payment-intents`, `tokens`, `webhook-engine`) for `src/unified.rs`.
+- `features = ["test-utils"]` for `src/test_utils/fixtures.rs` and `src/test_utils/mock.rs`.
 
 #### 1.1.2 Postconditions
-- `PaymentProvider` defines `create_payment`, `retrieve_payment`, `refund`, `capture`, `void` as `async` trait methods returning provider-agnostic types.
-- `MoyasarProvider` implements every method, mapping `MoyasarError` into the trait's `ProviderError`.
-- A shared conformance suite (`tests/conformance/`) runs against any `PaymentProvider` via a generic harness.
-- Money is expressed in minor units with an explicit currency; no provider-specific types leak through the trait.
+- `impl UnifiedPaymentGateway for MoyasarClient` normalizes `create_intent` (`POST /v1/payment_intents`), `charge_saved_token` (`POST /v1/payments` with `TokenSource` and `given_id`), `refund_or_void` (smart ~2h void-else-refund routing), and `verify_webhook` (`ConstantTimeSecretVerifier`).
+- `src/test_utils/fixtures.rs` provides deterministic JSON fixture generators for all 11 webhook event types (including `"payment_faild"`), STC Pay sandbox numbers (`0515555555`, `0515555558`, `0515555559`), SADAD sandbox biller `007`, and ISO 8583 response codes.
+- `src/test_utils/mock.rs` provides `MoyasarMockServer` for hermetic local/CI integration testing.
 
 ### 1.2 Acceptance Criteria (Gherkin Scenarios)
 
 ```gherkin
-Feature: Provider-Agnostic Payment Abstraction
+Feature: UnifiedPaymentGateway Adapter and Deterministic test-utils Mock Server
 
-  Scenario: [AC-US-8.3.0-01] Moyasar implements the full provider trait
-    Given a MoyasarProvider wrapping a configured client
-    When it is used as a dyn PaymentProvider
-    Then all trait methods are callable
-    And the code compiles without provider-specific types at the call site.
+  Scenario: [AC-US-8.3.0-01] MoyasarClient implements UnifiedPaymentGateway
+    Given a configured MoyasarClient and a shared webhook verifier secret
+    When create_intent, charge_saved_token, refund_or_void, and verify_webhook are invoked through UnifiedPaymentGateway
+    Then each operation dispatches to its canonical Moyasar primitive and returns unified response types.
 
-  Scenario: [AC-US-8.3.0-02] Provider-agnostic money representation
-    Given a payment of 10050 SAR
-    When created through the trait
-    Then the amount is expressed as 10050 minor units with currency SAR
-    And no float is used anywhere in the money path.
+  Scenario: [AC-US-8.3.0-02] Deterministic JSON fixtures cover all 11 webhook events and sandbox edge cases
+    Given the test-utils fixtures module
+    When fixture payloads are generated for all 11 webhook event types (plus "payment_faild"), STC Pay (0515555555, 0515555558, 0515555559), SADAD (007), and ISO 8583 codes
+    Then every fixture deserializes cleanly into its strongly typed SDK model without errors.
 
-  Scenario: [AC-US-8.3.0-03] Errors are normalized across providers
-    Given a provider error (e.g. card declined)
-    When surfaced through the trait
-    Then it is a ProviderError variant, not a MoyasarError
-    And the original provider error is retained as a source for diagnostics.
+  Scenario: [AC-US-8.3.0-03] MoyasarMockServer serves hermetic local HTTP responses for CI
+    Given a running MoyasarMockServer instance bound to 127.0.0.1
+    When MoyasarClient executes end-to-end payment, intent, token, and webhook flows against the mock server
+    Then all assertions pass with zero outbound internet requests.
 
-  Scenario: [AC-US-8.3.0-04] Idempotency is part of the contract
-    Given the same idempotency key used twice through the trait
-    When both calls execute
-    Then the provider returns the same logical payment
-    And the conformance suite asserts this for every implementation.
-
-  Scenario: [AC-US-8.3.0-05] The conformance suite is provider-generic
-    Given a generic harness parameterized over PaymentProvider
-    When run against MoyasarProvider
-    Then all conformance cases execute
-    And adding a second provider requires no changes to the suite.
-
-  Scenario: [AC-US-8.3.0-06] Refund and void semantics are uniform
-    Given a captured payment
-    When refund and void are invoked through the trait
-    Then both return provider-agnostic results
-    And a void on a settled payment yields a normalized UnsupportedOperation error.
-
-  Scenario: [AC-US-8.3.0-LAW] SAMA auditability across provider abstraction
-    Given any operation through the trait
-    When it is logged for audit
-    Then the provider name, operation, amount, currency and idempotency key are recorded without card data,
-         satisfying SAMA audit-trail requirements independent of the underlying provider.
+  Scenario: [AC-US-8.3.0-LAW] SAMA cross-provider auditability and integer minor-unit fidelity
+    Given any operation executed through UnifiedPaymentGateway
+    When amounts, currencies, and idempotency keys are normalized
+    Then amounts remain exact u64 minor units (halalas/cents/fils) with zero f64 conversion andgiven_id is preserved,
+         satisfying SAMA audit-trail and monetary precision requirements.
 ```
 
 ### 1.3 Test Cases & Traceability Matrix
 
 | Test Case ID | Target Criterion | Test Type | Execution Level | Verification Assertion & Pass Criteria |
 | :--- | :--- | :--- | :--- | :--- |
-| `TC-8.3.0-01` | `AC-US-8.3.0-01` | Compile | Static | `dyn PaymentProvider` usage compiles. |
-| `TC-8.3.0-02` | `AC-US-8.3.0-02` | Functional | Unit | Integer minor units; no `f64` in money path. |
-| `TC-8.3.0-03` | `AC-US-8.3.0-03` | Functional | Unit | `ProviderError` with `source()` preserved. |
-| `TC-8.3.0-04` | `AC-US-8.3.0-04` | Functional | Integration | Duplicate key → same logical payment. |
-| `TC-8.3.0-05` | `AC-US-8.3.0-05` | Architecture | Static | Harness generic over `PaymentProvider`. |
-| `TC-8.3.0-06` | `AC-US-8.3.0-06` | Functional | Integration | Uniform refund/void; normalized unsupported error. |
-| `TC-8.3.0-LAW` | `AC-US-8.3.0-LAW` | Compliance | Static / Audit | Audit fields present; no card data. |
+| `TC-8.3.0-01` | `AC-US-8.3.0-01` | Functional | Integration | All 4 `UnifiedPaymentGateway` methods succeed against mock responders. |
+| `TC-8.3.0-02` | `AC-US-8.3.0-02` | Functional | Unit | All 11+1 webhook fixtures, 3 STC Pay sandbox numbers, SADAD `007`, and ISO 8583 fixtures parse cleanly. |
+| `TC-8.3.0-03` | `AC-US-8.3.0-03` | Functional | Integration | `MoyasarMockServer` handles full conformance suite offline. |
+| `TC-8.3.0-LAW` | `AC-US-8.3.0-LAW` | Compliance | Static / Audit | Zero `f64` in unified adapter; `given_id` idempotency preserved. |
 
 ---
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/compat/behaviours/some-payment-trait/
-├── services/        # MoyasarProvider adapter
-├── logic/           # Error normalization, money conversion
-├── types/           # PaymentProvider trait, ProviderError, ProviderPayment
-└── constants/       # PROVIDER_NAME ("moyasar")
+src/
+├── src/unified.rs                             # Unit 1 (feat/us-8.3.0/unit-1-unified-trait)
+├── src/test_utils/fixtures.rs                 # Unit 2 (feat/us-8.3.0/unit-2-test-fixtures)
+├── src/test_utils/mock.rs                     # Unit 3 (feat/us-8.3.0/unit-3-mock-responder)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
-- **Tier 1 (Behaviour-Local)**: error normalization.
-- **Tier 2 (Module-Shared)**: `ProviderPayment` used by the conformance suite.
-- **Tier 3 (Feature-Shared)**: `MoyasarProvider` under `some-payment`.
-- **Tier 4 (Global-Shared)**: re-exported trait from the `some-payment` crate.
+- **Tier 1 (Behaviour-Local)**: Unified response mapping and mock HTTP route table.
+- **Tier 2 (Module-Shared)**: Deterministic JSON fixtures in `src/test_utils/fixtures.rs`.
+- **Tier 3 (Feature-Shared)**: `UnifiedPaymentGateway` under `some-payments-trait` and `MoyasarMockServer` under `test-utils`.
+- **Tier 4 (Global-Shared)**: Re-exported from crate root when respective features are enabled.
 
 ---
 
 ## 3. Technical Implementation Plan
 
 ### 3.1 Domain Invariants & Storage Schema
-- **No Leak Law**: no `MoyasarError` or Moyasar-specific type may appear in the trait signature.
-- **Integer Money Law**: amounts are `u64` minor units plus an explicit `Currency`.
-- **Idempotency Law**: every mutating trait method takes an idempotency key.
-- **Source Law**: `ProviderError` retains the original error via `std::error::Error::source`.
+- **Integer Minor-Unit Law**: `amount_minor: u64` is passed directly in minor units (halalas for SAR) with zero floating-point math.
+- **Idempotency Normalization Law**: `charge_saved_token` forwards `idempotency_key: Uuid` directly into `CreatePaymentParams.given_id`.
+- **Hermetic Mock Law**: `MoyasarMockServer` binds to `127.0.0.1:0` and requires zero external network access.
 
 ```rust
 #[async_trait::async_trait]
-pub trait PaymentProvider: Send + Sync {
-    fn name(&self) -> &'static str;
+pub trait UnifiedPaymentGateway: Send + Sync {
+    type Error: std::error::Error + Send + Sync + 'static;
 
-    async fn create_payment(
+    async fn create_intent(
         &self,
-        req: CreatePaymentRequest,
-        idempotency_key: &str,
-    ) -> Result<ProviderPayment, ProviderError>;
+        amount_minor: u64,
+        currency: &str,
+        description: Option<&str>,
+        callback_url: &str,
+    ) -> Result<UnifiedIntentResponse, Self::Error>;
 
-    async fn retrieve_payment(&self, id: &str) -> Result<ProviderPayment, ProviderError>;
-
-    async fn refund(
+    async fn charge_saved_token(
         &self,
-        id: &str,
-        amount: Option<u64>,
-        idempotency_key: &str,
-    ) -> Result<ProviderRefund, ProviderError>;
+        amount_minor: u64,
+        currency: &str,
+        token_id: &str,
+        idempotency_key: Uuid,
+    ) -> Result<UnifiedChargeResponse, Self::Error>;
 
-    async fn capture(&self, id: &str, amount: Option<u64>) -> Result<ProviderPayment, ProviderError>;
+    async fn refund_or_void(
+        &self,
+        transaction_id: &str,
+        amount_minor: Option<u64>,
+    ) -> Result<UnifiedReversalResponse, Self::Error>;
 
-    async fn void(&self, id: &str) -> Result<ProviderPayment, ProviderError>;
-}
-
-#[derive(Debug, Clone)]
-pub struct CreatePaymentRequest {
-    pub amount: u64,          // minor units
-    pub currency: Currency,
-    pub description: Option<String>,
-    pub metadata: BTreeMap<String, String>,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ProviderError {
-    #[error("card declined: {0}")]
-    Declined(String),
-    #[error("insufficient funds")]
-    InsufficientFunds,
-    #[error("operation not supported by provider")]
-    UnsupportedOperation,
-    #[error("provider transport error")]
-    Transport(#[source] Box<dyn std::error::Error + Send + Sync>),
-    #[error("provider error: {0}")]
-    Other(#[source] Box<dyn std::error::Error + Send + Sync>),
-}
-
-pub struct MoyasarProvider { client: MoyasarClient }
-
-#[async_trait::async_trait]
-impl PaymentProvider for MoyasarProvider {
-    fn name(&self) -> &'static str { "moyasar" }
-
-    async fn create_payment(&self, req: CreatePaymentRequest, key: &str)
-        -> Result<ProviderPayment, ProviderError>
-    {
-        self.client
-            .payments()
-            .create_with_idempotency(req.into(), key)
-            .await
-            .map(ProviderPayment::from)
-            .map_err(ProviderError::from)
-    }
-    // ...remaining methods
+    fn verify_webhook(
+        &self,
+        headers: &http::HeaderMap,
+        raw_body: &[u8],
+    ) -> Result<UnifiedWebhookEvent, Self::Error>;
 }
 ```
 
@@ -188,67 +128,51 @@ impl PaymentProvider for MoyasarProvider {
 ```mermaid
 sequenceDiagram
     autonumber
-    actor App
-    participant P as dyn PaymentProvider
-    participant M as MoyasarProvider
-    participant API as api.moyasar.com
+    actor App as Platform Service
+    participant U as MoyasarClient (UnifiedPaymentGateway)
+    participant Mock as MoyasarMockServer (test-utils)
 
-    App->>P: create_payment(req, idempotency_key)
-    P->>M: dispatch
-    M->>M: map CreatePaymentRequest → Moyasar params
-    M->>API: POST /v1/payments (given_id = key)
-    API-->>M: Payment
-    M->>M: map Payment → ProviderPayment, MoyasarError → ProviderError
-    M-->>App: Ok(ProviderPayment)
-    Note over App: identical call site works for any provider
+    App->>U: create_intent(15000, "SAR", Some("Order #1"), "https://example.com/cb")
+    U->>Mock: POST /v1/payment_intents
+    Mock-->>U: 201 PaymentIntent { id, client_secret, expires_at }
+    U-->>App: UnifiedIntentResponse
+    App->>U: charge_saved_token(15000, "SAR", "token_abc", given_id)
+    U->>Mock: POST /v1/payments { given_id, source: { type: "token" } }
+    Mock-->>U: 201 Payment { status: paid }
+    U-->>App: UnifiedChargeResponse
 ```
 
 ---
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 3-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/compat/provider/trait.rs` | `PaymentProvider` trait + provider-agnostic types. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/compat/provider/request.rs` | `CreatePaymentRequest` in minor units. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/compat/provider/moyasar.rs` | `MoyasarProvider` implementing all methods. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/compat/provider/mod.rs` | `MoyasarClient::as_provider()`. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/compat/provider/error.rs` | `ProviderError` + `From<MoyasarError>`. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/lib.rs` | Feature-gated `some-payment` export. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/compat/provider/moyasar.rs` | Borrow request fields; no intermediate clones. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/compat/provider/error.rs` | Void-on-settled → `UnsupportedOperation`. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/conformance/mod.rs` | Generic harness + Moyasar conformance run. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | "Add a provider" guide + trait docs. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-8.3.0/unit-1-unified-trait` | `src/unified.rs` | `impl UnifiedPaymentGateway for MoyasarClient`: create_intent, charge_saved_token, refund_or_void, verify_webhook. Normalization: idempotency_key → given_id, webhook verification via ConstantTimeSecretVerifier | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-8.3.0/unit-2-test-fixtures` | `src/test_utils/fixtures.rs` | Deterministic JSON fixtures: all 11 webhook event types (including payment_faild), STC Pay mock responses (0515555555, 0515555558, 0515555559), SADAD sandbox biller 007, ISO 8583 response codes | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-8.3.0/unit-3-mock-responder` | `src/test_utils/mock.rs` | `MoyasarMockServer` local HTTP mock responder and route handlers under `test-utils` feature flag, conformance unit tests | `engineering-backend-architect` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Trait & Types (PR 1–2)
-- [ ] **Task 1.1 (Trait)**: `PaymentProvider` with 5 async methods.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-8.3.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
+- [ ] **Unit 1 (`feat/us-8.3.0/unit-1-unified-trait`)**: `impl UnifiedPaymentGateway for MoyasarClient`: create_intent, charge_saved_token, refund_or_void, verify_webhook. Normalization: idempotency_key → given_id, webhook verification via ConstantTimeSecretVerifier (Files: `src/unified.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Request Types)**: minor-unit money + currency.  
+- [ ] **Unit 2 (`feat/us-8.3.0/unit-2-test-fixtures`)**: Deterministic JSON fixtures: all 11 webhook event types (including payment_faild), STC Pay mock responses (0515555555, 0515555558, 0515555559), SADAD sandbox biller 007, ISO 8583 response codes (Files: `src/test_utils/fixtures.rs`)  
+  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 3 (`feat/us-8.3.0/unit-3-mock-responder`)**: `MoyasarMockServer` local HTTP mock responder and route handlers under `test-utils` feature flag, conformance unit tests (Files: `src/test_utils/mock.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
 
-#### Phase 2: Adapter (PR 3–6)
-- [ ] **Task 2.1 (MoyasarProvider)**: implement all trait methods.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Error Mapping)**: `From<MoyasarError> for ProviderError`.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
-
-#### Phase 3: Guards (PR 7–8)
-- [ ] **Task 3.1 (Unsupported Ops)**: normalize void-on-settled.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Idempotency)**: key threaded through every mutating method.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-
-#### Phase 4: Conformance & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Harness)**: generic `run_conformance<P: PaymentProvider>(p: P)`.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on trait purity (no provider leakage).  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: provider-addition guide.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 
@@ -256,35 +180,30 @@ sequenceDiagram
 
 ### 5.1 Trust Boundaries & Security Actors
 - **Trust Boundaries**:
-  - `Abstraction Boundary`: the trait is the only surface platform code sees.
-  - `Provider Boundary`: each implementation holds its own credentials.
-- **Authorized Principals**: platform backend (`sk_` per provider).
+  - `Unified Gateway Boundary`: normalizes provider-specific primitives without leaking secrets or losing idempotency keys.
+  - `Test Fixture Boundary`: synthetic sandbox credentials (`sk_test_...`, `pk_test_...`) clearly isolated under `test-utils`.
+- **Authorized Principals**: platform backend (`sk_`).
 
 ### 5.2 Threat Modeling & Abuse Matrix (STRIDE / ASVS)
 
 | Threat Vector | Severity | Vulnerability Mechanism | Mitigating Control & Security Invariant |
 | :--- | :--- | :--- | :--- |
-| **Error Information Leak** | Medium | Raw provider error exposing internals | `ProviderError` normalizes; source retained but not displayed by default. |
-| **Idempotency Bypass** | High | Provider adapter drops the key | Key is a required parameter on every mutating method. |
-| **Money Precision Loss** | Critical | Float conversion in the adapter | `u64` minor units only; no `f64` in the money path. |
-| **Provider Type Leakage** | Medium | `MoyasarError` in the trait signature | Compile-time enforced purity; no provider types in the trait. |
-| **Credential Cross-Use** | Critical | One provider's key used for another | Each adapter owns its client and credentials. |
+| **Idempotency Loss Across Adapter** | High | Adapter drops `idempotency_key` when calling `POST /v1/payments` | `idempotency_key` mapped directly to `CreatePaymentParams.given_id`. |
+| **Webhook Verification Bypass** | Critical | Unified `verify_webhook` skips constant-time check | Delegates directly to `ConstantTimeSecretVerifier`. |
+| **Live Key in Test Fixtures** | High | Accidental `sk_live_` token committed in fixtures | Fixtures strictly use `sk_test_` / `pk_test_` synthetic values. |
 
 ### 5.3 Cryptographic & Data Protection Controls
-- **Trait Purity**: no provider-specific types in signatures.
-- **Integer Money**: exact minor-unit arithmetic.
-- **Idempotency Contract**: mandatory key parameter.
+- **Constant-Time Delegation**: `verify_webhook` uses `ConstantTimeSecretVerifier`.
+- **Integer Money**: `u64` minor units across all trait methods.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Purity Test**: `dyn PaymentProvider` compiles with no provider imports.
-- [ ] **Money Test**: no `f64` in the money path (grep + clippy).
-- [ ] **Idempotency Test**: duplicate key returns the same logical payment.
-- [ ] **Error Test**: `source()` chain preserved; no secrets in `Display`.
+- [ ] **Idempotency Test**: `charge_saved_token` forwards `idempotency_key` into `given_id`.
+- [ ] **Webhook Test**: `verify_webhook` rejects tampered `secret_token` in constant time.
+- [ ] **Fixture Scan**: zero `sk_live_` or real PANs in `src/test_utils/fixtures.rs`.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Abstraction verified against OWASP ASVS Level 2.
-- [ ] Trait purity certified.
-- [ ] Idempotency contract enforced.
+- [ ] Unified adapter and test utilities verified against OWASP ASVS Level 2.
+- [ ] Idempotency and constant-time webhook verification enforced.
 - [ ] Independent reviewer sign-off; zero open findings.
 
 ---
@@ -294,31 +213,31 @@ sequenceDiagram
 **Status: Ready for Implementation.**
 
 ### G0 — Build, lint & format
-- [ ] **US-8.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [ ] **US-8.3.0-G0:** `cargo build --all-features && cargo clippy --all-features -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-8.3.0-G1:** ≥90% line / ≥85% branch on the provider adapter; 100% of trait methods covered by conformance.
+- [ ] **US-8.3.0-G1:** ≥90% line / ≥85% branch on `unified` and `test_utils`.
 
 ### G2 — Security audit
-- [ ] **US-8.3.0-G2:** Abstraction audit passes with zero critical/high findings.
+- [ ] **US-8.3.0-G2:** Unified adapter audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-8.3.0-G3:** Trait has zero provider-specific types; adding a provider touches no shared code.
+- [ ] **US-8.3.0-G3:** `test-utils` is opt-in and never compiled into default production builds.
 
 ### G-Review — Code review
-- [ ] **US-8.3.0-G-Review:** Peer review on trait purity and error normalization.
+- [ ] **US-8.3.0-G-Review:** Peer review on trait normalization and fixture completeness.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-8.3.0-G-Borrow:** Adapter borrows request fields; no intermediate clones.
+- [ ] **US-8.3.0-G-Borrow:** Trait methods accept `&str` and `&[u8]` slices without unnecessary allocations.
 
 ### G-Complexity — Cyclomatic complexity
 - [ ] **US-8.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-8.3.0-G-Docs:** 100% public symbols documented; "add a provider" guide ships.
+- [ ] **US-8.3.0-G-Docs:** 100% public symbols documented; `MoyasarMockServer` and `UnifiedPaymentGateway` examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-8.3.0-G-Law:** SAMA audit-trail requirements certified provider-independently.
+- [ ] **US-8.3.0-G-Law:** SAMA cross-provider auditability and minor-unit precision certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-8.3.0-G4:** Full conformance suite passes against `MoyasarProvider`.
+- [ ] **US-8.3.0-G4:** Full cross-provider conformance suite passes against `MoyasarClient` and `MoyasarMockServer`.

@@ -1,7 +1,7 @@
 # US-1.2.0: Body-Injected `given_id` Idempotency, Validated Metadata & Pagination
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/microkernel/behaviours/idempotency-metadata-pagination/`  
+> **Behavior Blueprint**: `src/kernel/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -90,14 +90,15 @@ Feature: Idempotency, Metadata Validation and Pagination
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/microkernel/behaviours/idempotency-metadata-pagination/
-├── services/        # PageFetcher (next-page traversal engine)
-├── logic/           # GivenIdPolicy derivation, Metadata validation, query serialization
-├── types/           # GivenIdPolicy, Metadata, PaginatedList<T>, Meta
-└── constants/       # METADATA_MAX_KEYS, METADATA_KEY_MAX_LEN, METADATA_VALUE_MAX_LEN
+src/
+├── src/kernel/idempotency.rs                  # Unit 1 (feat/us-1.2.0/unit-1-given-id-policy)
+├── src/kernel/idempotency_v5.rs               # Unit 2 (feat/us-1.2.0/unit-2-uuidv5-hashing)
+├── src/kernel/metadata.rs                     # Unit 3 (feat/us-1.2.0/unit-3-metadata)
+├── src/kernel/pagination.rs                   # Unit 4 (feat/us-1.2.0/unit-4-pagination-types)
+├── src/kernel/paginator_stream.rs             # Unit 5 (feat/us-1.2.0/unit-5-pagination-stream)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -131,7 +132,15 @@ impl GivenIdPolicy {
     }
 }
 
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Metadata(BTreeMap<String, String>);
+
+impl std::fmt::Debug for Metadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Metadata").field("keys_count", &self.0.len()).finish()
+    }
+}
 
 impl Metadata {
     pub fn insert(&mut self, key: &str, value: &str) -> Result<(), MoyasarError> {
@@ -147,6 +156,33 @@ impl Metadata {
         self.0.insert(key.to_owned(), value.to_owned());
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Meta {
+    pub current_page: u32,
+    pub next_page: Option<u32>,
+    pub prev_page: Option<u32>,
+    pub total_pages: u32,
+    pub total_count: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PaginatedList<T> {
+    #[serde(
+        alias = "payments",
+        alias = "invoices",
+        alias = "payouts",
+        alias = "payout_accounts",
+        alias = "settlements",
+        alias = "transfers",
+        alias = "lines",
+        alias = "internal_transactions",
+        alias = "webhooks",
+        alias = "attempts"
+    )]
+    pub items: Vec<T>,
+    pub meta: Meta,
 }
 ```
 
@@ -179,56 +215,39 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 5-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/kernel/idempotency.rs` | `GivenIdPolicy` enum, UUIDv4 generation. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request/Response Modeling** | `src/kernel/metadata.rs` | `Metadata` map, validation constants. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/kernel/idempotency.rs` | Body-level `given_id` injection; no header emission. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/kernel/pagination.rs` | `PaginatedList<T>` + `Meta` structs. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `MetadataTooManyKeys`, `MetadataKeyTooLong`, `MetadataValueTooLong` variants. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/lib.rs` | Export idempotency/metadata/pagination under `core` feature. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/kernel/metadata.rs` | Borrowed-key insertion; no needless `String` clones. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/kernel/metadata.rs` | Empty-string unset semantics; boundary enforcement tests. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/idempotency_wire_test.rs` | Mock asserts same `given_id` on retry returns identical Payment. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests for UUIDv5 derivation and metadata limits. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-1.2.0/unit-1-given-id-policy` | `src/kernel/idempotency.rs` | `GivenIdPolicy` enum (Random/Deterministic), UUIDv4 generation, `given_id` injection into JSON bodies | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-1.2.0/unit-2-uuidv5-hashing` | `src/kernel/idempotency_v5.rs` | `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")` deterministic derivation for subscription billing, roundtrip tests | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-1.2.0/unit-3-metadata` | `src/kernel/metadata.rs` | `Metadata` map: `insert`/`remove`/`get`, validation on key count/length/value, empty-string key unset, unit tests for boundary conditions | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-1.2.0/unit-4-pagination-types` | `src/kernel/pagination.rs` | `PaginatedList<T>`, `Meta` struct (current_page, next_page, prev_page, total_pages, total_count), `Deserialize` | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-1.2.0/unit-5-pagination-stream` | `src/kernel/paginator_stream.rs` | `Paginator<T>::into_stream()` with `futures::Stream`, auto-page following next_page, unit tests covering 1-page and multi-page responses | `engineering-rust-refactoring-specialist` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Domain Primitives (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `GivenIdPolicy` enum with `Random` and `Deterministic` variants.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-1.2.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
+- [ ] **Unit 1 (`feat/us-1.2.0/unit-1-given-id-policy`)**: `GivenIdPolicy` enum (Random/Deterministic), UUIDv4 generation, `given_id` injection into JSON bodies (Files: `src/kernel/idempotency.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Constants)**: `METADATA_MAX_KEYS=30`, `METADATA_KEY_MAX_LEN=40`, `METADATA_VALUE_MAX_LEN=500`.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Logic)**: `Metadata::insert` with validation-at-insert.  
+- [ ] **Unit 2 (`feat/us-1.2.0/unit-2-uuidv5-hashing`)**: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")` deterministic derivation for subscription billing, roundtrip tests (Files: `src/kernel/idempotency_v5.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.4 (Unit Tests)**: Boundary table tests at 30/31, 40/41, 500/501.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
+- [ ] **Unit 3 (`feat/us-1.2.0/unit-3-metadata`)**: `Metadata` map: `insert`/`remove`/`get`, validation on key count/length/value, empty-string key unset, unit tests for boundary conditions (Files: `src/kernel/metadata.rs`)  
+  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-1.2.0/unit-4-pagination-types`)**: `PaginatedList<T>`, `Meta` struct (current_page, next_page, prev_page, total_pages, total_count), `Deserialize` (Files: `src/kernel/pagination.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-1.2.0/unit-5-pagination-stream`)**: `Paginator<T>::into_stream()` with `futures::Stream`, auto-page following next_page, unit tests covering 1-page and multi-page responses (Files: `src/kernel/paginator_stream.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
-#### Phase 2: Injection & Pagination (PR 3–6)
-- [ ] **Task 2.1 (Injection)**: Serialize `given_id` into the body; assert no `Idempotency-Key` header.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Deterministic UUIDv5)**: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Pagination Types)**: `PaginatedList<T>`, `Meta` with `Deserialize`.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.4 (Stream)**: `Paginator<T>::into_stream()` following `next_page`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-
-#### Phase 3: Edge Cases & Hardening (PR 7–8)
-- [ ] **Task 3.1 (Borrow Audit)**: Eliminate needless `String` clones in metadata paths.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Unset Semantics)**: Empty-string value preserves unset behavior end-to-end.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Retry Wire Test)**: Same `given_id` twice → identical Payment, single charge.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: Peer review on determinism and retry safety envelope.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: Doc-tests including a worked subscription-cycle example.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

@@ -1,7 +1,7 @@
 # US-5.1.0: Payout Accounts Service — Bank & Wallet Source Accounts
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payouts/behaviours/payout-accounts/`  
+> **Behavior Blueprint**: `src/resources/payouts/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -84,14 +84,14 @@ Feature: Payout Account Registration and Retrieval
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payouts/behaviours/payout-accounts/
-├── services/        # PayoutAccountsService create/list/retrieve
-├── logic/           # IBAN validation, account-type parsing
-├── types/           # PayoutAccount, AccountType, PayoutAccountId, CreatePayoutAccountParams
-└── constants/       # PAYOUT_ACCOUNTS_PATH, SA_IBAN_LEN
+src/
+├── src/resources/payouts/models.rs            # Unit 1 (feat/us-5.1.0/unit-1-payout-account-model)
+├── src/resources/payouts/accounts_create.rs   # Unit 2 (feat/us-5.1.0/unit-2-payout-account-create)
+├── src/resources/payouts/accounts_list.rs     # Unit 3 (feat/us-5.1.0/unit-3-payout-account-list)
+├── src/resources/payouts/accounts_retrieve.rs # Unit 4 (feat/us-5.1.0/unit-4-payout-account-retrieve)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -124,11 +124,34 @@ pub struct PayoutAccount {
 #[serde(rename_all = "lowercase")]
 pub enum AccountType { Bank, Wallet }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PayoutAccountId(pub Uuid);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayoutAccountProperties {
+    pub iban: Option<String>,
+    pub name: Option<String>,
+    pub bank_name: Option<String>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Clone, Serialize)]
 pub struct CreatePayoutAccountParams {
     pub account_type: AccountType,
-    pub properties: serde_json::Value,
-    pub credentials: serde_json::Value,   // write-only; never Debug-printed
+    pub properties: PayoutAccountProperties,
+    pub credentials: serde_json::Value,   // write-only; redacted in Debug
+}
+
+impl std::fmt::Debug for CreatePayoutAccountParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CreatePayoutAccountParams")
+            .field("account_type", &self.account_type)
+            .field("properties", &self.properties)
+            .field("credentials", &"[REDACTED]")
+            .finish()
+    }
 }
 
 pub fn validate_sa_iban(iban: &str) -> Result<(), MoyasarError> {
@@ -161,52 +184,36 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 4-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payouts/account_models.rs` | `PayoutAccount`, `AccountType`, `PayoutAccountId`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payouts/account_params.rs` | `CreatePayoutAccountParams` with write-only credentials. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payouts/accounts_create.rs` | `POST /v1/payout_accounts`. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payouts/service.rs` | `client.payout_accounts()` accessor. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | `InvalidIban`, 404 mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payouts/mod.rs` | Feature-gated export under `payouts`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payouts/account_models.rs` | `PayoutAccountId` newtype; no credential copies. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payouts/accounts_list.rs` | IBAN validation, pagination, 404. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/payout_accounts_test.rs` | Bank and wallet creation, list, retrieve. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests for bank and wallet accounts. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-5.1.0/unit-1-payout-account-model` | `src/resources/payouts/models.rs` | `PayoutAccount` struct (id, account_type bank/wallet, currency, properties, created_at), `PayoutAccountId` newtype | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-5.1.0/unit-2-payout-account-create` | `src/resources/payouts/accounts_create.rs` | `CreatePayoutAccountParams` (account_type, properties like iban, credentials), `client.payout_accounts().create()` | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-5.1.0/unit-3-payout-account-list` | `src/resources/payouts/accounts_list.rs` | `ListPayoutAccountsParams`, `client.payout_accounts().list(params)`, pagination unit tests | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-5.1.0/unit-4-payout-account-retrieve` | `src/resources/payouts/accounts_retrieve.rs` | `client.payout_accounts().retrieve(id)`, Saudi IBAN validator (`validate_sa_iban`), unit tests | `security-appsec-engineer` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `PayoutAccount`, `AccountType`, `PayoutAccountId`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-5.1.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
+- [ ] **Unit 1 (`feat/us-5.1.0/unit-1-payout-account-model`)**: `PayoutAccount` struct (id, account_type bank/wallet, currency, properties, created_at), `PayoutAccountId` newtype (Files: `src/resources/payouts/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: create params with write-only credentials.  
+- [ ] **Unit 2 (`feat/us-5.1.0/unit-2-payout-account-create`)**: `CreatePayoutAccountParams` (account_type, properties like iban, credentials), `client.payout_accounts().create()` (Files: `src/resources/payouts/accounts_create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: IBAN validator table.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (Create)**: `POST /v1/payout_accounts` returning 201.  
+- [ ] **Unit 3 (`feat/us-5.1.0/unit-3-payout-account-list`)**: `ListPayoutAccountsParams`, `client.payout_accounts().list(params)`, pagination unit tests (Files: `src/resources/payouts/accounts_list.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (List/Retrieve)**: paginated list and single retrieve.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Errors)**: `InvalidIban`, 404.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-5.1.0/unit-4-payout-account-retrieve`)**: `client.payout_accounts().retrieve(id)`, Saudi IBAN validator (`validate_sa_iban`), unit tests (Files: `src/resources/payouts/accounts_retrieve.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
-#### Phase 3: Guards (PR 7–8)
-- [ ] **Task 3.1 (Credential Redaction)**: ensure no credentials field in response.  
-  *Agent*: `agency-rust-refactoring-specialist` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Identity)**: require account holder name.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: bank + wallet + list + retrieve.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on credential handling.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: doc-tests for both account types.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

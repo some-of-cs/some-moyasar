@@ -1,7 +1,7 @@
 # US-6.1.0: Settlements Service — List, Retrieve, Lines & Balance
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/settlements/behaviours/settlements/`  
+> **Behavior Blueprint**: `src/resources/settlements/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -89,14 +89,15 @@ Feature: Settlement Reconciliation
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/settlements/behaviours/settlements/
-├── services/        # SettlementsService list/retrieve/lines/balance
-├── logic/           # Date-filter serialization, net-amount derivation helpers
-├── types/           # Settlement, SettlementLine, MerchantBalance, SettlementId
-└── constants/       # SETTLEMENTS_PATH, BALANCE_PATH, LINES_SUFFIX
+src/
+├── src/resources/settlements/models.rs        # Unit 1 (feat/us-6.1.0/unit-1-settlement-model)
+├── src/resources/settlements/list.rs          # Unit 2 (feat/us-6.1.0/unit-2-settlement-list)
+├── src/resources/settlements/retrieve.rs      # Unit 3 (feat/us-6.1.0/unit-3-settlement-retrieve)
+├── src/resources/settlements/balance.rs       # Unit 4 (feat/us-6.1.0/unit-4-settlement-balance)
+├── src/resources/settlements/lines.rs         # Unit 5 (feat/us-6.1.0/unit-5-settlement-lines)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -145,6 +146,30 @@ impl Settlement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RecipientType { Entity, Platform, Beneficiary }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SettlementLine {
+    pub payment_id: Option<Uuid>,
+    #[serde(rename = "type")]
+    pub line_type: Option<String>,
+    pub currency: Currency,
+    pub amount: u64,
+    pub fee: u64,
+    pub tax: u64,
+    pub reference: Option<String>,
+    pub settled_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MerchantBalance {
+    pub currency: Currency,
+    pub available: u64,
+    pub pending: u64,
+    pub reserved: u64,
+    pub available_format: Option<String>,
+    pub pending_format: Option<String>,
+    pub reserved_format: Option<String>,
+}
 ```
 
 ### 3.2 Activity & Interaction Diagram
@@ -171,52 +196,39 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 5-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/settlements/models.rs` | `Settlement`, `SettlementLine`, `RecipientType`. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/settlements/params.rs` | List filter params with date bounds. | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/settlements/list.rs` | `GET /v1/settlements` with filters. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/settlements/service.rs` | `client.settlements()` accessor. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | 404 and date-parse error mapping. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/settlements/mod.rs` | Feature-gated export under `settlements`. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/settlements/models.rs` | `SettlementId` newtype; borrowed URLs. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/settlements/balance.rs` | Balance struct; missing FX fields tolerated. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/settlements_test.rs` | list/retrieve/lines/balance wire tests. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-tests with a reconciliation example. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-6.1.0/unit-1-settlement-model` | `src/resources/settlements/models.rs` | `Settlement` struct (recipient_type, currency, source_currency, invoicing_currency, amount, fee, tax, invoicing_fee, invoicing_tax, invoicing_ex_rate, reference, settlement_count, invoice_url PDF, csv_list_url, pdf_list_url) | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-6.1.0/unit-2-settlement-list` | `src/resources/settlements/list.rs` | `client.settlements().list(params)` with id/created[gt/lt]/page filters, pagination | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-6.1.0/unit-3-settlement-retrieve` | `src/resources/settlements/retrieve.rs` | `client.settlements().retrieve(id)`, `Settlement::net()` breakdown helper, 404 mapping, unit tests | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-6.1.0/unit-4-settlement-balance` | `src/resources/settlements/balance.rs` | `client.settlements().fetch_balance()`, `MerchantBalance` struct (available, pending, reserved amounts), unit tests | `security-appsec-engineer` | `security-audit` |
+| **Unit 5** | `feat/us-6.1.0/unit-5-settlement-lines` | `src/resources/settlements/lines.rs` | `SettlementLine` struct, `ListSettlementLinesParams`, `client.settlements().list_lines(id, params)`, unit tests | `engineering-rust-refactoring-specialist` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Models & Params (PR 1–2)
-- [ ] **Task 1.1 (Types)**: `Settlement`, `SettlementLine`, `RecipientType`, `net()`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-6.1.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
+- [ ] **Unit 1 (`feat/us-6.1.0/unit-1-settlement-model`)**: `Settlement` struct (recipient_type, currency, source_currency, invoicing_currency, amount, fee, tax, invoicing_fee, invoicing_tax, invoicing_ex_rate, reference, settlement_count, invoice_url PDF, csv_list_url, pdf_list_url) (Files: `src/resources/settlements/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Params)**: date-range filter params.  
+- [ ] **Unit 2 (`feat/us-6.1.0/unit-2-settlement-list`)**: `client.settlements().list(params)` with id/created[gt/lt]/page filters, pagination (Files: `src/resources/settlements/list.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: arithmetic and FX fixtures.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Endpoints (PR 3–6)
-- [ ] **Task 2.1 (List)**: `GET /v1/settlements` with encoded filters.  
+- [ ] **Unit 3 (`feat/us-6.1.0/unit-3-settlement-retrieve`)**: `client.settlements().retrieve(id)`, `Settlement::net()` breakdown helper, 404 mapping, unit tests (Files: `src/resources/settlements/retrieve.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Retrieve/Lines)**: `GET /:id` and `GET /:id/lines`.  
-  *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Balance)**: `GET /v1/settlements/balance`.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-6.1.0/unit-4-settlement-balance`)**: `client.settlements().fetch_balance()`, `MerchantBalance` struct (available, pending, reserved amounts), unit tests (Files: `src/resources/settlements/balance.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
+- [ ] **Unit 5 (`feat/us-6.1.0/unit-5-settlement-lines`)**: `SettlementLine` struct, `ListSettlementLinesParams`, `client.settlements().list_lines(id, params)`, unit tests (Files: `src/resources/settlements/lines.rs`)  
+  *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
-#### Phase 3: Edge Cases (PR 7–8)
-- [ ] **Task 3.1 (Optional FX)**: tolerate absence of invoicing fields.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (URL Validation)**: absolute-URL checks when present.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: all four endpoints.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on monetary arithmetic.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: reconciliation walkthrough.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 

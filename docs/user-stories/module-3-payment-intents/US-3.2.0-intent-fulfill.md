@@ -1,7 +1,7 @@
 # US-3.2.0: Payment Intent Fulfillment via Publishable Key & Browser Flow
 
 > **Spec Kit Specification**: [Specification Lifecycle Active](../../../docs/architecture/DECOMPOSITION_ROADMAP.md)  
-> **Behavior Blueprint**: `features/core/modules/payment-intents/behaviours/intent-fulfillment/`  
+> **Behavior Blueprint**: `src/resources/payment_intents/`  
 > **Slicing Standard**: [10-PR Vertical Slicing Framework](../README.md#2-the-10-pr-vertical-slicing-framework-rust-sdk-adaptation)  
 > **Security Gateway**: `security-audit` Level 2 Enforced  
 > **Quality Gates**: `(G0–G4 + G-Review + G-Borrow + G-Law)`  
@@ -15,12 +15,12 @@
 **I want to** fulfill a previously created `PaymentIntent` using only the `PublishableKey` and the intent's `client_secret`, supplying instrument-specific properties,  
 **So that** no secret key ever reaches the client, the amount cannot be tampered with, and the resulting `Payment` object — not the intent — carries the authoritative charge outcome.
 
-#### 1.2 Preconditions
+#### 1.1.1 Preconditions
 - `features = ["payment-intents"]`.
 - Backend has created the intent and delivered `(intent.id, intent.client_secret)` to the client.
 - Client holds a `PublishableKey`.
 
-#### 1.3 Postconditions
+#### 1.1.2 Postconditions
 - `POST /v1/payment_intents/:id/fulfill` accepts `client_secret`, `source`, `metadata`, `save_card`, `manual`, `3ds` and returns a standard `Payment`.
 - Attempts to override `amount`, `currency`, `description`, or `callback_url` are **ignored** by Moyasar; the intent's locked values win.
 - The intent transitions to `fulfilled`; that is **not** proof of payment.
@@ -89,14 +89,14 @@ Feature: Payment Intent Fulfillment from the Browser
 
 ## 2. Behavior-Centric Architecture & Folder Blueprint
 
-### 2.1 Colocated Behaviour Directory Tree
+### 2.1 Rust Crate Module & Unit File Ownership Tree
 
 ```
-features/core/modules/payment-intents/behaviours/intent-fulfillment/
-├── services/        # FulfillDispatcher
-├── logic/           # client_secret matching, flag forwarding
-├── types/           # FulfillIntentParams, FulfillmentOutcome
-└── constants/       # FULFILL_PATH
+src/
+├── src/resources/payment_intents/fulfill_params.rs # Unit 1 (feat/us-3.2.0/unit-1-fulfill-params)
+├── src/resources/payment_intents/fulfill.rs   # Unit 2 (feat/us-3.2.0/unit-2-fulfill-endpoint)
+├── src/resources/payment_intents/lifecycle.rs # Unit 3 (feat/us-3.2.0/unit-3-fulfill-lifecycle)
+├── src/resources/payment_intents/fulfill_guard.rs # Unit 4 (feat/us-3.2.0/unit-4-fulfill-guard)
 ```
 
 ### 2.2 Scoping & Promotion Blueprint
@@ -116,7 +116,7 @@ features/core/modules/payment-intents/behaviours/intent-fulfillment/
 - **Key Law**: fulfill is callable with a `PublishableKey`.
 
 ```rust
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct FulfillIntentParams {
     pub client_secret: String,
     pub source: PaymentSourceRequest,
@@ -130,7 +130,26 @@ pub struct FulfillIntentParams {
     pub three_ds: Option<bool>,
 }
 
-impl PaymentIntentsService<'_> {
+impl std::fmt::Debug for FulfillIntentParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FulfillIntentParams")
+            .field("client_secret", &"[REDACTED]")
+            .field("save_card", &self.save_card)
+            .field("manual", &self.manual)
+            .field("three_ds", &self.three_ds)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum FulfillmentOutcome {
+    Paid(Payment),
+    Authorized(Payment),
+    RequiresAction { payment: Payment, transaction_url: Option<String> },
+    Failed(Payment),
+}
+
+impl<K: AuthKey> PaymentIntentsService<'_, K> {
     pub async fn fulfill(&self, id: Uuid, params: FulfillIntentParams)
         -> Result<Payment, MoyasarError>
     {
@@ -164,52 +183,36 @@ sequenceDiagram
 
 ## 4. Granular Implementation Tasks
 
-### 4.1 The 10-PR Vertical Slicing Implementation Plan
+### 4.1 Dynamic 4-Unit Parallel Implementation Plan
 
-| PR # | Pillar | Architectural Layer | Primary Scope & Files | Deliverables & Acceptance | Accountable Role / Agent | Assigned Skills |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PR 1** | **Pillar 1** | **Domain Logic & Core Traits** | `src/resources/payment_intents/fulfill.rs` | `FulfillIntentParams` struct. | `engineering-software-architect` | `security-audit` |
-| **PR 2** | **Pillar 2** | **Request Modeling** | `src/resources/payment_intents/fulfill.rs` | Flag forwarding (`save_card`, `manual`, `3ds`). | `engineering-backend-architect` | `security-audit` |
-| **PR 3** | **Pillar 3** | **Transport Wire Adapter** | `src/resources/payment_intents/fulfill.rs` | `POST /:id/fulfill` returning `Payment`. | `engineering-backend-architect` | `security-audit` |
-| **PR 4** | **Pillar 4** | **Service Accessor** | `src/resources/payment_intents/service.rs` | `fulfill()` on the service, `pk_`-callable. | `engineering-software-architect` | `security-audit` |
-| **PR 5** | **Pillar 5** | **Error Taxonomy** | `src/kernel/error.rs` | Mismatched `client_secret` and expired-intent errors. | `security-application-security-engineer` | `security-audit` |
-| **PR 6** | **Pillar 6** | **Resource Facade Mounting** | `src/resources/payment_intents/mod.rs` | Export fulfillment types. | `engineering-software-architect` | `security-audit` |
-| **PR 7** | **Pillar 7** | **Zero-Copy Hardening** | `src/resources/payment_intents/fulfill.rs` | Borrowed source; no payload duplication. | `agency-rust-refactoring-specialist` | `security-audit` |
-| **PR 8** | **Pillar 8** | **Edge Cases & Guards** | `src/resources/payment_intents/lifecycle.rs` | Locked-param rejection; fulfilled≠paid guard. | `agency-api-tester` | `security-audit` |
-| **PR 9** | **Pillar 9** | **Integration Wire Verification** | `tests/intent_fulfill_test.rs` | Override-ignored, wrong-secret, expired-intent cases. | `agency-api-tester` | `security-audit` |
-| **PR 10** | **Pillar 10** | **Documentation & Packaging** | `README.md` | Doc-test asserting `Payment.status` is authoritative. | `engineering-technical-writer` | `security-audit` |
+| Unit # | Branch | Exclusive Owner Files | Deliverables & Colocated Unit Tests | Accountable Role / Agent | Assigned Skills |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Unit 1** | `feat/us-3.2.0/unit-1-fulfill-params` | `src/resources/payment_intents/fulfill_params.rs` | `FulfillIntentParams` (`client_secret` redacted in `Debug`, `source`, `metadata`, `save_card`, `manual`, `3ds`) | `engineering-software-architect` | `security-audit` |
+| **Unit 2** | `feat/us-3.2.0/unit-2-fulfill-endpoint` | `src/resources/payment_intents/fulfill.rs` | `client.payment_intents().fulfill(id, params)` (`PublishableKey` compatible), returning `Payment` | `engineering-backend-architect` | `security-audit` |
+| **Unit 3** | `feat/us-3.2.0/unit-3-fulfill-lifecycle` | `src/resources/payment_intents/lifecycle.rs` | `FulfillmentOutcome` enum (`Paid`, `Authorized`, `RequiresAction`, `Failed`) derived from returned `Payment` (`fulfilled ≠ paid`) | `engineering-backend-architect` | `security-audit` |
+| **Unit 4** | `feat/us-3.2.0/unit-4-fulfill-guard` | `src/resources/payment_intents/fulfill_guard.rs` | Pre-fulfillment `is_usable()` and `client_secret` format guard, locked-param schema assertions, and fulfillment unit tests | `security-appsec-engineer` | `security-audit` |
 
-### 4.2 Implementation Phase Breakdown
+### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
-#### Phase 1: Fulfillment Model (PR 1–2)
-- [ ] **Task 1.1 (Params)**: `FulfillIntentParams` with `client_secret` and `source`.  
+#### Wave 1: Base Branch Scaffolding (`feat/us-3.2.0-*`)
+- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+  *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
+
+#### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
+- [ ] **Unit 1 (`feat/us-3.2.0/unit-1-fulfill-params`)**: `FulfillIntentParams` (`client_secret` redacted in `Debug`, `source`, `metadata`, `save_card`, `manual`, `3ds`) (Files: `src/resources/payment_intents/fulfill_params.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.2 (Flags)**: forward `save_card`, `manual`, `3ds` when present.  
+- [ ] **Unit 2 (`feat/us-3.2.0/unit-2-fulfill-endpoint`)**: `client.payment_intents().fulfill(id, params)` (`PublishableKey` compatible), returning `Payment` (Files: `src/resources/payment_intents/fulfill.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 1.3 (Unit Tests)**: serialized body shape.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 2: Endpoint & Errors (PR 3–6)
-- [ ] **Task 2.1 (Fulfill)**: `POST /:id/fulfill` returning `Payment`.  
+- [ ] **Unit 3 (`feat/us-3.2.0/unit-3-fulfill-lifecycle`)**: `FulfillmentOutcome` enum (`Paid`, `Authorized`, `RequiresAction`, `Failed`) derived from returned `Payment` (`fulfilled ≠ paid`) (Files: `src/resources/payment_intents/lifecycle.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Task 2.2 (Errors)**: mismatched secret, expired intent.  
-  *Agent*: `security-application-security-engineer` | *Skill*: `security-audit`
-- [ ] **Task 2.3 (Exports)**: feature-gated wiring.  
-  *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
+- [ ] **Unit 4 (`feat/us-3.2.0/unit-4-fulfill-guard`)**: Pre-fulfillment `is_usable()` and `client_secret` format guard, locked-param schema assertions, and fulfillment unit tests (Files: `src/resources/payment_intents/fulfill_guard.rs`)  
+  *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
-#### Phase 3: Guards (PR 7–8)
-- [ ] **Task 3.1 (Locked Params)**: assert no override fields serialized.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Outcome Guard)**: document and test fulfilled≠paid.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-
-#### Phase 4: Verification & Sign-Off (PR 9–10)
-- [ ] **Task 4.1 (Wire Tests)**: override-ignored and wrong-secret scenarios.  
-  *Agent*: `agency-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 4.2 (G-Review)**: peer review on secret handling.  
-  *Agent*: `agency-code-reviewer` | *Skill*: `security-audit`
-- [ ] **Task 4.3 (Documentation)**: browser-flow example.  
-  *Agent*: `engineering-technical-writer` | *Skill*: `security-audit`
+#### Wave 3: Cascading Merge & Story Integration Verification
+- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+  *Agent*: `testing-api-tester` | *Skill*: `security-audit`
+- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+  *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
 
