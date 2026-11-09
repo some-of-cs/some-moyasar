@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256" width="512" height="256" fill="none">
+  <!-- Composite Dual-Brand Emblem: Some(CS) Org Logo + some-divide-and-conquer Parallel Worktree Graph -->
+  <defs>
+    <linearGradient id="someNavyTealLeft" x1="64" y1="68" x2="124" y2="152" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F2942"/>
+      <stop offset="55%" stop-color="#154E70"/>
+      <stop offset="100%" stop-color="#0D9488"/>
+    </linearGradient>
+    <linearGradient id="someTealNavyRight" x1="124" y1="52" x2="184" y2="144" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0D9488"/>
+      <stop offset="55%" stop-color="#155E75"/>
+      <stop offset="100%" stop-color="#0F2942"/>
+    </linearGradient>
+    <linearGradient id="dncGrad" x1="288" y1="28" x2="488" y2="228" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="50%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- LEFT CARD: Some(CS) Organization Brand Emblem -->
+  <rect x="24" y="28" width="200" height="200" rx="44" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="4"/>
+  <!-- Left Curly Brace + Lower S-Loop -->
+  <path d="M94 72 H84 C76 72 72 78 72 86 V92 C72 98 66 102 60 102 C66 102 72 106 72 112 V118 C72 126 76 132 84 132 H92 L112 150 C119 156 129 156 136 150 L146 140 C152 134 152 122 144 115 L124 99"
+        stroke="url(#someNavyTealLeft)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Right Curly Brace + Upper S-Loop -->
+  <path d="M154 132 H164 C172 132 176 126 176 118 V112 C176 106 182 102 188 102 C182 102 176 98 176 92 V86 C176 78 172 72 164 72 H156 L136 54 C129 48 119 48 112 54 L102 64 C96 70 96 82 104 89 L124 105"
+        stroke="url(#someTealNavyRight)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Central Interlocking S-Ribbon Diagonal -->
+  <path d="M104 86 L124 102" stroke="#0F2942" stroke-width="11" stroke-linecap="round"/>
+  <path d="M124 102 L144 118" stroke="#0D9488" stroke-width="11" stroke-linecap="round"/>
+  <!-- Two Signature Orange Dots -->
+  <circle cx="103" cy="115" r="9.5" fill="#F97316"/>
+  <circle cx="145" cy="89" r="9.5" fill="#F97316"/>
+  <!-- Some(CS) Typography -->
+  <text x="124" y="194" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="30" fill="#0F2942" letter-spacing="-0.5">
+    <tspan font-weight="500">Some</tspan><tspan font-weight="800">(CS)</tspan>
+  </text>
+
+  <!-- CENTER CONNECTOR BADGE -->
+  <circle cx="256" cy="128" r="20" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="3"/>
+  <path d="M248 128 H264 M256 120 V136" stroke="#0F2942" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- RIGHT CARD: some-divide-and-conquer Parallel Worktree Graph Icon -->
+  <rect x="288" y="28" width="200" height="200" rx="44" fill="url(#dncGrad)" stroke="#93C5FD" stroke-width="4"/>
+  <!-- Top Root Node (Monolithic Spec) -->
+  <rect x="364" y="54" width="48" height="28" rx="8" fill="#FFFFFF"/>
+  <!-- Branch Connectors -->
+  <path d="M388 82 V108 M388 108 H336 V128 M388 108 V128 M388 108 H440 V128" stroke="#E0F2FE" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 3 Parallel Execution Unit Nodes -->
+  <rect x="316" y="128" width="40" height="28" rx="7" fill="#FFFFFF"/>
+  <rect x="368" y="128" width="40" height="28" rx="7" fill="#FFFFFF"/>
+  <rect x="420" y="128" width="40" height="28" rx="7" fill="#FFFFFF"/>
+  <!-- Cascading Merge Connectors into Verified Release Gate -->
+  <path d="M336 156 V174 H388 M388 156 V186 M440 156 V174 H388" stroke="#E0F2FE" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="388" cy="194" r="14" fill="#22C55E" stroke="#FFFFFF" stroke-width="4"/>
+  <path d="M382 194 L386 198 L395 189" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
