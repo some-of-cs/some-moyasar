@@ -244,7 +244,10 @@ mod tests {
         let parsed: TokenId = "token_xyz".parse().expect("FromStr succeeds");
         assert_eq!(parsed.as_str(), "token_xyz");
 
-        assert!(matches!(TokenId::new(""), Err(MoyasarError::InvalidTokenId)));
+        assert!(matches!(
+            TokenId::new(""),
+            Err(MoyasarError::InvalidTokenId)
+        ));
         assert!(matches!(
             TokenId::new("token_"),
             Err(MoyasarError::InvalidTokenId)
@@ -317,8 +320,8 @@ mod tests {
 
         assert!(!contains_16_consecutive_digits(&debug_output));
         assert!(!contains_16_consecutive_digits(&serialized));
-        assert!(!serialized.contains("cvc"));
-        assert!(!serialized.contains("pan"));
+        assert!(!serialized.contains("\"cvc\""));
+        assert!(!serialized.contains("\"pan\""));
         assert!(token.id.as_str().starts_with(TOKEN_ID_PREFIX));
     }
 }

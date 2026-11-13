@@ -86,10 +86,7 @@ async fn retrieve_token(
     execute_with_retry(max_network_retries, || send_retrieve_request(http, &url)).await
 }
 
-async fn send_retrieve_request(
-    http: &reqwest::Client,
-    url: &str,
-) -> Result<Token, MoyasarError> {
+async fn send_retrieve_request(http: &reqwest::Client, url: &str) -> Result<Token, MoyasarError> {
     let response = http.get(url).send().await.map_err(map_reqwest_error)?;
     let status = response.status();
     if status.is_success() {
