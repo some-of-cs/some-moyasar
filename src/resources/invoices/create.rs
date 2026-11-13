@@ -315,10 +315,10 @@ mod tests {
             .await
             .expect("creates invoice");
 
-        assert!(!invoice.url.is_empty());
+        assert!(invoice.url.as_deref().is_some_and(|u| !u.is_empty()));
         assert_eq!(
-            invoice.url,
-            "https://moyasar.com/i/11111111-1111-4111-8111-111111111111"
+            invoice.url.as_deref(),
+            Some("https://moyasar.com/i/11111111-1111-4111-8111-111111111111")
         );
     }
 
@@ -364,7 +364,11 @@ mod tests {
                 .expect("creates bulk invoices");
 
         assert_eq!(invoices.len(), 3);
-        assert!(invoices.iter().all(|inv| !inv.url.is_empty()));
+        assert!(
+            invoices
+                .iter()
+                .all(|inv| inv.url.as_deref().is_some_and(|u| !u.is_empty()))
+        );
     }
 
     #[tokio::test]
@@ -385,9 +389,10 @@ mod tests {
         let client = MoyasarClient::new(key).expect("builds client");
         let params = CreateInvoiceParams::new(Amount::from_minor(0), Currency::SAR);
 
-        let err = post_with_base_url::<_, _, Invoice>(&client, &server.uri(), INVOICES_PATH, &params)
-            .await
-            .expect_err("422 must fail");
+        let err =
+            post_with_base_url::<_, _, Invoice>(&client, &server.uri(), INVOICES_PATH, &params)
+                .await
+                .expect_err("422 must fail");
 
         assert!(matches!(
             err,
@@ -409,11 +414,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let response_json = sample_invoice_json(
-            "33333333-3333-4333-8333-333333333333",
-            50_000,
-            "Recovered",
-        );
+        let response_json =
+            sample_invoice_json("33333333-3333-4333-8333-333333333333", 50_000, "Recovered");
         Mock::given(method("POST"))
             .and(path("/v1/invoices"))
             .respond_with(ResponseTemplate::new(201).set_body_json(&response_json))
