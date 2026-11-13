@@ -36,6 +36,19 @@ pub struct ReversalPlan {
     pub mada_hold_likely_expired: bool,
 }
 
+fn is_void_fallback_eligible(payment: &Payment, err: &MoyasarError) -> bool {
+    matches!(
+        payment.status,
+        PaymentStatus::Paid | PaymentStatus::Captured
+    ) && matches!(
+        err,
+        MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError | ApiErrorType::IntentNotCancelable,
+            ..
+        }
+    )
+}
+
 impl<K: AuthKey> PaymentsService<'_, K> {
     /// Pure, network-free reversal planner (`CC <= 6`, `nesting <= 2`, zero clones).
     ///
@@ -97,17 +110,7 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
         match self.plan_reversal(payment, now) {
             ReversalStrategy::Void => match self.void(id).await {
                 Ok(voided) => Ok(voided),
-                Err(MoyasarError::Api {
-                    error_type:
-                        ApiErrorType::InvalidRequestError | ApiErrorType::IntentNotCancelable,
-                    ..
-                }) if matches!(
-                    payment.status,
-                    PaymentStatus::Paid | PaymentStatus::Captured
-                ) =>
-                {
-                    self.refund(id, None).await
-                }
+                Err(err) if is_void_fallback_eligible(payment, &err) => self.refund(id, None).await,
                 Err(err) => Err(err),
             },
             ReversalStrategy::Refund { amount } => self.refund(id, amount).await,

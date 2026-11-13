@@ -24,9 +24,17 @@ fn serialize_opt_secret<S: Serializer>(
     }
 }
 
+fn is_safe_token_suffix(suffix: &str) -> bool {
+    !suffix.is_empty()
+        && !suffix.contains("..")
+        && !suffix
+            .chars()
+            .any(|ch| ch.is_whitespace() || matches!(ch, '/' | '?' | '#'))
+}
+
 fn validate_token_id(token: &str) -> Result<(), MoyasarError> {
     match token.strip_prefix("token_") {
-        Some(suffix) if !suffix.is_empty() => Ok(()),
+        Some(suffix) if is_safe_token_suffix(suffix) => Ok(()),
         _ => Err(MoyasarError::InvalidTokenId),
     }
 }
@@ -35,6 +43,16 @@ fn validate_token_id(token: &str) -> Result<(), MoyasarError> {
 ///
 /// Charges a previously tokenized card using a `SecretKey` without 3DS by default
 /// unless `three_ds` is explicitly set.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::source_token::TokenSource;
+///
+/// let source = TokenSource::new("token_01J9SAVED").expect("valid token id");
+/// source.validate().expect("passes validation");
+/// assert!(format!("{source:?}").contains("[REDACTED]"));
+/// ```
 #[derive(Clone, Serialize)]
 pub struct TokenSource {
     /// Saved card token identifier (`token_...`), zeroized on drop.
@@ -55,12 +73,12 @@ pub struct TokenSource {
 }
 
 impl TokenSource {
-    /// Constructs and validates a [`TokenSource`] requiring a non-empty `token_` suffix.
+    /// Constructs and validates a [`TokenSource`] requiring a safe non-empty `token_` suffix.
     ///
     /// # Errors
     ///
     /// Returns [`MoyasarError::InvalidTokenId`] if `token` does not start with `"token_"`
-    /// followed by at least one character.
+    /// followed by a non-empty suffix free of whitespace, `/`, `?`, `#`, or `..`.
     pub fn new(token: impl Into<String>) -> Result<Self, MoyasarError> {
         let token_str = token.into();
         validate_token_id(&token_str)?;
@@ -72,7 +90,7 @@ impl TokenSource {
         })
     }
 
-    /// Validates the token prefix and optional CVC format.
+    /// Validates the token prefix/suffix and optional CVC format.
     pub fn validate(&self) -> Result<(), MoyasarError> {
         validate_token_id(self.token.expose_secret())?;
         if let Some(cvc) = &self.cvc {
@@ -104,14 +122,21 @@ mod tests {
 
     #[test]
     fn tc_2_3_0_06_token_omits_3ds_when_unset_and_validates_prefix() {
-        assert!(matches!(
-            TokenSource::new("token_"),
-            Err(MoyasarError::InvalidTokenId)
-        ));
-        assert!(matches!(
-            TokenSource::new("abc_123"),
-            Err(MoyasarError::InvalidTokenId)
-        ));
+        for invalid in [
+            "token_",
+            "abc_123",
+            "token_abc/def",
+            "token_abc?x=1",
+            "token_abc#frag",
+            "token_..",
+            "token_a..b",
+            "token_abc 123",
+        ] {
+            assert!(
+                matches!(TokenSource::new(invalid), Err(MoyasarError::InvalidTokenId)),
+                "expected InvalidTokenId for {invalid}"
+            );
+        }
 
         let src = TokenSource::new("token_abc").expect("valid token");
         let json = serde_json::to_value(&src).expect("serializes");

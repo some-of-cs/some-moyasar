@@ -14,6 +14,17 @@ pub use crate::kernel::response_code::{FieldError, ResponseCode, deserialize_fie
 pub use crate::kernel::transport::{execute_with_retry, send_with_retry};
 pub use crate::kernel::types::{Amount, Currency, RecipientType};
 
+#[cfg(feature = "payments")]
+pub use crate::resources::payments::{
+    AfTSender, AftSender, ApplePaySource, CardBrand, CardSourceResponse, CreatePaymentParams,
+    CreatePaymentParamsBuilder, CreditCardSource, IssuerCardType, ListParams, Payment, PaymentId,
+    PaymentSourceRequest, PaymentSourceResponse, PaymentSplitRequest, PaymentSplitResponse,
+    PaymentStatus, PaymentsService, ReversalPlan, ReversalStrategy, SadadBillSource,
+    SadadBillSourceResponse, SamsungPaySource, SplitRecipientType, SplitRefundAllocation,
+    StcPayOtpPayment, StcPayOtpRequest, StcPaySource, StcPaySourceResponse, TokenSource,
+    UpdatePaymentParams, VoidOrRefund, WalletSourceResponse,
+};
+
 #[cfg(feature = "tokens")]
 pub use crate::resources::tokens::{CreateTokenParams, Token, TokenId, TokenStatus, TokensService};
 

@@ -4,7 +4,7 @@ use core::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::kernel::auth::AuthKey;
+use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::transport::execute_with_retry;
 use crate::resources::payments::service::PaymentsService;
@@ -36,6 +36,27 @@ pub struct StcPayOtpPayment {
     pub status: String,
     /// Payment amount in the smallest currency unit (e.g., Halalas).
     pub amount: i64,
+    /// Pre-formatted human-readable payment amount string (e.g., `"100.00 SAR"`).
+    #[serde(default)]
+    pub amount_format: Option<String>,
+    /// Processing fee in minor units.
+    #[serde(default)]
+    pub fee: Option<i64>,
+    /// Pre-formatted processing fee string.
+    #[serde(default)]
+    pub fee_format: Option<String>,
+    /// Total refunded amount in minor units.
+    #[serde(default)]
+    pub refunded: Option<i64>,
+    /// Pre-formatted refunded amount string.
+    #[serde(default)]
+    pub refunded_format: Option<String>,
+    /// Total captured amount in minor units.
+    #[serde(default)]
+    pub captured: Option<i64>,
+    /// Pre-formatted captured amount string.
+    #[serde(default)]
+    pub captured_format: Option<String>,
     /// ISO 4217 currency code (e.g., `"SAR"`).
     pub currency: String,
     /// Optional payment description.
@@ -44,6 +65,21 @@ pub struct StcPayOtpPayment {
     /// Raw source payload returned by the gateway.
     #[serde(default)]
     pub source: Option<serde_json::Value>,
+    /// Optional merchant metadata map.
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+    /// Optional callback URL.
+    #[serde(default)]
+    pub callback_url: Option<String>,
+    /// Optional associated invoice ID.
+    #[serde(default)]
+    pub invoice_id: Option<String>,
+    /// Optional creation timestamp string.
+    #[serde(default)]
+    pub created_at: Option<String>,
+    /// Optional last-update timestamp string.
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
 /// Returns `true` when an error reflects STC Pay's 60-second OTP resend/retry cooldown.
@@ -58,9 +94,11 @@ pub fn is_otp_cooldown_error(err: &MoyasarError) -> bool {
     }
 }
 
-impl<'a, K: AuthKey> PaymentsService<'a, K> {
+impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
     /// Completes an initiated STC Pay charge by posting the customer's OTP
     /// to the server-provided `transaction_url`.
+    ///
+    /// Restricted at compile time to [`SecretKey`](crate::kernel::auth::SecretKey) (`K: SecretAuthKey`).
     ///
     /// # Security
     ///
@@ -73,6 +111,45 @@ impl<'a, K: AuthKey> PaymentsService<'a, K> {
     /// - [`MoyasarError::InvalidBaseUrl`] if `transaction_url` does not start with `https://`.
     /// - [`MoyasarError::Api`] if `otp` is empty or the gateway rejects the OTP.
     /// - [`MoyasarError::Network`] / [`MoyasarError::ServerError`] on transport failures.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use some_moyasar::prelude::{MoyasarClient, SecretKey};
+    ///
+    /// # async fn run() -> Result<(), some_moyasar::prelude::MoyasarError> {
+    /// let sk = SecretKey::new("sk_test_your_secret_key")?;
+    /// let client = MoyasarClient::new(sk)?;
+    /// let verified = client
+    ///     .payments()
+    ///     .verify_stc_otp(
+    ///         "https://api.moyasar.com/v1/stc_pays/pay_123/proceed?otp_token=tok_xyz",
+    ///         "123456",
+    ///     )
+    ///     .await?;
+    /// assert_eq!(verified.status, "paid");
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// Calling `verify_stc_otp` with a [`PublishableKey`](crate::kernel::auth::PublishableKey)
+    /// is rejected at compile time:
+    ///
+    /// ```compile_fail
+    /// use some_moyasar::prelude::{MoyasarClient, PublishableKey};
+    ///
+    /// # async fn example() {
+    /// let pk = PublishableKey::new("pk_test_abc123").unwrap();
+    /// let client = MoyasarClient::new(pk).unwrap();
+    /// let _ = client
+    ///     .payments()
+    ///     .verify_stc_otp(
+    ///         "https://api.moyasar.com/v1/stc_pays/pay_123/proceed?otp_token=tok_xyz",
+    ///         "123456",
+    ///     )
+    ///     .await;
+    /// # }
+    /// ```
     pub async fn verify_stc_otp(
         &self,
         transaction_url: &str,
@@ -172,6 +249,9 @@ mod tests {
                 "id": "pay_123",
                 "status": "paid",
                 "amount": 10000,
+                "amount_format": "100.00 SAR",
+                "fee": 150,
+                "fee_format": "1.50 SAR",
                 "currency": "SAR",
                 "description": "STC Pay order"
             })))
@@ -194,6 +274,7 @@ mod tests {
         assert_eq!(payment.id, "pay_123");
         assert_eq!(payment.status, "paid");
         assert_eq!(payment.amount, 10000);
+        assert_eq!(payment.amount_format.as_deref(), Some("100.00 SAR"));
         assert_eq!(payment.currency, "SAR");
     }
 

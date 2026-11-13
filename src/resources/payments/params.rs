@@ -10,6 +10,20 @@ use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
 use crate::kernel::types::Currency;
 
+use super::aft::AftSender;
+use super::source::PaymentSourceRequest;
+use super::split_validation::validate_splits;
+use super::splits::PaymentSplitRequest;
+
+fn invalid_req_err(message: &str) -> MoyasarError {
+    MoyasarError::Api {
+        error_type: ApiErrorType::InvalidRequestError,
+        message: message.to_owned(),
+        errors: Vec::new(),
+        response_code: None,
+    }
+}
+
 /// Validated request payload for creating a payment via `POST /v1/payments`.
 ///
 /// Construct using [`CreatePaymentParams::builder()`].
@@ -66,11 +80,13 @@ pub struct CreatePaymentParamsBuilder {
     amount: Option<u64>,
     currency: Option<Currency>,
     source: Option<Value>,
+    typed_source: Option<PaymentSourceRequest>,
     description: Option<String>,
     callback_url: Option<String>,
     given_id: Option<Uuid>,
     metadata: Option<Metadata>,
     splits: Option<Vec<Value>>,
+    typed_splits: Option<Vec<PaymentSplitRequest>>,
     sender: Option<Value>,
 }
 
@@ -79,7 +95,10 @@ impl fmt::Debug for CreatePaymentParamsBuilder {
         f.debug_struct("CreatePaymentParamsBuilder")
             .field("amount", &self.amount)
             .field("currency", &self.currency)
-            .field("has_source", &self.source.is_some())
+            .field(
+                "has_source",
+                &(self.source.is_some() || self.typed_source.is_some()),
+            )
             .field("given_id", &self.given_id)
             .finish()
     }
@@ -98,9 +117,17 @@ impl CreatePaymentParamsBuilder {
         self
     }
 
-    /// Sets the payment source payload.
+    /// Sets the raw JSON payment source payload.
     pub fn source(mut self, source: Value) -> Self {
         self.source = Some(source);
+        self.typed_source = None;
+        self
+    }
+
+    /// Sets a strongly typed [`PaymentSourceRequest`], validated during [`Self::build`].
+    pub fn payment_source(mut self, source: impl Into<PaymentSourceRequest>) -> Self {
+        self.typed_source = Some(source.into());
+        self.source = None;
         self
     }
 
@@ -128,15 +155,29 @@ impl CreatePaymentParamsBuilder {
         self
     }
 
-    /// Sets optional marketplace split allocations.
+    /// Sets optional raw JSON marketplace split allocations.
     pub fn splits(mut self, splits: Vec<Value>) -> Self {
         self.splits = Some(splits);
+        self.typed_splits = None;
         self
     }
 
-    /// Sets optional Account Funding Transaction (AFT) sender details.
+    /// Sets typed marketplace split allocations, validated against `amount` during [`Self::build`].
+    pub fn payment_splits(mut self, splits: Vec<PaymentSplitRequest>) -> Self {
+        self.typed_splits = Some(splits);
+        self.splits = None;
+        self
+    }
+
+    /// Sets optional raw JSON Account Funding Transaction (AFT) sender details.
     pub fn sender(mut self, sender: Value) -> Self {
         self.sender = Some(sender);
+        self
+    }
+
+    /// Sets strongly typed [`AftSender`] details for Account Funding Transactions.
+    pub fn aft_sender(mut self, sender: AftSender) -> Self {
+        self.sender = serde_json::to_value(sender).ok();
         self
     }
 
@@ -145,24 +186,12 @@ impl CreatePaymentParamsBuilder {
         let amount = self
             .amount
             .filter(|&a| a > 0)
-            .ok_or_else(|| MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                message: "amount must be strictly positive".to_owned(),
-                errors: Vec::new(),
-                response_code: None,
-            })?;
-        let currency = self.currency.ok_or_else(|| MoyasarError::Api {
-            error_type: ApiErrorType::InvalidRequestError,
-            message: "currency is required".to_owned(),
-            errors: Vec::new(),
-            response_code: None,
-        })?;
-        let source = self.source.ok_or_else(|| MoyasarError::Api {
-            error_type: ApiErrorType::InvalidRequestError,
-            message: "source is required".to_owned(),
-            errors: Vec::new(),
-            response_code: None,
-        })?;
+            .ok_or_else(|| invalid_req_err("amount must be strictly positive"))?;
+        let currency = self
+            .currency
+            .ok_or_else(|| invalid_req_err("currency is required"))?;
+        let source = resolve_source(self.typed_source, self.source)?;
+        let splits = resolve_splits(self.typed_splits, self.splits, amount)?;
 
         Ok(CreatePaymentParams {
             amount,
@@ -172,15 +201,44 @@ impl CreatePaymentParamsBuilder {
             callback_url: self.callback_url,
             given_id: self.given_id,
             metadata: self.metadata,
-            splits: self.splits,
+            splits,
             sender: self.sender,
         })
     }
 }
 
+fn resolve_source(
+    typed_source: Option<PaymentSourceRequest>,
+    raw_source: Option<Value>,
+) -> Result<Value, MoyasarError> {
+    if let Some(typed) = typed_source {
+        typed.validate()?;
+        return serde_json::to_value(typed).map_err(|e| invalid_req_err(&e.to_string()));
+    }
+    raw_source.ok_or_else(|| invalid_req_err("source is required"))
+}
+
+fn resolve_splits(
+    typed_splits: Option<Vec<PaymentSplitRequest>>,
+    raw_splits: Option<Vec<Value>>,
+    amount: u64,
+) -> Result<Option<Vec<Value>>, MoyasarError> {
+    if let Some(typed) = typed_splits {
+        validate_splits(&typed, amount)?;
+        let values = typed
+            .into_iter()
+            .map(|s| serde_json::to_value(s).map_err(|e| invalid_req_err(&e.to_string())))
+            .collect::<Result<Vec<Value>, MoyasarError>>()?;
+        return Ok(Some(values));
+    }
+    Ok(raw_splits)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::payments::source_token::TokenSource;
+    use crate::resources::payments::splits::SplitRecipientType;
     use serde_json::json;
 
     #[test]
@@ -232,5 +290,46 @@ mod tests {
             .source(json!({ "type": "token", "token": "token_123" }))
             .build();
         assert!(zero_amount.is_err());
+    }
+
+    #[test]
+    fn typed_payment_source_splits_and_aft_sender_validate_in_build() {
+        let token = TokenSource::new("token_valid_123").expect("valid token");
+        let valid_splits = vec![
+            PaymentSplitRequest::new(8_500, SplitRecipientType::Beneficiary, Uuid::nil())
+                .with_fee_source(false),
+            PaymentSplitRequest::new(1_500, SplitRecipientType::Platform, Uuid::nil())
+                .with_fee_source(true),
+        ];
+        let sender = AftSender::new("Maher", "Mansour")
+            .with_nationality("SA")
+            .with_id("national_id", "1020304050");
+
+        let params = CreatePaymentParams::builder()
+            .amount(10_000)
+            .currency(Currency::SAR)
+            .payment_source(token.clone())
+            .payment_splits(valid_splits)
+            .aft_sender(sender)
+            .build()
+            .expect("valid typed params");
+
+        let serialized = serde_json::to_value(&params).expect("serializes");
+        assert_eq!(serialized["source"]["type"], "token");
+        assert_eq!(serialized["splits"].as_array().expect("splits").len(), 2);
+        assert_eq!(serialized["sender"]["first_name"], "Maher");
+
+        let over_splits = vec![
+            PaymentSplitRequest::new(7_000, SplitRecipientType::Beneficiary, Uuid::nil()),
+            PaymentSplitRequest::new(5_000, SplitRecipientType::Platform, Uuid::nil()),
+        ];
+        let over_err = CreatePaymentParams::builder()
+            .amount(10_000)
+            .currency(Currency::SAR)
+            .payment_source(token)
+            .payment_splits(over_splits)
+            .build()
+            .expect_err("must reject splits exceeding amount");
+        assert!(matches!(over_err, MoyasarError::SplitTotalExceedsAmount));
     }
 }

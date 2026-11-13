@@ -48,6 +48,16 @@ impl<'a, K: AuthKey> PaymentsService<'a, K> {
         params: &CreatePaymentParams,
         policy: &GivenIdPolicy,
     ) -> Result<Payment, MoyasarError> {
+        self.create_with_policy_at(&self.client().config().base_url, params, policy)
+            .await
+    }
+
+    async fn create_with_policy_at(
+        &self,
+        base_url: &str,
+        params: &CreatePaymentParams,
+        policy: &GivenIdPolicy,
+    ) -> Result<Payment, MoyasarError> {
         let mut payload = serde_json::to_value(params).map_err(|err| MoyasarError::Api {
             error_type: crate::kernel::error::ApiErrorType::InvalidRequestError,
             message: err.to_string(),
@@ -56,7 +66,7 @@ impl<'a, K: AuthKey> PaymentsService<'a, K> {
         })?;
         inject_given_id(&mut payload, policy)?;
 
-        let url = format!("{}/v1/payments", self.client().config().base_url);
+        let url = format!("{}/v1/payments", base_url.trim_end_matches('/'));
         let http = self.client().http();
         let retries = self.client().config().max_network_retries;
 
@@ -125,6 +135,14 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/v1/payments"))
+            .respond_with(ResponseTemplate::new(503).set_body_string("service unavailable"))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/v1/payments"))
             .respond_with(ResponseTemplate::new(201).set_body_json(response_body))
             .expect(1)
             .mount(&server)
@@ -138,23 +156,23 @@ mod tests {
             .build()
             .expect("valid params");
 
-        let mut payload = serde_json::to_value(&params).expect("serializes");
-        let gid = inject_given_id(&mut payload, &GivenIdPolicy::Random)
-            .expect("injects")
-            .expect("some");
-        assert_eq!(gid, explicit_gid);
-        assert_eq!(payload["given_id"], explicit_gid.to_string());
-
-        let http = reqwest::Client::new();
-        let url = format!("{}/v1/payments", server.uri());
-        let payment = execute_with_retry(2, || async {
-            let resp = http.post(&url).json(&payload).send().await?;
-            parse_payment_response(resp).await
-        })
-        .await
-        .expect("payment created");
+        let client =
+            MoyasarClient::new(SecretKey::new("sk_test_retry").expect("valid sk")).expect("client");
+        let payment = client
+            .payments()
+            .create_with_policy_at(&server.uri(), &params, &GivenIdPolicy::Random)
+            .await
+            .expect("payment created after 503 retry");
 
         assert_eq!(payment.id, "pay_01J9CREATE");
         assert_eq!(payment.amount, 15_000);
+
+        let recorded = server.received_requests().await.expect("requests recorded");
+        assert_eq!(recorded.len(), 2);
+        for req in recorded {
+            let body: serde_json::Value =
+                serde_json::from_slice(&req.body).expect("json request body");
+            assert_eq!(body["given_id"], explicit_gid.to_string());
+        }
     }
 }
