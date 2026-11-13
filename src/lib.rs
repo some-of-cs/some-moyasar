@@ -12,6 +12,7 @@ pub mod kernel;
 pub mod prelude;
 
 #[cfg(any(
+    feature = "payments",
     feature = "payment-intents",
     feature = "tokens",
     feature = "invoices",
