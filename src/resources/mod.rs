@@ -1,5 +1,8 @@
 //! Feature-gated Moyasar API resource services.
 
+#[cfg(feature = "payments")]
+pub mod payments;
+
 #[cfg(feature = "payment-intents")]
 pub mod payment_intents;
 
