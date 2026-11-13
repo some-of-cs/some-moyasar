@@ -68,6 +68,22 @@ impl InvoiceStatus {
             .find(|&&(status, _)| status == self)
             .map_or("unknown", |&(_, label)| label)
     }
+
+    /// Returns `true` when the invoice is in a terminal state (`Paid`, `Canceled`, or `Expired`).
+    #[must_use]
+    pub const fn is_terminal(self) -> bool {
+        matches!(self, Self::Paid | Self::Canceled | Self::Expired)
+    }
+
+    /// Returns `true` if transitioning from `self` to `next` is permitted by the invoice lifecycle
+    /// (`Created -> Paid | Canceled | Expired`; terminal states cannot transition to any other state).
+    #[must_use]
+    pub const fn can_transition_to(self, next: Self) -> bool {
+        matches!(
+            (self, next),
+            (Self::Created, Self::Paid | Self::Canceled | Self::Expired)
+        )
+    }
 }
 
 impl fmt::Display for InvoiceStatus {

@@ -5,6 +5,12 @@ pub mod delete;
 pub mod models;
 pub mod retrieve;
 
+pub use create::CreateTokenParams;
+pub use delete::{
+    can_transition_token_status, is_token_chargeable, is_token_deletable, require_active_token,
+};
+pub use models::{TOKEN_ID_PREFIX, Token, TokenId, TokenStatus};
+
 use crate::kernel::auth::AuthKey;
 use crate::kernel::client::MoyasarClient;
 
