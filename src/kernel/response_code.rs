@@ -167,10 +167,9 @@ mod tests {
 
     #[test]
     fn deserializes_field_errors_from_array_and_map_formats() {
-        let from_array: Wrapper = serde_json::from_str(
-            r#"{"errors":[{"field":"amount","message":"must be positive"}]}"#,
-        )
-        .expect("array format");
+        let from_array: Wrapper =
+            serde_json::from_str(r#"{"errors":[{"field":"amount","message":"must be positive"}]}"#)
+                .expect("array format");
         assert_eq!(
             from_array.errors,
             vec![FieldError {
