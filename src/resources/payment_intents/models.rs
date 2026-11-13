@@ -5,7 +5,7 @@ use core::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::types::Currency;
@@ -28,16 +28,19 @@ pub const INTENT_EXPIRY_SECS: i64 = 3600;
 /// assert!(IntentId::new("   ").is_err());
 /// assert!(IntentId::new("../admin").is_err());
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct IntentId(String);
 
 fn is_valid_id_char(c: char) -> bool {
-    c.is_ascii_graphic() && !matches!(c, '/' | '?' | '#' | '\\')
+    c.is_ascii_graphic() && !"/?#\\".contains(c)
 }
 
 fn is_valid_intent_id(raw: &str) -> bool {
-    !raw.is_empty() && raw.chars().all(is_valid_id_char)
+    !raw.is_empty()
+        && !raw.ends_with('_')
+        && !raw.contains("..")
+        && raw.chars().all(is_valid_id_char)
 }
 
 impl IntentId {
@@ -83,6 +86,13 @@ impl TryFrom<&str> for IntentId {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::new(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for IntentId {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Self::new(raw).map_err(de::Error::custom)
     }
 }
 
@@ -169,10 +179,15 @@ mod tests {
     #[test]
     fn rejects_empty_whitespace_and_path_traversal_intent_ids() {
         for invalid in [
+            "pay_",
+            "ca_",
             "",
             "   \t\n",
             "pi_123/cancel",
+            "ca_123/../admin",
+            "token_123/delete",
             "../admin",
+            "pi_123..admin",
             "pi_123?foo=bar",
             "pi_123#frag",
             "pi_123\\bar",
@@ -180,10 +195,16 @@ mod tests {
         ] {
             assert!(
                 IntentId::new(invalid).is_err(),
-                "expected Err for {invalid:?}"
+                "expected IntentId::new Err for {invalid:?}"
+            );
+            let json_str = serde_json::to_string(invalid).expect("json string");
+            assert!(
+                serde_json::from_str::<IntentId>(&json_str).is_err(),
+                "expected serde_json::from_str Err for {invalid:?}"
             );
         }
-        assert_eq!(IntentId::new("pi_123").expect("valid").as_str(), "pi_123");
+        let valid: IntentId = serde_json::from_str(r#""pi_123""#).expect("valid intent id");
+        assert_eq!(valid.as_str(), "pi_123");
     }
 
     #[test]

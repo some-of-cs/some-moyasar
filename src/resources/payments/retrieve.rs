@@ -1,8 +1,9 @@
 //! Payment retrieval endpoint (`GET /v1/payments/:id`) for `PaymentsService` (US-2.1.0 Unit 4).
 
 use core::fmt;
+use core::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
@@ -11,9 +12,17 @@ use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
 
 /// Validated Moyasar payment identifier (`pay_...`) with non-empty suffix enforcement.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct PaymentId(String);
+
+fn is_valid_id_char(c: char) -> bool {
+    !c.is_whitespace() && !"/?#\\".contains(c)
+}
+
+fn is_valid_payment_suffix(suffix: &str) -> bool {
+    !suffix.is_empty() && !suffix.contains("..") && suffix.chars().all(is_valid_id_char)
+}
 
 impl PaymentId {
     /// Parses and validates a Moyasar payment identifier.
@@ -21,14 +30,10 @@ impl PaymentId {
     /// Requires the `pay_` prefix followed by a non-empty, URL-safe suffix.
     pub fn new(raw: impl Into<String>) -> Result<Self, MoyasarError> {
         let value = raw.into();
-        let valid = value.strip_prefix("pay_").is_some_and(|suffix| {
-            !suffix.is_empty()
-                && !suffix.chars().any(char::is_whitespace)
-                && !suffix.contains('/')
-                && !suffix.contains('?')
-                && !suffix.contains('#')
-        });
-        if !valid {
+        if !value
+            .strip_prefix("pay_")
+            .is_some_and(is_valid_payment_suffix)
+        {
             return Err(MoyasarError::Api {
                 error_type: ApiErrorType::InvalidRequestError,
                 message: "invalid payment id: expected non-empty URL-safe suffix after 'pay_'"
@@ -58,6 +63,14 @@ impl AsRef<str> for PaymentId {
     }
 }
 
+impl FromStr for PaymentId {
+    type Err = MoyasarError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
+}
+
 impl TryFrom<&str> for PaymentId {
     type Error = MoyasarError;
 
@@ -71,6 +84,13 @@ impl TryFrom<String> for PaymentId {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::new(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for PaymentId {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Self::new(raw).map_err(de::Error::custom)
     }
 }
 
@@ -94,7 +114,7 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
     pub async fn retrieve(&self, id: &PaymentId) -> Result<Payment, MoyasarError> {
         let url = format!(
             "{}/v1/payments/{}",
-            self.client().config().base_url,
+            self.client().config().base_url.trim_end_matches('/'),
             id.as_str()
         );
         let http = self.client().http();
@@ -134,12 +154,36 @@ mod tests {
 
     #[test]
     fn payment_id_validates_pay_prefix_and_non_empty_suffix() {
-        assert!(PaymentId::new("pay_01J9XYZ").is_ok());
-        assert!(PaymentId::new("pay_").is_err());
-        assert!(PaymentId::new("").is_err());
-        assert!(PaymentId::new("inv_01J9XYZ").is_err());
-        assert!(PaymentId::new("pay_../other").is_err());
-        assert!(PaymentId::new("pay_abc?foo=bar").is_err());
+        let valid: PaymentId = "pay_01J9XYZ".parse().expect("FromStr succeeds");
+        assert_eq!(valid.as_str(), "pay_01J9XYZ");
+        let deser: PaymentId = serde_json::from_str(r#""pay_01J9XYZ""#).expect("valid serde");
+        assert_eq!(deser, valid);
+
+        for invalid in [
+            "pay_",
+            "ca_",
+            "",
+            "inv_01J9XYZ",
+            "pi_123/cancel",
+            "ca_123/../admin",
+            "token_123/delete",
+            "pay_../other",
+            "pay_123/cancel",
+            "pay_123\\admin",
+            "pay_abc?foo=bar",
+            "pay_abc#frag",
+            "pay_ 123",
+        ] {
+            assert!(
+                PaymentId::new(invalid).is_err(),
+                "expected PaymentId::new Err for {invalid:?}"
+            );
+            let json_str = serde_json::to_string(invalid).expect("json string");
+            assert!(
+                serde_json::from_str::<PaymentId>(&json_str).is_err(),
+                "expected serde_json::from_str Err for {invalid:?}"
+            );
+        }
     }
 
     #[tokio::test]

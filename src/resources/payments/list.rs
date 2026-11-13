@@ -140,10 +140,11 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
     /// ```
     pub async fn list(&self, params: &ListParams) -> Result<PaginatedList<Payment>, MoyasarError> {
         let qs = params.to_query_string();
+        let base_url = self.client().config().base_url.trim_end_matches('/');
         let url = if qs.is_empty() {
-            format!("{}/v1/payments", self.client().config().base_url)
+            format!("{base_url}/v1/payments")
         } else {
-            format!("{}/v1/payments?{qs}", self.client().config().base_url)
+            format!("{base_url}/v1/payments?{qs}")
         };
         let http = self.client().http();
         let retries = self.client().config().max_network_retries;

@@ -4,12 +4,15 @@ use core::fmt;
 
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Serialize, Serializer};
+use zeroize::Zeroize;
 
 use crate::kernel::error::MoyasarError;
 use crate::kernel::metadata::Metadata;
 use crate::resources::payment_intents::fulfill_guard::validate_client_secret;
 
 /// Payment instrument payload accepted by `POST /v1/payment_intents/:id/fulfill`.
+///
+/// Sensitive card numbers, CVCs, tokens, and mobile numbers are zeroized in memory on drop.
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum PaymentSourceRequest {
@@ -42,6 +45,32 @@ pub enum PaymentSourceRequest {
         /// Saudi mobile number (`05XXXXXXXX`).
         mobile: String,
     },
+}
+
+impl Drop for PaymentSourceRequest {
+    fn drop(&mut self) {
+        match self {
+            Self::CreditCard {
+                name,
+                number,
+                month,
+                year,
+                cvc,
+            } => {
+                name.zeroize();
+                number.zeroize();
+                month.zeroize();
+                year.zeroize();
+                cvc.zeroize();
+            }
+            Self::Token { token } | Self::ApplePay { token } => {
+                token.zeroize();
+            }
+            Self::StcPay { mobile } => {
+                mobile.zeroize();
+            }
+        }
+    }
 }
 
 impl fmt::Debug for PaymentSourceRequest {

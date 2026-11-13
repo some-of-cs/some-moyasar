@@ -102,7 +102,11 @@ impl<'a, K: SecretAuthKey> PaymentIntentsService<'a, K> {
         policy: &GivenIdPolicy,
     ) -> Result<PaymentIntent, MoyasarError> {
         let payload = prepare_create_payload(&params, policy)?;
-        let url = format!("{}{}", self.client.config().base_url, PAYMENT_INTENTS_PATH);
+        let url = format!(
+            "{}{}",
+            self.client.config().base_url.trim_end_matches('/'),
+            PAYMENT_INTENTS_PATH
+        );
         post_intent_json(
             self.client.http(),
             self.client.config().max_network_retries,
@@ -131,7 +135,7 @@ impl<'a, K: SecretAuthKey> PaymentIntentsService<'a, K> {
     pub async fn cancel(&self, id: &IntentId) -> Result<PaymentIntent, MoyasarError> {
         let url = format!(
             "{}{}/{}/cancel",
-            self.client.config().base_url,
+            self.client.config().base_url.trim_end_matches('/'),
             PAYMENT_INTENTS_PATH,
             id.as_str()
         );

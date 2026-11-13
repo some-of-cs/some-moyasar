@@ -1,5 +1,7 @@
 //! STC Pay payment source and Saudi mobile normalization (US-2.4.0 Unit 1).
 
+use core::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use crate::kernel::error::MoyasarError;
@@ -14,7 +16,7 @@ const SAUDI_SUBSCRIBER_LEN: usize = 8;
 ///
 /// Normalizes Saudi mobile numbers from `05xxxxxxxx`, `+9665xxxxxxxx`, or
 /// `009665xxxxxxxx` into the canonical `05xxxxxxxx` format expected by Moyasar.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StcPaySource {
     /// Customer Saudi mobile number normalized to `05xxxxxxxx`.
     pub mobile: String,
@@ -26,8 +28,18 @@ pub struct StcPaySource {
     pub branch: Option<String>,
 }
 
+impl fmt::Debug for StcPaySource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StcPaySource")
+            .field("mobile", &"[REDACTED]")
+            .field("cashier", &self.cashier)
+            .field("branch", &self.branch)
+            .finish()
+    }
+}
+
 /// STC Pay payment source returned in an initiated or completed payment response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StcPaySourceResponse {
     /// Source type discriminator (`"stcpay"`).
     #[serde(rename = "type", default)]
@@ -50,6 +62,20 @@ pub struct StcPaySourceResponse {
     /// Human-readable gateway status message.
     #[serde(default)]
     pub message: Option<String>,
+}
+
+impl fmt::Debug for StcPaySourceResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StcPaySourceResponse")
+            .field("source_type", &self.source_type)
+            .field("mobile", &"[REDACTED]")
+            .field("reference_number", &self.reference_number)
+            .field("branch", &self.branch)
+            .field("cashier", &self.cashier)
+            .field("transaction_url", &self.transaction_url)
+            .field("message", &self.message)
+            .finish()
+    }
 }
 
 /// Validates and normalizes a Saudi mobile number to canonical `05xxxxxxxx` form.
@@ -167,5 +193,28 @@ mod tests {
         let minimal_json = serde_json::to_value(&minimal).expect("serializes");
         assert!(minimal_json.get("cashier").is_none());
         assert!(minimal_json.get("branch").is_none());
+    }
+
+    #[test]
+    fn stcpay_source_and_response_debug_redact_mobile() {
+        let src = StcPaySource::new("0512345678")
+            .expect("valid")
+            .with_cashier("POS-01");
+        let src_dbg = format!("{src:?}");
+        assert!(src_dbg.contains(r#"mobile: "[REDACTED]""#));
+        assert!(!src_dbg.contains("0512345678"));
+
+        let resp = StcPaySourceResponse {
+            source_type: Some("stcpay".to_owned()),
+            mobile: Some("0598765432".to_owned()),
+            reference_number: Some("REF-123".to_owned()),
+            branch: None,
+            cashier: None,
+            transaction_url: None,
+            message: None,
+        };
+        let resp_dbg = format!("{resp:?}");
+        assert!(resp_dbg.contains(r#"mobile: "[REDACTED]""#));
+        assert!(!resp_dbg.contains("0598765432"));
     }
 }

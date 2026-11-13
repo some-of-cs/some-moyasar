@@ -6,7 +6,7 @@ pub mod models;
 pub mod retrieve_list;
 pub mod update;
 
-pub use cancel::{MAX_SADAD_EXPIRY_DAYS, sync_sadad_expiry};
+pub use cancel::{MAX_SADAD_EXPIRY_DAYS, sync_sadad_expiry, validate_invoice_cancelable};
 pub use create::CreateInvoiceParams;
 pub use models::{Invoice, InvoiceStatus};
 pub use retrieve_list::ListInvoicesParams;
