@@ -3,6 +3,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::kernel::error::MoyasarError;
+use crate::resources::payments::sadad_expiry::validate_sadad_expiry;
+
 /// Primary production SADAD biller code.
 pub const SADAD_BILLER_PRODUCTION_PRIMARY: &str = "901";
 
@@ -16,6 +19,16 @@ pub const SADAD_BILLER_SANDBOX: &str = "007";
 ///
 /// Generates a payable `sadad_number` settled asynchronously by the customer
 /// through their banking app or ATM.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::source_sadad::{SADAD_BILLER_SANDBOX, SadadBillSource};
+///
+/// let sadad = SadadBillSource::new().with_biller_code(SADAD_BILLER_SANDBOX);
+/// sadad.validate_utc().expect("valid default expiry");
+/// assert_eq!(sadad.biller_code.as_deref(), Some("007"));
+/// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SadadBillSource {
     /// Optional bill expiration timestamp (defaults to 29 days; capped at 29 days).
@@ -71,6 +84,24 @@ impl SadadBillSource {
         self
     }
 
+    /// Validates that `expired_at` does not exceed the 29-day SADAD provider limit relative to `now`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoyasarError::SadadExpiryTooFar`] if `expired_at` is more than 29 days after `now`.
+    pub fn validate(&self, now: DateTime<Utc>) -> Result<(), MoyasarError> {
+        validate_sadad_expiry(self.expired_at, now)
+    }
+
+    /// Validates that `expired_at` does not exceed the 29-day SADAD provider limit relative to [`Utc::now()`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoyasarError::SadadExpiryTooFar`] if `expired_at` is more than 29 days after the current UTC time.
+    pub fn validate_utc(&self) -> Result<(), MoyasarError> {
+        self.validate(Utc::now())
+    }
+
     /// Returns `true` if `biller_code` is one of the known Moyasar SADAD codes (`901`, `902`, `007`).
     #[must_use]
     pub fn is_known_biller_code(biller_code: &str) -> bool {
@@ -86,6 +117,7 @@ impl SadadBillSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
 
     #[test]
     fn tc_2_4_0_04_and_06_serializes_and_deserializes_sadad_biller_codes() {
@@ -119,5 +151,19 @@ mod tests {
         assert!(SadadBillSource::is_known_biller_code("901"));
         assert!(SadadBillSource::is_known_biller_code("902"));
         assert!(!SadadBillSource::is_known_biller_code("999"));
+    }
+
+    #[test]
+    fn validate_and_validate_utc_enforce_29_day_limit() {
+        let now = Utc::now();
+        let valid = SadadBillSource::new().with_expired_at(now + Duration::days(20));
+        valid.validate(now).expect("20 days is valid");
+        valid.validate_utc().expect("20 days from now is valid");
+
+        let too_far = SadadBillSource::new().with_expired_at(now + Duration::days(35));
+        assert!(matches!(
+            too_far.validate(now),
+            Err(MoyasarError::SadadExpiryTooFar)
+        ));
     }
 }

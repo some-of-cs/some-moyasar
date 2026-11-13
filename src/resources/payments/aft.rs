@@ -1,9 +1,14 @@
 //! Account Funding Transaction (`AftSender` / `AfTSender`) types (US-2.5.0 Unit 3).
 
+use core::fmt;
+
 use serde::{Deserialize, Serialize};
 
 /// Sender identification payload for Account Funding Transactions (AFT).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// The `id_number` field is redacted as `"[REDACTED]"` in [`fmt::Debug`] output so
+/// government identification numbers never leak into application logs.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AftSender {
     /// Sender's legal first name.
     pub first_name: String,
@@ -15,9 +20,21 @@ pub struct AftSender {
     /// Optional government identification document type (e.g., `"national_id"`, `"passport"`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id_type: Option<String>,
-    /// Optional government identification number.
+    /// Optional government identification number (redacted in `Debug` output).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id_number: Option<String>,
+}
+
+impl fmt::Debug for AftSender {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AftSender")
+            .field("first_name", &self.first_name)
+            .field("last_name", &self.last_name)
+            .field("nationality", &self.nationality)
+            .field("id_type", &self.id_type)
+            .field("id_number", &self.id_number.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
 }
 
 /// Compatibility type alias for [`AftSender`].
@@ -72,5 +89,15 @@ mod tests {
         assert!(min_val.get("nationality").is_none());
         assert!(min_val.get("id_type").is_none());
         assert!(min_val.get("id_number").is_none());
+    }
+
+    #[test]
+    fn aft_sender_debug_redacts_id_number() {
+        let sender = AftSender::new("Maher", "Mansour")
+            .with_nationality("SA")
+            .with_id("national_id", "1020304050");
+        let dbg = format!("{sender:?}");
+        assert!(dbg.contains("[REDACTED]"));
+        assert!(!dbg.contains("1020304050"));
     }
 }

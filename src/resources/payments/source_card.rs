@@ -16,10 +16,34 @@ fn serialize_secret<S: Serializer>(
     serializer.serialize_str(secret.expose_secret())
 }
 
+fn is_valid_card_auth_id(auth_id: &str) -> bool {
+    match auth_id.strip_prefix("ca_") {
+        Some(suffix) => {
+            !suffix.is_empty()
+                && !suffix.contains("..")
+                && !suffix
+                    .chars()
+                    .any(|ch| ch.is_whitespace() || matches!(ch, '/' | '?' | '#'))
+        }
+        None => false,
+    }
+}
+
 /// Credit or debit card payment source (`type: "creditcard"`).
 ///
 /// Sensitive fields (`number` and `cvc`) are stored in [`SecretString`] (zeroized on drop)
 /// and are always masked as `"[REDACTED]"` in [`fmt::Debug`] output.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::source_card::CreditCardSource;
+///
+/// let card = CreditCardSource::new("Maher Mansour", "4111111111111111", 12, 2030, "123")
+///     .expect("valid card");
+/// card.validate().expect("passes Luhn, expiry, and CVC checks");
+/// assert!(format!("{card:?}").contains("[REDACTED]"));
+/// ```
 #[derive(Clone, Serialize)]
 pub struct CreditCardSource {
     /// Cardholder name as printed on the card.
@@ -86,7 +110,7 @@ impl CreditCardSource {
         })
     }
 
-    /// Validates card number (Luhn), expiry date, CVC length, and optional `card_auth_id` prefix.
+    /// Validates card number (Luhn), expiry date, CVC length, and optional `card_auth_id` format.
     pub fn validate(&self) -> Result<(), MoyasarError> {
         validate_card_fields(
             self.number.expose_secret(),
@@ -95,7 +119,7 @@ impl CreditCardSource {
             self.cvc.expose_secret(),
         )?;
         if let Some(auth_id) = &self.card_auth_id
-            && !auth_id.starts_with("ca_")
+            && !is_valid_card_auth_id(auth_id)
         {
             return Err(MoyasarError::InvalidCardAuthId);
         }
@@ -145,5 +169,29 @@ mod tests {
         assert_eq!(json["3ds"], true);
         assert_eq!(json["save_card"], true);
         assert!(json.get("manual").is_none());
+    }
+
+    #[test]
+    fn validates_card_auth_id_suffix_and_rejects_unsafe_characters() {
+        let mut card = CreditCardSource::new("Maher Mansour", "4111111111111111", 12, 2030, "123")
+            .expect("valid card");
+        card.card_auth_id = Some("ca_01J9VALID".to_owned());
+        card.validate().expect("valid ca_ id");
+
+        for bad in [
+            "ca_",
+            "auth_123",
+            "ca_123/456",
+            "ca_123?foo=bar",
+            "ca_123#frag",
+            "ca_..",
+            "ca_123 456",
+        ] {
+            card.card_auth_id = Some(bad.to_owned());
+            assert!(
+                matches!(card.validate(), Err(MoyasarError::InvalidCardAuthId)),
+                "expected InvalidCardAuthId for {bad}"
+            );
+        }
     }
 }

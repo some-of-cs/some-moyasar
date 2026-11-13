@@ -18,6 +18,16 @@ fn serialize_secret<S: Serializer>(
 ///
 /// The encrypted wallet `token` / cryptogram is stored in [`SecretString`] and
 /// redacted as `"[REDACTED]"` in [`fmt::Debug`] output.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::source_digital_wallet::ApplePaySource;
+///
+/// let apple = ApplePaySource::new("apple_pay_encrypted_token_payload");
+/// apple.validate().expect("non-empty token");
+/// assert!(format!("{apple:?}").contains("[REDACTED]"));
+/// ```
 #[derive(Clone, Serialize)]
 pub struct ApplePaySource {
     /// Encrypted Apple Pay payment token payload.
@@ -69,6 +79,16 @@ impl fmt::Debug for ApplePaySource {
 ///
 /// The encrypted wallet `token` / cryptogram is stored in [`SecretString`] and
 /// redacted as `"[REDACTED]"` in [`fmt::Debug`] output.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::source_digital_wallet::SamsungPaySource;
+///
+/// let samsung = SamsungPaySource::new("samsung_pay_encrypted_token_payload");
+/// samsung.validate().expect("non-empty token");
+/// assert!(format!("{samsung:?}").contains("[REDACTED]"));
+/// ```
 #[derive(Clone, Serialize)]
 pub struct SamsungPaySource {
     /// Encrypted Samsung Pay payment token payload.

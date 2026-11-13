@@ -4,22 +4,22 @@ use chrono::{Datelike, Utc};
 
 use crate::kernel::error::MoyasarError;
 
+fn luhn_step(digit: u32, idx: usize) -> u32 {
+    let doubled = if idx % 2 == 1 { digit * 2 } else { digit };
+    if doubled > 9 { doubled - 9 } else { doubled }
+}
+
 /// Validates a card PAN using the Luhn checksum without heap allocation.
 ///
 /// Accepts ASCII digits (ignoring spaces and hyphens) with length between 12 and 19.
 pub fn luhn_valid(number: &str) -> bool {
     let mut count = 0usize;
     let mut sum = 0u32;
-    for byte in number.bytes().rev() {
-        if byte == b' ' || byte == b'-' {
-            continue;
-        }
+    for byte in number.bytes().rev().filter(|&b| !matches!(b, b' ' | b'-')) {
         if !byte.is_ascii_digit() {
             return false;
         }
-        let digit = u32::from(byte - b'0');
-        let doubled = if count % 2 == 1 { digit * 2 } else { digit };
-        sum += if doubled > 9 { doubled - 9 } else { doubled };
+        sum += luhn_step(u32::from(byte - b'0'), count);
         count += 1;
     }
     (12..=19).contains(&count) && sum.is_multiple_of(10)

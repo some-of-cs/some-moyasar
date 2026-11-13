@@ -2,9 +2,9 @@ name: Rust CI
 
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main, "feat/**", "patch/**"]
   pull_request:
-    branches: [main, "feat/**"]
+    branches: [main, "feat/**", "patch/**"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -39,6 +39,9 @@ jobs:
 
       - name: Check Module 4 individual & umbrella features
         run: |
+          cargo check --no-default-features --features "core,tokens"
+          cargo check --no-default-features --features "core,invoices"
+          cargo check --no-default-features --features "core,card-auths"
           cargo check --no-default-features --features tokens
           cargo check --no-default-features --features invoices
           cargo check --no-default-features --features card-auths
@@ -48,7 +51,7 @@ jobs:
         run: cargo check --lib
 
       - name: Run Clippy with -D warnings
-        run: cargo clippy --lib -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run library unit & integration tests
         run: cargo test --lib
