@@ -45,24 +45,29 @@ pub enum ResponseCode {
     Unknown(String),
 }
 
+const KNOWN_CODES: &[(&str, ResponseCode)] = &[
+    ("00", ResponseCode::IssuerApproved),
+    ("01", ResponseCode::ReferToCardIssuer),
+    ("03", ResponseCode::InvalidMerchant),
+    ("05", ResponseCode::DoNotHonor),
+    ("51", ResponseCode::InsufficientFunds),
+    ("54", ResponseCode::ExpiredCard),
+    ("55", ResponseCode::IncorrectPin),
+    ("61", ResponseCode::ExceedsWithdrawalLimit),
+    ("62", ResponseCode::RestrictedCard),
+    ("63", ResponseCode::SecurityViolation),
+    ("65", ResponseCode::ExceedsFrequencyLimit),
+    ("91", ResponseCode::IssuerOrSwitchInoperative),
+    ("96", ResponseCode::SystemMalfunction),
+];
+
 impl From<&str> for ResponseCode {
     fn from(code: &str) -> Self {
-        match code {
-            "00" => Self::IssuerApproved,
-            "01" => Self::ReferToCardIssuer,
-            "03" => Self::InvalidMerchant,
-            "05" => Self::DoNotHonor,
-            "51" => Self::InsufficientFunds,
-            "54" => Self::ExpiredCard,
-            "55" => Self::IncorrectPin,
-            "61" => Self::ExceedsWithdrawalLimit,
-            "62" => Self::RestrictedCard,
-            "63" => Self::SecurityViolation,
-            "65" => Self::ExceedsFrequencyLimit,
-            "91" => Self::IssuerOrSwitchInoperative,
-            "96" => Self::SystemMalfunction,
-            other => Self::Unknown(other.to_owned()),
-        }
+        KNOWN_CODES
+            .iter()
+            .find(|(k, _)| *k == code)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_else(|| Self::Unknown(code.to_owned()))
     }
 }
 
@@ -75,22 +80,14 @@ impl<'de> Deserialize<'de> for ResponseCode {
 
 impl fmt::Display for ResponseCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let code = match self {
-            Self::IssuerApproved => "00",
-            Self::ReferToCardIssuer => "01",
-            Self::InvalidMerchant => "03",
-            Self::DoNotHonor => "05",
-            Self::InsufficientFunds => "51",
-            Self::ExpiredCard => "54",
-            Self::IncorrectPin => "55",
-            Self::ExceedsWithdrawalLimit => "61",
-            Self::RestrictedCard => "62",
-            Self::SecurityViolation => "63",
-            Self::ExceedsFrequencyLimit => "65",
-            Self::IssuerOrSwitchInoperative => "91",
-            Self::SystemMalfunction => "96",
-            Self::Unknown(other) => other.as_str(),
-        };
+        if let Self::Unknown(other) = self {
+            return f.write_str(other);
+        }
+        let code = KNOWN_CODES
+            .iter()
+            .find(|(_, v)| v == self)
+            .map(|(k, _)| *k)
+            .unwrap_or("");
         f.write_str(code)
     }
 }
@@ -103,7 +100,10 @@ mod tests {
     fn parses_known_and_unknown_iso8583_codes_without_panicking() {
         assert_eq!(ResponseCode::from("00"), ResponseCode::IssuerApproved);
         assert_eq!(ResponseCode::from("51"), ResponseCode::InsufficientFunds);
+        assert_eq!(ResponseCode::from("96"), ResponseCode::SystemMalfunction);
         assert_eq!(ResponseCode::from("ZZ"), ResponseCode::Unknown("ZZ".into()));
         assert_eq!(ResponseCode::IssuerApproved.to_string(), "00");
+        assert_eq!(ResponseCode::SystemMalfunction.to_string(), "96");
+        assert_eq!(ResponseCode::Unknown("ZZ".into()).to_string(), "ZZ");
     }
 }
