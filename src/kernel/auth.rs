@@ -26,6 +26,19 @@ pub trait AuthKey: Send + Sync + 'static {
 }
 
 /// Marker trait for backend-only secret keys (`sk_live_...` / `sk_test_...`).
+///
+/// # Examples
+///
+/// A [`PublishableKey`] does not implement `SecretAuthKey` (`TC-1.1.0-03`):
+///
+/// ```compile_fail
+/// use some_moyasar::prelude::{PublishableKey, SecretAuthKey};
+///
+/// fn require_secret_key<K: SecretAuthKey>(_key: &K) {}
+///
+/// let pk = PublishableKey::new("pk_test_abc123").unwrap();
+/// require_secret_key(&pk);
+/// ```
 pub trait SecretAuthKey: AuthKey {}
 
 /// Marker trait for client-side publishable keys (`pk_live_...` / `pk_test_...`).
@@ -48,8 +61,19 @@ pub struct PublishableKey {
 impl SecretKey {
     /// Parses and validates a Moyasar secret key (`sk_live_...` or `sk_test_...`).
     ///
+    /// Bare prefixes with an empty suffix (e.g., `"sk_live_"`, `"sk_test_"`) are rejected.
     /// With the `env-keys` feature enabled, values starting with `$` (`$VAR` or `${VAR}`)
     /// are resolved from the process environment or `.env*` files before validation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use some_moyasar::prelude::{AuthKey, AuthMode, SecretKey};
+    ///
+    /// let key = SecretKey::new("sk_test_abc123").unwrap();
+    /// assert_eq!(key.mode(), AuthMode::Test);
+    /// assert!(SecretKey::new("sk_test_").is_err());
+    /// ```
     pub fn new(raw: &str) -> Result<Self, MoyasarError> {
         let (inner, mode) = resolve_and_build(raw, parse_secret_mode)?;
         Ok(Self { inner, mode })
@@ -59,18 +83,44 @@ impl SecretKey {
 impl PublishableKey {
     /// Parses and validates a Moyasar publishable key (`pk_live_...` or `pk_test_...`).
     ///
+    /// Bare prefixes with an empty suffix (e.g., `"pk_live_"`, `"pk_test_"`) are rejected.
     /// With the `env-keys` feature enabled, values starting with `$` (`$VAR` or `${VAR}`)
     /// are resolved from the process environment or `.env*` files before validation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use some_moyasar::prelude::{AuthKey, AuthMode, PublishableKey};
+    ///
+    /// let key = PublishableKey::new("pk_live_xyz789").unwrap();
+    /// assert_eq!(key.mode(), AuthMode::Live);
+    /// assert!(PublishableKey::new("pk_live_").is_err());
+    /// ```
+    ///
+    /// `PublishableKey` does not implement [`SecretAuthKey`] (`TC-1.1.0-03`):
+    ///
+    /// ```compile_fail
+    /// use some_moyasar::prelude::{PublishableKey, SecretAuthKey};
+    ///
+    /// fn assert_secret<K: SecretAuthKey>(_key: &K) {}
+    ///
+    /// let pk = PublishableKey::new("pk_test_abc123").unwrap();
+    /// assert_secret(&pk);
+    /// ```
     pub fn new(raw: &str) -> Result<Self, MoyasarError> {
         let (inner, mode) = resolve_and_build(raw, parse_publishable_mode)?;
         Ok(Self { inner, mode })
     }
 }
 
+fn has_non_empty_suffix(key: &str, prefix: &str) -> bool {
+    key.strip_prefix(prefix).is_some_and(|s| !s.is_empty())
+}
+
 fn parse_secret_mode(key: &str) -> Result<AuthMode, MoyasarError> {
-    if key.starts_with("sk_live_") {
+    if has_non_empty_suffix(key, "sk_live_") {
         Ok(AuthMode::Live)
-    } else if key.starts_with("sk_test_") {
+    } else if has_non_empty_suffix(key, "sk_test_") {
         Ok(AuthMode::Test)
     } else {
         Err(MoyasarError::InvalidKey)
@@ -78,9 +128,9 @@ fn parse_secret_mode(key: &str) -> Result<AuthMode, MoyasarError> {
 }
 
 fn parse_publishable_mode(key: &str) -> Result<AuthMode, MoyasarError> {
-    if key.starts_with("pk_live_") {
+    if has_non_empty_suffix(key, "pk_live_") {
         Ok(AuthMode::Live)
-    } else if key.starts_with("pk_test_") {
+    } else if has_non_empty_suffix(key, "pk_test_") {
         Ok(AuthMode::Test)
     } else {
         Err(MoyasarError::InvalidKey)
@@ -166,18 +216,22 @@ mod tests {
         let pk_test = PublishableKey::new("pk_test_xyz").expect("valid test publishable");
         assert_eq!(pk_test.mode(), AuthMode::Test);
 
-        assert!(matches!(
-            SecretKey::new("pk_test_wrong"),
-            Err(MoyasarError::InvalidKey)
-        ));
-        assert!(matches!(
-            SecretKey::new("abc123"),
-            Err(MoyasarError::InvalidKey)
-        ));
-        assert!(matches!(
-            PublishableKey::new("sk_live_wrong"),
-            Err(MoyasarError::InvalidKey)
-        ));
+        for invalid_sk in ["pk_test_wrong", "abc123", "sk_live_", "sk_test_", ""] {
+            assert!(
+                matches!(SecretKey::new(invalid_sk), Err(MoyasarError::InvalidKey)),
+                "expected InvalidKey for {invalid_sk:?}"
+            );
+        }
+
+        for invalid_pk in ["sk_live_wrong", "abc123", "pk_live_", "pk_test_", ""] {
+            assert!(
+                matches!(
+                    PublishableKey::new(invalid_pk),
+                    Err(MoyasarError::InvalidKey)
+                ),
+                "expected InvalidKey for {invalid_pk:?}"
+            );
+        }
     }
 
     #[test]
@@ -251,10 +305,15 @@ mod tests {
         #[test]
         fn rejects_invalid_or_missing_env_keys() {
             let _guard = CWD_LOCK.lock().expect("lock cwd");
-            let _dir = ScopedDir::enter("invalid", "BAD_SK=pk_test_wrong_prefix\n");
+            let _dir =
+                ScopedDir::enter("invalid", "BAD_SK=pk_test_wrong_prefix\nBARE_SK=sk_test_\n");
 
             assert!(matches!(
                 SecretKey::new("$BAD_SK"),
+                Err(MoyasarError::InvalidKey)
+            ));
+            assert!(matches!(
+                SecretKey::new("$BARE_SK"),
                 Err(MoyasarError::InvalidKey)
             ));
             assert!(matches!(

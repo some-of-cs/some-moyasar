@@ -67,6 +67,26 @@ mod tests {
     use futures::StreamExt;
 
     #[tokio::test]
+    async fn streams_single_page_cleanly() {
+        let paginator = Paginator::new(1, |page| async move {
+            assert_eq!(page, 1);
+            Ok::<_, ()>(PaginatedList {
+                items: vec!["pay_1", "pay_2"],
+                meta: Meta {
+                    current_page: 1,
+                    next_page: None,
+                    prev_page: None,
+                    total_pages: 1,
+                    total_count: 2,
+                },
+            })
+        });
+
+        let collected: Vec<Result<&str, ()>> = paginator.into_stream().collect().await;
+        assert_eq!(collected, vec![Ok("pay_1"), Ok("pay_2")]);
+    }
+
+    #[tokio::test]
     async fn streams_multiple_pages_in_order() {
         let paginator = Paginator::new(1, |page| async move {
             let items = if page == 1 { vec![1, 2] } else { vec![3] };

@@ -24,9 +24,7 @@ impl GivenIdPolicy {
     pub fn derive(&self) -> Uuid {
         match self {
             Self::Random => Uuid::new_v4(),
-            Self::Deterministic { namespace, scope } => {
-                Uuid::new_v5(namespace, scope.as_bytes())
-            }
+            Self::Deterministic { namespace, scope } => Uuid::new_v5(namespace, scope.as_bytes()),
         }
     }
 }
@@ -75,6 +73,27 @@ mod tests {
             .expect("valid")
             .expect("preserved");
         assert_eq!(id.to_string(), explicit);
+    }
+
+    #[test]
+    fn tc_1_2_0_02_explicit_given_id_roundtrips_into_response_id() {
+        let explicit = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+        let mut request_body = json!({
+            "amount": 1000,
+            "currency": "SAR",
+            "given_id": explicit,
+        });
+        let injected = inject_given_id(&mut request_body, &GivenIdPolicy::Random)
+            .expect("valid explicit given_id")
+            .expect("given_id present");
+        assert_eq!(injected.to_string(), explicit);
+
+        let simulated_response = json!({
+            "id": request_body["given_id"].as_str().expect("string given_id"),
+            "status": "paid",
+            "amount": 1000,
+        });
+        assert_eq!(simulated_response["id"], explicit);
     }
 
     #[test]

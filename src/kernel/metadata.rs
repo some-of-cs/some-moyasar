@@ -93,7 +93,8 @@ mod tests {
     fn enforces_key_count_and_length_limits() {
         let mut meta = Metadata::new();
         for i in 0..30 {
-            meta.insert(&format!("k_{i}"), "val").expect("within 30 keys");
+            meta.insert(&format!("k_{i}"), "val")
+                .expect("within 30 keys");
         }
         assert!(matches!(
             meta.insert("k_30", "val"),

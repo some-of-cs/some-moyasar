@@ -148,4 +148,29 @@ mod tests {
         assert_eq!(Arc::strong_count(&client.0), 2);
         assert!(!format!("{cloned:?}").contains("sk_test_secret_value"));
     }
+
+    #[tokio::test]
+    async fn tc_1_1_0_01_spawns_10k_concurrent_clones_with_arc_integrity() {
+        let key = SecretKey::new("sk_test_concurrent_10k").expect("valid key");
+        let client = MoyasarClient::new(key).expect("client builds");
+        assert_eq!(Arc::strong_count(&client.0), 1);
+
+        let mut handles = Vec::with_capacity(10_000);
+        for _ in 0..10_000 {
+            let cloned = client.clone();
+            handles.push(tokio::spawn(async move {
+                assert_eq!(cloned.config().base_url, DEFAULT_BASE_URL);
+                cloned
+            }));
+        }
+
+        let mut held_clones = Vec::with_capacity(10_000);
+        for handle in handles {
+            held_clones.push(handle.await.expect("task completes cleanly"));
+        }
+
+        assert_eq!(Arc::strong_count(&client.0), 10_001);
+        drop(held_clones);
+        assert_eq!(Arc::strong_count(&client.0), 1);
+    }
 }
