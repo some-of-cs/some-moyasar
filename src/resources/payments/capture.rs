@@ -11,6 +11,7 @@ use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::transport::execute_with_retry;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
+use crate::resources::payments::update::validate_payment_id;
 
 /// Maximum Mada authorization hold window in days before issuers silently release funds.
 pub const MADA_CAPTURE_WINDOW_DAYS: i64 = 14;
@@ -57,14 +58,7 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
         id: &str,
         amount: Option<u64>,
     ) -> Result<Payment, MoyasarError> {
-        if id.trim().is_empty() {
-            return Err(MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                message: "payment id must not be empty".to_owned(),
-                errors: Vec::new(),
-                response_code: None,
-            });
-        }
+        validate_payment_id(id)?;
         if let Some(0) = amount {
             return Err(MoyasarError::Api {
                 error_type: ApiErrorType::InvalidRequestError,
@@ -85,20 +79,30 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
                 None => http.post(&url),
             };
             let response = req.send().await?;
-            let status = response.status();
-            if status.is_success() {
-                return Ok(response.json::<Payment>().await?);
-            }
-            let body = response.text().await.unwrap_or_default();
-            Err(MoyasarError::from_api_response(status.as_u16(), &body))
+            parse_payment_response(response).await
         })
         .await
     }
 }
 
+async fn parse_payment_response(response: reqwest::Response) -> Result<Payment, MoyasarError> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response.json::<Payment>().await?);
+    }
+    let body = response.text().await.unwrap_or_default();
+    Err(MoyasarError::from_api_response(status.as_u16(), &body))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kernel::auth::SecretKey;
+    use crate::kernel::client::MoyasarClient;
+    use crate::resources::payments::models::PaymentStatus;
+    use serde_json::json;
+    use wiremock::matchers::{body_json, body_string, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn tc_2_2_0_03_partial_capture_payload_serializes_amount() {
@@ -114,5 +118,118 @@ mod tests {
         let expired = now - Duration::days(15);
         assert!(!is_mada_hold_likely_expired(recent, now));
         assert!(is_mada_hold_likely_expired(expired, now));
+    }
+
+    #[tokio::test]
+    async fn capture_rejects_invalid_id_and_zero_amount() {
+        let key = SecretKey::new("sk_test_capture_validation").expect("valid key");
+        let client = MoyasarClient::new(key).expect("client builds");
+
+        let bad_id = client
+            .payments()
+            .capture("pay_123?x=1", None)
+            .await
+            .expect_err("must reject unsafe id");
+        assert!(matches!(
+            bad_id,
+            MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                ..
+            }
+        ));
+
+        let zero_amt = client
+            .payments()
+            .capture("pay_123", Some(0))
+            .await
+            .expect_err("must reject zero capture");
+        assert!(matches!(
+            zero_amt,
+            MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn tc_2_2_0_03_wiremock_full_capture_omits_body_and_partial_sends_amount() {
+        let server = MockServer::start().await;
+
+        let full_response = json!({
+            "id": "pay_01J9CAP_FULL",
+            "status": "captured",
+            "amount": 10000,
+            "amount_format": "100.00 SAR",
+            "fee": 250,
+            "fee_format": "2.50 SAR",
+            "refunded": 0,
+            "refunded_format": "0.00 SAR",
+            "captured": 10000,
+            "captured_format": "100.00 SAR",
+            "currency": "SAR",
+            "source": { "type": "creditcard" },
+            "captured_at": "2026-11-13T10:05:00Z",
+            "created_at": "2026-11-13T10:00:00Z",
+            "updated_at": "2026-11-13T10:05:00Z"
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_01J9CAP_FULL/capture"))
+            .and(body_string(""))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_response))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let full_url = format!("{}/v1/payments/pay_01J9CAP_FULL/capture", server.uri());
+        let full_payment = execute_with_retry(1, || async {
+            let resp = http.post(&full_url).send().await?;
+            parse_payment_response(resp).await
+        })
+        .await
+        .expect("full capture succeeds");
+
+        assert_eq!(full_payment.status, PaymentStatus::Captured);
+        assert_eq!(full_payment.captured, 10000);
+
+        let partial_response = json!({
+            "id": "pay_01J9CAP_PART",
+            "status": "captured",
+            "amount": 10000,
+            "amount_format": "100.00 SAR",
+            "fee": 150,
+            "fee_format": "1.50 SAR",
+            "refunded": 0,
+            "refunded_format": "0.00 SAR",
+            "captured": 4000,
+            "captured_format": "40.00 SAR",
+            "currency": "SAR",
+            "source": { "type": "creditcard" },
+            "captured_at": "2026-11-13T10:06:00Z",
+            "created_at": "2026-11-13T10:00:00Z",
+            "updated_at": "2026-11-13T10:06:00Z"
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_01J9CAP_PART/capture"))
+            .and(body_json(json!({ "amount": 4000 })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(partial_response))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let partial_url = format!("{}/v1/payments/pay_01J9CAP_PART/capture", server.uri());
+        let payload = CapturePaymentRequest { amount: 4000 };
+        let partial_payment = execute_with_retry(1, || async {
+            let resp = http.post(&partial_url).json(&payload).send().await?;
+            parse_payment_response(resp).await
+        })
+        .await
+        .expect("partial capture succeeds");
+
+        assert_eq!(partial_payment.status, PaymentStatus::Captured);
+        assert_eq!(partial_payment.captured, 4000);
     }
 }
