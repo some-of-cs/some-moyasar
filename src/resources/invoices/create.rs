@@ -8,7 +8,6 @@ use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::metadata::Metadata;
-use crate::kernel::transport::execute_with_retry;
 use crate::kernel::types::{Amount, Currency};
 use crate::resources::invoices::InvoicesService;
 use crate::resources::invoices::models::Invoice;
@@ -207,10 +206,9 @@ where
     R: DeserializeOwned,
 {
     let url = format!("{}{}", base_url.trim_end_matches('/'), path);
-    execute_with_retry(client.config().max_network_retries, || {
-        send_post(client, &url, body)
-    })
-    .await
+    // Invoice creation has no idempotency field. Retrying after a timeout or
+    // lost response could create a second invoice, so submit it once.
+    send_post(client, &url, body).await
 }
 
 async fn send_post<K, B, R>(

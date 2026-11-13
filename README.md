@@ -2,7 +2,7 @@
 
 <div align="center">
 
-> **Idiomatic, microkernel-architected Rust SDK and constant-time webhook verification engine for the [Moyasar API (v1)](https://docs.moyasar.com/api/api-introduction).**  
+> **Idiomatic, microkernel-architected Rust SDK for the currently implemented Moyasar API resources.**
 > Modeled after [`stripe-node`](https://github.com/stripe/stripe-node) ergonomics • Built for the Rust 2024 edition • Core GCC & Saudi Arabia provider for [`some-payment`](https://github.com/some-of-cs/some-payment)
 
 [![Crates.io](https://img.shields.io/crates/v/some-moyasar.svg)](https://crates.io/crates/some-moyasar)
@@ -24,6 +24,14 @@
 </div>
 
 ---
+
+> **Implementation status:** This crate currently ships the `core`, `payments`,
+> `payment-intents`, `tokens`, `invoices`, and `card-auths` feature modules.
+> Webhook verification, payouts, settlements, Apple Pay, Stripe compatibility,
+> and `some-payment` integration described elsewhere in this document are
+> roadmap/research material and are not part of the current published API.
+> Do not treat this repository as PCI DSS, payment-services, AML/KYC, sanctions,
+> privacy, or regulatory compliance certification.
 
 ## Why some-moyasar?
 

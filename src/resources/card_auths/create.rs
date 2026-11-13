@@ -27,7 +27,7 @@ use crate::resources::card_auths::models::CardAuthentication;
 /// use some_moyasar::resources::card_auths::create::CreateCardAuthParams;
 ///
 /// let params = CreateCardAuthParams::new(
-///     Amount::from_major(100, Currency::SAR),
+///     Amount::from_major(100, Currency::SAR).expect("fits"),
 ///     Currency::SAR,
 ///     "https://merchant.example/3ds/callback",
 ///     "Ahmed Ali",
@@ -179,7 +179,7 @@ impl<'a, K: AuthKey> CardAuthsService<'a, K> {
     /// let service = client.card_auths();
     ///
     /// let invalid = CreateCardAuthParams::new(
-    ///     Amount::from_major(50, Currency::SAR),
+    ///     Amount::from_major(50, Currency::SAR).expect("fits"),
     ///     Currency::SAR,
     ///     "http://insecure.example/callback",
     ///     "Ahmed Ali",
@@ -255,7 +255,7 @@ mod tests {
 
     fn sample_params() -> CreateCardAuthParams {
         CreateCardAuthParams::new(
-            Amount::from_major(100, Currency::SAR),
+            Amount::from_major(100, Currency::SAR).expect("fits"),
             Currency::SAR,
             "https://merchant.example/3ds/callback",
             "Ahmed Ali",

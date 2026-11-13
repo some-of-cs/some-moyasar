@@ -50,10 +50,10 @@ Feature: Typed Error Pipeline and Currency Safety
     And an unknown code such as "ZZ" maps to ResponseCode::Unknown("ZZ") without panicking.
 
   Scenario: [AC-US-1.3.0-04] Currency exponent correctness across SAR, KWD and JPY
-    Given Amount::from_major(1, Currency::SAR)
+    Given Amount::from_major(1, Currency::SAR).expect("fits")
     Then the minor-unit value is 100
-    And Amount::from_major(1, Currency::KWD) yields 1000
-    And Amount::from_major(1, Currency::JPY) yields 1.
+    And Amount::from_major(1, Currency::KWD).expect("fits") yields 1000
+    And Amount::from_major(1, Currency::JPY).expect("fits") yields 1.
 
   Scenario: [AC-US-1.3.0-05] Network and timeout errors are retryable; 4xx are not
     Given a request that fails with a connection reset

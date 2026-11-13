@@ -262,7 +262,10 @@ mod tests {
 
         let invoice: Invoice = serde_json::from_str(raw).expect("valid minimal invoice");
         assert_eq!(invoice.status, InvoiceStatus::Canceled);
-        assert_eq!(invoice.amount, Amount::from_major(1, Currency::KWD));
+        assert_eq!(
+            invoice.amount,
+            Amount::from_major(1, Currency::KWD).expect("fits")
+        );
         assert_eq!(invoice.currency, Currency::KWD);
         assert!(invoice.amount_format.is_none());
         assert!(invoice.description.is_none());

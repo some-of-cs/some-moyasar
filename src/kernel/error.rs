@@ -178,6 +178,12 @@ impl MoyasarError {
     /// [`MoyasarError::Api`]; unparseable 5xx bodies fall back to [`MoyasarError::ServerError`].
     pub fn from_api_response(status: u16, body: &str) -> Self {
         if let Ok(payload) = serde_json::from_str::<ApiErrorPayload>(body) {
+            if status >= 500 {
+                return Self::ServerError {
+                    status,
+                    message: payload.message.unwrap_or_default(),
+                };
+            }
             return Self::from(payload);
         }
         if status >= 500 {

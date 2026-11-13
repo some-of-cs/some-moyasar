@@ -103,16 +103,22 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
         if !self.config.base_url.starts_with("https://") {
             return Err(MoyasarError::InvalidBaseUrl);
         }
+        let normalized_base_url = self.config.base_url.trim_end_matches('/');
+        if normalized_base_url == "https:" {
+            return Err(MoyasarError::InvalidBaseUrl);
+        }
+        let mut config = self.config;
+        config.base_url = normalized_base_url.to_owned();
         let headers = build_default_headers(&self.key)?;
         let http = reqwest::Client::builder()
-            .timeout(self.config.timeout)
+            .timeout(config.timeout)
             .default_headers(headers)
             .build()?;
 
         Ok(MoyasarClient(Arc::new(ClientInner {
             key: self.key,
             http,
-            config: self.config,
+            config,
         })))
     }
 }

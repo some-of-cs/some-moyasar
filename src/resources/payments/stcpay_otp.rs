@@ -155,10 +155,20 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
         transaction_url: &str,
         otp: &str,
     ) -> Result<StcPayOtpPayment, MoyasarError> {
-        if !transaction_url.starts_with("https://") {
+        let configured_url = reqwest::Url::parse(&self.client().config().base_url)
+            .map_err(|_| MoyasarError::InvalidBaseUrl)?;
+        let transaction_url =
+            reqwest::Url::parse(transaction_url).map_err(|_| MoyasarError::InvalidBaseUrl)?;
+        if transaction_url.scheme() != "https"
+            || transaction_url.host_str() != configured_url.host_str()
+            || transaction_url.port_or_known_default() != configured_url.port_or_known_default()
+            || transaction_url.username() != ""
+            || transaction_url.password().is_some()
+        {
             return Err(MoyasarError::InvalidBaseUrl);
         }
-        self.verify_stc_otp_inner(transaction_url, otp).await
+        self.verify_stc_otp_inner(transaction_url.as_str(), otp)
+            .await
     }
 
     async fn verify_stc_otp_inner(

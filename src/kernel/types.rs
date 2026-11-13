@@ -50,9 +50,11 @@ impl Amount {
     }
 
     /// Converts a major-unit integer amount into minor units using `currency.exponent()`.
-    pub const fn from_major(major: i64, currency: Currency) -> Self {
+    ///
+    /// Returns `None` when the conversion cannot be represented by `i64`.
+    pub const fn from_major(major: i64, currency: Currency) -> Option<Self> {
         let factor = 10_i64.pow(currency.exponent());
-        Self(major * factor)
+        major.checked_mul(factor).map(Self)
     }
 
     /// Returns the raw integer value in minor units.
@@ -77,9 +79,34 @@ mod tests {
 
     #[test]
     fn converts_major_to_minor_units_by_currency_exponent() {
-        assert_eq!(Amount::from_major(1, Currency::SAR).minor_units(), 100);
-        assert_eq!(Amount::from_major(1, Currency::KWD).minor_units(), 1000);
-        assert_eq!(Amount::from_major(1, Currency::BHD).minor_units(), 1000);
-        assert_eq!(Amount::from_major(1, Currency::JPY).minor_units(), 1);
+        assert_eq!(
+            Amount::from_major(1, Currency::SAR)
+                .expect("fits")
+                .minor_units(),
+            100
+        );
+        assert_eq!(
+            Amount::from_major(1, Currency::KWD)
+                .expect("fits")
+                .minor_units(),
+            1000
+        );
+        assert_eq!(
+            Amount::from_major(1, Currency::BHD)
+                .expect("fits")
+                .minor_units(),
+            1000
+        );
+        assert_eq!(
+            Amount::from_major(1, Currency::JPY)
+                .expect("fits")
+                .minor_units(),
+            1
+        );
+    }
+
+    #[test]
+    fn rejects_major_amounts_that_overflow_minor_units() {
+        assert!(Amount::from_major(i64::MAX, Currency::SAR).is_none());
     }
 }
