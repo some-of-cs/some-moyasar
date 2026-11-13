@@ -12,6 +12,28 @@ use crate::kernel::transport::execute_with_retry;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
 
+/// Validates that `id` is a non-empty, URL-safe single path segment.
+///
+/// Rejects empty strings, whitespace, `/`, `?`, `#`, and `..` traversal sequences
+/// before interpolating `id` into Moyasar API request URLs.
+pub(crate) fn validate_payment_id(id: &str) -> Result<(), MoyasarError> {
+    let invalid = id.is_empty()
+        || id.chars().any(char::is_whitespace)
+        || id.contains('/')
+        || id.contains('?')
+        || id.contains('#')
+        || id.contains("..");
+    if invalid {
+        return Err(MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            message: "payment id must be a non-empty URL-safe path segment".to_owned(),
+            errors: Vec::new(),
+            response_code: None,
+        });
+    }
+    Ok(())
+}
+
 /// Parameters for updating an existing payment via `PUT /v1/payments/:id`.
 ///
 /// Fields left as `None` are omitted from the JSON payload. To unset an
@@ -88,14 +110,7 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
         id: &str,
         params: &UpdatePaymentParams,
     ) -> Result<Payment, MoyasarError> {
-        if id.trim().is_empty() {
-            return Err(MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                message: "payment id must not be empty".to_owned(),
-                errors: Vec::new(),
-                response_code: None,
-            });
-        }
+        validate_payment_id(id)?;
 
         let url = format!("{}/v1/payments/{id}", self.client().config().base_url);
         let http = self.client().http();
@@ -103,20 +118,30 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
 
         execute_with_retry(retries, || async {
             let response = http.put(&url).json(params).send().await?;
-            let status = response.status();
-            if status.is_success() {
-                return Ok(response.json::<Payment>().await?);
-            }
-            let body = response.text().await.unwrap_or_default();
-            Err(MoyasarError::from_api_response(status.as_u16(), &body))
+            parse_payment_response(response).await
         })
         .await
     }
 }
 
+async fn parse_payment_response(response: reqwest::Response) -> Result<Payment, MoyasarError> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response.json::<Payment>().await?);
+    }
+    let body = response.text().await.unwrap_or_default();
+    Err(MoyasarError::from_api_response(status.as_u16(), &body))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kernel::auth::SecretKey;
+    use crate::kernel::client::MoyasarClient;
+    use crate::resources::payments::models::PaymentStatus;
+    use serde_json::json;
+    use wiremock::matchers::{body_json, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn tc_2_2_0_01_serializes_description_and_omits_none_fields() {
@@ -133,5 +158,100 @@ mod tests {
             .expect("unset metadata key");
         let json = serde_json::to_value(&params).expect("serializes params");
         assert_eq!(json["metadata"]["order_id"], "");
+    }
+
+    #[test]
+    fn validate_payment_id_rejects_unsafe_segments() {
+        assert!(validate_payment_id("pay_01J9XYZ").is_ok());
+        for bad in [
+            "",
+            "   ",
+            "pay_123/void",
+            "pay_123?foo=bar",
+            "pay_123#frag",
+            "../other",
+            "pay 123",
+        ] {
+            let err = validate_payment_id(bad).expect_err("must reject unsafe id");
+            assert!(matches!(
+                err,
+                MoyasarError::Api {
+                    error_type: ApiErrorType::InvalidRequestError,
+                    ..
+                }
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn update_rejects_invalid_id_before_network() {
+        let key = SecretKey::new("sk_test_update_validation").expect("valid key");
+        let client = MoyasarClient::new(key).expect("client builds");
+        let params = UpdatePaymentParams::new().description("Order #42");
+        let err = client
+            .payments()
+            .update("pay_123/refund", &params)
+            .await
+            .expect_err("must reject path traversal");
+        assert!(matches!(
+            err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn tc_2_2_0_01_and_02_wiremock_put_updates_description_and_unsets_metadata() {
+        let server = MockServer::start().await;
+        let params = UpdatePaymentParams::new()
+            .description("Order #1024")
+            .unset_metadata("order_id")
+            .expect("unset metadata");
+
+        let response_body = json!({
+            "id": "pay_01J9UPD",
+            "status": "paid",
+            "amount": 15000,
+            "amount_format": "150.00 SAR",
+            "fee": 350,
+            "fee_format": "3.50 SAR",
+            "refunded": 0,
+            "refunded_format": "0.00 SAR",
+            "captured": 15000,
+            "captured_format": "150.00 SAR",
+            "currency": "SAR",
+            "description": "Order #1024",
+            "source": { "type": "creditcard" },
+            "metadata": {},
+            "created_at": "2026-11-13T10:00:00Z",
+            "updated_at": "2026-11-13T10:02:00Z"
+        });
+
+        Mock::given(method("PUT"))
+            .and(path("/v1/payments/pay_01J9UPD"))
+            .and(body_json(json!({
+                "description": "Order #1024",
+                "metadata": { "order_id": "" }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response_body))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let url = format!("{}/v1/payments/pay_01J9UPD", server.uri());
+        let payment = execute_with_retry(1, || async {
+            let resp = http.put(&url).json(&params).send().await?;
+            parse_payment_response(resp).await
+        })
+        .await
+        .expect("updates payment");
+
+        assert_eq!(payment.id, "pay_01J9UPD");
+        assert_eq!(payment.status, PaymentStatus::Paid);
+        assert_eq!(payment.description.as_deref(), Some("Order #1024"));
+        assert!(payment.metadata.get("order_id").is_none());
     }
 }
