@@ -3,7 +3,7 @@
 use core::fmt;
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 use crate::kernel::error::MoyasarError;
 
@@ -15,9 +15,20 @@ pub const METADATA_KEY_MAX_LEN: usize = 40;
 pub const METADATA_VALUE_MAX_LEN: usize = 500;
 
 /// Validated key/value metadata map for Moyasar resources.
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Metadata(BTreeMap<String, String>);
+
+impl<'de> Deserialize<'de> for Metadata {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = BTreeMap::<String, String>::deserialize(deserializer)?;
+        let mut meta = Self::new();
+        for (k, v) in raw {
+            meta.insert(&k, &v).map_err(de::Error::custom)?;
+        }
+        Ok(meta)
+    }
+}
 
 impl fmt::Debug for Metadata {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -108,5 +119,24 @@ mod tests {
         meta.unset("order_id").expect("unset valid");
         let json = serde_json::to_value(&meta).unwrap();
         assert_eq!(json["order_id"], "");
+    }
+
+    #[test]
+    fn deserialize_enforces_metadata_limits() {
+        let valid: Metadata = serde_json::from_str(r#"{"order_id":"123"}"#).unwrap();
+        assert_eq!(valid.get("order_id"), Some("123"));
+
+        let mut map = BTreeMap::new();
+        for i in 0..31 {
+            map.insert(format!("k_{i}"), "val".to_owned());
+        }
+        let json_31 = serde_json::to_string(&map).unwrap();
+        assert!(serde_json::from_str::<Metadata>(&json_31).is_err());
+
+        let long_key_json = format!(r#"{{"{}":"v"}}"#, "a".repeat(41));
+        assert!(serde_json::from_str::<Metadata>(&long_key_json).is_err());
+
+        let long_val_json = format!(r#"{{"k":"{}"}}"#, "b".repeat(501));
+        assert!(serde_json::from_str::<Metadata>(&long_val_json).is_err());
     }
 }

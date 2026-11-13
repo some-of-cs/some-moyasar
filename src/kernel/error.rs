@@ -110,7 +110,10 @@ pub enum MoyasarError {
 impl MoyasarError {
     /// Returns `true` only for transient network, timeout, or 5xx server failures.
     pub fn is_retryable(&self) -> bool {
-        matches!(self, Self::Network(_) | Self::Timeout | Self::ServerError { .. })
+        matches!(
+            self,
+            Self::Network(_) | Self::Timeout | Self::ServerError { .. }
+        )
     }
 }
 

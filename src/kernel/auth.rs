@@ -128,9 +128,18 @@ mod tests {
         let pk = PublishableKey::new("pk_test_xyz").expect("valid publishable");
         assert_eq!(pk.mode(), AuthMode::Test);
 
-        assert!(matches!(SecretKey::new("pk_test_wrong"), Err(MoyasarError::InvalidKey)));
-        assert!(matches!(SecretKey::new("abc123"), Err(MoyasarError::InvalidKey)));
-        assert!(matches!(PublishableKey::new("sk_live_wrong"), Err(MoyasarError::InvalidKey)));
+        assert!(matches!(
+            SecretKey::new("pk_test_wrong"),
+            Err(MoyasarError::InvalidKey)
+        ));
+        assert!(matches!(
+            SecretKey::new("abc123"),
+            Err(MoyasarError::InvalidKey)
+        ));
+        assert!(matches!(
+            PublishableKey::new("sk_live_wrong"),
+            Err(MoyasarError::InvalidKey)
+        ));
     }
 
     #[test]
