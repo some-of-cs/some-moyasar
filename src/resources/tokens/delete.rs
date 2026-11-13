@@ -75,11 +75,7 @@ async fn delete_token(
 }
 
 async fn send_delete_once(http: &reqwest::Client, url: &str) -> Result<(), MoyasarError> {
-    let response = http
-        .delete(url)
-        .send()
-        .await
-        .map_err(map_transport_error)?;
+    let response = http.delete(url).send().await.map_err(map_transport_error)?;
     let status = response.status();
     if status == reqwest::StatusCode::NO_CONTENT || status.is_success() {
         return Ok(());
@@ -159,7 +155,7 @@ pub fn require_active_token(status: TokenStatus) -> Result<(), MoyasarError> {
             errors: Vec::new(),
             response_code: None,
         }),
-        TokenStatus::Inactive => Err(MoyasarError::Api {
+        TokenStatus::Inactive | TokenStatus::Unknown => Err(MoyasarError::Api {
             error_type: ApiErrorType::InvalidRequestError,
             message: "token is inactive and cannot be charged".to_owned(),
             errors: Vec::new(),
@@ -184,11 +180,13 @@ pub fn require_active_token(status: TokenStatus) -> Result<(), MoyasarError> {
 /// ```
 #[must_use]
 pub const fn can_transition_token_status(from: TokenStatus, to: TokenStatus) -> bool {
-    match (from, to) {
-        (TokenStatus::Initiated, TokenStatus::Active | TokenStatus::Inactive) => true,
-        (TokenStatus::Active, TokenStatus::Inactive) => true,
-        _ => false,
-    }
+    matches!(
+        (from, to),
+        (
+            TokenStatus::Initiated,
+            TokenStatus::Active | TokenStatus::Inactive
+        ) | (TokenStatus::Active, TokenStatus::Inactive)
+    )
 }
 
 #[cfg(test)]
@@ -224,7 +222,10 @@ mod tests {
         let id = TokenId::new("token_abc123").expect("valid token id");
 
         let result = delete_token(&http, &server.uri(), 0, &id).await;
-        assert!(result.is_ok(), "expected Ok(()) for 204 No Content, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected Ok(()) for 204 No Content, got {result:?}"
+        );
     }
 
     #[tokio::test]
@@ -232,18 +233,20 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("DELETE"))
             .and(path("/v1/tokens/token_missing"))
-            .respond_with(ResponseTemplate::new(404).set_body_string(
-                r#"{"type":"record_not_found","message":"Token not found"}"#,
-            ))
+            .respond_with(
+                ResponseTemplate::new(404)
+                    .set_body_string(r#"{"type":"record_not_found","message":"Token not found"}"#),
+            )
             .expect(1)
             .mount(&server)
             .await;
 
         Mock::given(method("DELETE"))
             .and(path("/v1/tokens/token_unauth"))
-            .respond_with(ResponseTemplate::new(401).set_body_string(
-                r#"{"type":"authentication_error","message":"Invalid key"}"#,
-            ))
+            .respond_with(
+                ResponseTemplate::new(401)
+                    .set_body_string(r#"{"type":"authentication_error","message":"Invalid key"}"#),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -299,7 +302,10 @@ mod tests {
         let id = TokenId::new("token_retry").expect("valid token id");
 
         let result = delete_token(&http, &server.uri(), 2, &id).await;
-        assert!(result.is_ok(), "expected retry recovery on 204, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected retry recovery on 204, got {result:?}"
+        );
     }
 
     #[test]
