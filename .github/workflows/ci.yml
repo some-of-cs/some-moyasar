@@ -1,0 +1,47 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main, "feat/**"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-and-test:
+    name: Format, Check, Clippy & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Check standalone core feature
+        run: cargo check --no-default-features --features core
+
+      - name: Check core + payment-intents features
+        run: cargo check --no-default-features --features "core,payment-intents"
+
+      - name: Check default library target
+        run: cargo check --lib
+
+      - name: Run Clippy with -D warnings
+        run: cargo clippy --lib -- -D warnings
+
+      - name: Run library unit & integration tests
+        run: cargo test --lib
+
+      - name: Run doc-tests (including compile_fail guards)
+        run: cargo test --doc
