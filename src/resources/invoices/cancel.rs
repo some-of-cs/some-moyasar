@@ -15,6 +15,59 @@ const CANCEL_SUFFIX: &str = "/cancel";
 /// Maximum SADAD bill validity window in days (`29` days).
 pub const MAX_SADAD_EXPIRY_DAYS: i64 = 29;
 
+/// Validates that `invoice` is not in a terminal state (`paid`, `canceled`, or `expired`)
+/// before attempting cancellation (`PUT /v1/invoices/:id/cancel`).
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::Api`] with [`ApiErrorType::IntentNotCancelable`] when
+/// [`InvoiceStatus::is_terminal`](crate::resources::invoices::models::InvoiceStatus::is_terminal)
+/// is `true`.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::kernel::error::{ApiErrorType, MoyasarError};
+/// use some_moyasar::resources::invoices::cancel::validate_invoice_cancelable;
+/// use some_moyasar::resources::invoices::models::Invoice;
+///
+/// let created: Invoice = serde_json::from_str(r#"{
+///     "id": "550e8400-e29b-41d4-a716-446655440000",
+///     "status": "created",
+///     "amount": 50000,
+///     "currency": "SAR"
+/// }"#).unwrap();
+/// assert!(validate_invoice_cancelable(&created).is_ok());
+///
+/// let paid: Invoice = serde_json::from_str(r#"{
+///     "id": "550e8400-e29b-41d4-a716-446655440000",
+///     "status": "paid",
+///     "amount": 50000,
+///     "currency": "SAR"
+/// }"#).unwrap();
+/// assert!(matches!(
+///     validate_invoice_cancelable(&paid),
+///     Err(MoyasarError::Api {
+///         error_type: ApiErrorType::IntentNotCancelable,
+///         ..
+///     })
+/// ));
+/// ```
+pub fn validate_invoice_cancelable(invoice: &Invoice) -> Result<(), MoyasarError> {
+    if invoice.status.is_terminal() {
+        return Err(MoyasarError::Api {
+            error_type: ApiErrorType::IntentNotCancelable,
+            message: format!(
+                "invoice {} cannot be canceled in terminal status '{}'",
+                invoice.id, invoice.status
+            ),
+            errors: Vec::new(),
+            response_code: None,
+        });
+    }
+    Ok(())
+}
+
 /// Synchronizes a SADAD bill expiration timestamp with an invoice's `expired_at`.
 ///
 /// Enforces the SAMA / Moyasar expiry-sync invariant:
@@ -147,11 +200,55 @@ mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
     use crate::kernel::client::MoyasarClient;
+    use crate::kernel::types::{Amount, Currency};
     use crate::resources::invoices::models::InvoiceStatus;
     use chrono::TimeZone;
     use serde_json::json;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn sample_invoice(status: InvoiceStatus) -> Invoice {
+        Invoice {
+            id: Uuid::nil(),
+            status,
+            amount: Amount::from_minor(50_000),
+            currency: Currency::SAR,
+            amount_format: None,
+            description: None,
+            logo_url: None,
+            url: None,
+            callback_url: None,
+            expired_at: None,
+            back_url: None,
+            success_url: None,
+            metadata: None,
+            payments: Vec::new(),
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    #[test]
+    fn validate_invoice_cancelable_rejects_terminal_statuses() {
+        assert!(validate_invoice_cancelable(&sample_invoice(InvoiceStatus::Created)).is_ok());
+        assert!(validate_invoice_cancelable(&sample_invoice(InvoiceStatus::Unknown)).is_ok());
+
+        for terminal in [
+            InvoiceStatus::Paid,
+            InvoiceStatus::Canceled,
+            InvoiceStatus::Expired,
+        ] {
+            let err = validate_invoice_cancelable(&sample_invoice(terminal))
+                .expect_err("terminal status must not be cancelable");
+            assert!(matches!(
+                err,
+                MoyasarError::Api {
+                    error_type: ApiErrorType::IntentNotCancelable,
+                    ..
+                }
+            ));
+        }
+    }
 
     #[tokio::test]
     async fn tc_4_2_0_05_cancel_uses_put_verb_on_cancel_path() {

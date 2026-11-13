@@ -4,6 +4,7 @@ use core::fmt;
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
@@ -14,18 +15,26 @@ use crate::resources::card_auths::models::{CardAuthId, CardAuthResult, CardAuthe
 /// Extracted 3DS MPI cryptographic parameters (`eci`, `authentication_value`, `ds_transaction_id`).
 ///
 /// Implements a custom [`fmt::Debug`] that redacts `authentication_value` (CAVV)
-/// to satisfy PCI-DSS 4.0 and `TC-4.3.0-LAW`.
+/// to satisfy PCI-DSS 4.0 and `TC-4.3.0-LAW`, and zeroizes `authentication_value` on drop.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MpiParameters {
     /// Electronic Commerce Indicator returned by the directory server or ACS.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub eci: Option<String>,
-    /// Cardholder Authentication Verification Value (CAVV / AAV); redacted in `Debug`.
+    /// Cardholder Authentication Verification Value (CAVV / AAV); redacted in `Debug` and zeroized on drop.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authentication_value: Option<String>,
     /// 3DS2 Directory Server Transaction ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ds_transaction_id: Option<String>,
+}
+
+impl Drop for MpiParameters {
+    fn drop(&mut self) {
+        if let Some(ref mut cavv) = self.authentication_value {
+            cavv.zeroize();
+        }
+    }
 }
 
 impl MpiParameters {
@@ -54,13 +63,14 @@ impl fmt::Debug for MpiParameters {
 /// External 3DS MPI parameters forwarded verbatim under `source.card_auth_data` (`AC-US-4.3.0-05`).
 ///
 /// Implements a custom [`fmt::Debug`] that redacts `authentication_value` and any `cavv`
-/// entry in `extra` so cryptographic authentication values are never logged in plaintext.
+/// entry in `extra` so cryptographic authentication values are never logged in plaintext,
+/// and zeroizes `authentication_value` and any `"cavv"` / `"authentication_value"` entry in `extra` on drop.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalMpiData {
     /// Electronic Commerce Indicator (e.g., `"05"` or `"02"`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub eci: Option<String>,
-    /// Cardholder Authentication Verification Value (CAVV); redacted in `Debug`.
+    /// Cardholder Authentication Verification Value (CAVV); redacted in `Debug` and zeroized on drop.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authentication_value: Option<String>,
     /// 3DS2 Directory Server Transaction ID.
@@ -75,6 +85,22 @@ pub struct ExternalMpiData {
     /// Additional scheme-specific MPI fields serialized verbatim.
     #[serde(flatten)]
     pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+fn zeroize_extra_secret(extra: &mut BTreeMap<String, serde_json::Value>, key: &str) {
+    if let Some(serde_json::Value::String(secret)) = extra.get_mut(key) {
+        secret.zeroize();
+    }
+}
+
+impl Drop for ExternalMpiData {
+    fn drop(&mut self) {
+        if let Some(ref mut cavv) = self.authentication_value {
+            cavv.zeroize();
+        }
+        zeroize_extra_secret(&mut self.extra, "cavv");
+        zeroize_extra_secret(&mut self.extra, "authentication_value");
+    }
 }
 
 fn redacted_extra_debug(extra: &BTreeMap<String, serde_json::Value>) -> BTreeMap<&str, String> {
@@ -129,7 +155,9 @@ impl fmt::Debug for ExternalMpiData {
 ///     eci: Some("05".to_owned()),
 ///     authentication_value: Some("cavv_secret_token".to_owned()),
 ///     ds_transaction_id: Some("ds_tx_999".to_owned()),
-///     ..Default::default()
+///     version: None,
+///     transaction_status: None,
+///     extra: std::collections::BTreeMap::new(),
 /// };
 /// let by_data = CardAuthBridgeData::from_card_auth_data(mpi);
 /// let data_json = serde_json::to_value(&by_data).unwrap();
@@ -167,12 +195,14 @@ impl CardAuthBridgeData {
 
     /// Creates a `card_auth_data` bridge payload from extracted [`MpiParameters`].
     #[must_use]
-    pub fn from_mpi(mpi: MpiParameters) -> Self {
+    pub fn from_mpi(mut mpi: MpiParameters) -> Self {
         Self::from_card_auth_data(ExternalMpiData {
-            eci: mpi.eci,
-            authentication_value: mpi.authentication_value,
-            ds_transaction_id: mpi.ds_transaction_id,
-            ..Default::default()
+            eci: mpi.eci.take(),
+            authentication_value: mpi.authentication_value.take(),
+            ds_transaction_id: mpi.ds_transaction_id.take(),
+            version: None,
+            transaction_status: None,
+            extra: BTreeMap::new(),
         })
     }
 }

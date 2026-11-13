@@ -1,6 +1,9 @@
 //! Standalone 3DS card authentication models (`CardAuthentication`, `CardAuthStatus`, `CardAuthId`, `CardAuthResult`).
 
-use serde::{Deserialize, Serialize};
+use core::str::FromStr;
+
+use serde::{Deserialize, Deserializer, Serialize, de};
+use zeroize::Zeroize;
 
 use crate::kernel::error::MoyasarError;
 
@@ -19,25 +22,36 @@ use crate::kernel::error::MoyasarError;
 /// assert!(matches!(CardAuthId::new("ca_"), Err(MoyasarError::InvalidCardAuthId)));
 /// assert!(matches!(CardAuthId::new("tok_123"), Err(MoyasarError::InvalidCardAuthId)));
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct CardAuthId(String);
+
+fn is_valid_id_char(c: char) -> bool {
+    !c.is_whitespace() && !"/?#\\".contains(c)
+}
+
+fn is_valid_card_auth_suffix(suffix: &str) -> bool {
+    !suffix.is_empty() && !suffix.contains("..") && suffix.chars().all(is_valid_id_char)
+}
 
 impl CardAuthId {
     /// Validates and constructs a [`CardAuthId`] from a raw string.
     ///
-    /// Requires a `ca_` prefix followed by a non-empty suffix.
+    /// Requires a `ca_` prefix followed by a non-empty, URL-safe suffix.
     ///
     /// # Errors
     ///
     /// Returns [`MoyasarError::InvalidCardAuthId`] if `raw` does not start with `ca_`
-    /// or has an empty suffix after `ca_`.
+    /// or has an empty/unsafe suffix after `ca_`.
     pub fn new(raw: impl Into<String>) -> Result<Self, MoyasarError> {
         let raw = raw.into();
-        match raw.strip_prefix("ca_") {
-            Some(suffix) if !suffix.is_empty() => Ok(Self(raw)),
-            _ => Err(MoyasarError::InvalidCardAuthId),
+        if raw
+            .strip_prefix("ca_")
+            .is_some_and(is_valid_card_auth_suffix)
+        {
+            return Ok(Self(raw));
         }
+        Err(MoyasarError::InvalidCardAuthId)
     }
 
     /// Returns the underlying `ca_...` identifier slice without allocating.
@@ -56,6 +70,21 @@ impl AsRef<str> for CardAuthId {
 impl std::fmt::Display for CardAuthId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+impl FromStr for CardAuthId {
+    type Err = MoyasarError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for CardAuthId {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Self::new(raw).map_err(de::Error::custom)
     }
 }
 
@@ -114,7 +143,8 @@ impl std::fmt::Display for CardAuthStatus {
 /// Cryptographic MPI outcome returned by Moyasar after 3D Secure authentication.
 ///
 /// Implements a custom [`std::fmt::Debug`] that redacts `authentication_value` (CAVV)
-/// as `"[REDACTED]"` to prevent sensitive cryptographic data from leaking into logs.
+/// as `"[REDACTED]"` to prevent sensitive cryptographic data from leaking into logs,
+/// and zeroizes `authentication_value` on drop.
 ///
 /// # Examples
 ///
@@ -145,7 +175,7 @@ pub struct CardAuthResult {
     pub eci: Option<String>,
     /// Cardholder Authentication Verification Value (CAVV / `authentication_value`).
     ///
-    /// Redacted as `"[REDACTED]"` in [`std::fmt::Debug`] output.
+    /// Redacted as `"[REDACTED]"` in [`std::fmt::Debug`] output and zeroized on drop.
     pub authentication_value: Option<String>,
     /// Directory Server transaction identifier (`ds_transaction_id`).
     pub ds_transaction_id: Option<String>,
@@ -157,6 +187,14 @@ pub struct CardAuthResult {
     pub auth_scheme: Option<String>,
     /// Whether authentication completed frictionlessly without an interactive challenge.
     pub is_frictionless: Option<bool>,
+}
+
+impl Drop for CardAuthResult {
+    fn drop(&mut self) {
+        if let Some(ref mut cavv) = self.authentication_value {
+            cavv.zeroize();
+        }
+    }
 }
 
 impl std::fmt::Debug for CardAuthResult {
@@ -213,23 +251,38 @@ mod tests {
 
     #[test]
     fn card_auth_id_validates_prefix_and_non_empty_suffix() {
-        let valid = CardAuthId::new("ca_abc123").expect("valid ca_ prefix and suffix");
+        let valid: CardAuthId = "ca_abc123".parse().expect("FromStr succeeds");
         assert_eq!(valid.as_str(), "ca_abc123");
         assert_eq!(valid.as_ref(), "ca_abc123");
         assert_eq!(valid.to_string(), "ca_abc123");
+        let deser: CardAuthId = serde_json::from_str(r#""ca_abc123""#).expect("valid serde");
+        assert_eq!(deser, valid);
 
-        assert!(matches!(
-            CardAuthId::new("ca_"),
-            Err(MoyasarError::InvalidCardAuthId)
-        ));
-        assert!(matches!(
-            CardAuthId::new(""),
-            Err(MoyasarError::InvalidCardAuthId)
-        ));
-        assert!(matches!(
-            CardAuthId::new("tok_abc123"),
-            Err(MoyasarError::InvalidCardAuthId)
-        ));
+        for invalid in [
+            "pay_",
+            "ca_",
+            "",
+            "tok_abc123",
+            "pi_123/cancel",
+            "ca_123/../admin",
+            "token_123/delete",
+            "ca_123/prepare",
+            "ca_123\\admin",
+            "ca_123..admin",
+            "ca_123?foo=bar",
+            "ca_123#frag",
+            "ca_ 123",
+        ] {
+            assert!(matches!(
+                CardAuthId::new(invalid),
+                Err(MoyasarError::InvalidCardAuthId)
+            ));
+            let json_str = serde_json::to_string(invalid).expect("json string");
+            assert!(
+                serde_json::from_str::<CardAuthId>(&json_str).is_err(),
+                "expected serde_json::from_str Err for {invalid:?}"
+            );
+        }
     }
 
     #[test]

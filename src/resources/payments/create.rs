@@ -48,8 +48,12 @@ impl<'a, K: AuthKey> PaymentsService<'a, K> {
         params: &CreatePaymentParams,
         policy: &GivenIdPolicy,
     ) -> Result<Payment, MoyasarError> {
-        self.create_with_policy_at(&self.client().config().base_url, params, policy)
-            .await
+        self.create_with_policy_at(
+            self.client().config().base_url.trim_end_matches('/'),
+            params,
+            policy,
+        )
+        .await
     }
 
     async fn create_with_policy_at(

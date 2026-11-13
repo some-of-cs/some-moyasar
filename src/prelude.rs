@@ -25,13 +25,21 @@ pub use crate::resources::payments::{
     UpdatePaymentParams, VoidOrRefund, WalletSourceResponse,
 };
 
+#[cfg(feature = "payment-intents")]
+pub use crate::resources::payment_intents::{
+    CreatePaymentIntentParams, FulfillIntentParams, FulfillmentOutcome, INTENT_EXPIRY_SECS,
+    IntentId, IntentPayment, IntentPaymentStatus, PaymentIntent, PaymentIntentStatus,
+    PaymentIntentsService, PaymentSourceRequest as FulfillPaymentSourceRequest,
+    validate_client_secret, validate_pre_fulfillment,
+};
+
 #[cfg(feature = "tokens")]
 pub use crate::resources::tokens::{CreateTokenParams, Token, TokenId, TokenStatus, TokensService};
 
 #[cfg(feature = "invoices")]
 pub use crate::resources::invoices::{
     CreateInvoiceParams, Invoice, InvoiceStatus, InvoicesService, ListInvoicesParams,
-    UpdateInvoiceParams, sync_sadad_expiry,
+    UpdateInvoiceParams, sync_sadad_expiry, validate_invoice_cancelable,
 };
 
 #[cfg(feature = "card-auths")]

@@ -28,7 +28,7 @@ impl<'a, K: SecretAuthKey> PaymentIntentsService<'a, K> {
     pub async fn retrieve(&self, id: &IntentId) -> Result<PaymentIntent, MoyasarError> {
         let url = format!(
             "{}{}/{}",
-            self.client.config().base_url,
+            self.client.config().base_url.trim_end_matches('/'),
             PAYMENT_INTENTS_PATH,
             id.as_str()
         );

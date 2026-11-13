@@ -55,7 +55,10 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
     pub async fn void(&self, id: &str) -> Result<Payment, MoyasarError> {
         validate_payment_id(id)?;
 
-        let url = format!("{}/v1/payments/{id}/void", self.client().config().base_url);
+        let url = format!(
+            "{}/v1/payments/{id}/void",
+            self.client().config().base_url.trim_end_matches('/')
+        );
         let http = self.client().http();
         let retries = self.client().config().max_network_retries;
 

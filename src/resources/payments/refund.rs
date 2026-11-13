@@ -93,7 +93,7 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
 
         let url = format!(
             "{}/v1/payments/{id}/refund",
-            self.client().config().base_url
+            self.client().config().base_url.trim_end_matches('/')
         );
         let http = self.client().http();
         let retries = self.client().config().max_network_retries;

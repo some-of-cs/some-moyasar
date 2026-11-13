@@ -1,7 +1,11 @@
 //! Payment Intent fulfillment endpoint (`fulfill`).
 
+use core::fmt;
+
 use chrono::{DateTime, Utc};
+use http::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
 
 use crate::kernel::auth::AuthKey;
 use crate::kernel::error::MoyasarError;
@@ -43,7 +47,7 @@ pub enum IntentPaymentStatus {
 ///
 /// Always inspect [`IntentPayment::status`] (or re-fetch `GET /v1/payments/:id`)
 /// because `PaymentIntentStatus::Fulfilled` does **not** guarantee `Paid`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct IntentPayment {
     /// Unique Moyasar Payment identifier.
     pub id: String,
@@ -81,6 +85,26 @@ pub struct IntentPayment {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+impl fmt::Debug for IntentPayment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IntentPayment")
+            .field("id", &self.id)
+            .field("status", &self.status)
+            .field("amount", &self.amount)
+            .field("currency", &self.currency)
+            .field("fee", &self.fee)
+            .field("refunded", &self.refunded)
+            .field("captured", &self.captured)
+            .field("description", &self.description)
+            .field("callback_url", &self.callback_url)
+            .field("source", &"[REDACTED]")
+            .field("metadata", &self.metadata)
+            .field("created_at", &self.created_at)
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
+}
+
 impl<'a, K: AuthKey> PaymentIntentsService<'a, K> {
     /// Fulfills a [`PaymentIntent`](crate::resources::payment_intents::models::PaymentIntent)
     /// via `POST /v1/payment_intents/:id/fulfill`.
@@ -106,7 +130,7 @@ impl<'a, K: AuthKey> PaymentIntentsService<'a, K> {
     ) -> Result<IntentPayment, MoyasarError> {
         let url = format!(
             "{}{}/{}/fulfill",
-            self.client.config().base_url,
+            self.client.config().base_url.trim_end_matches('/'),
             PAYMENT_INTENTS_PATH,
             id.as_str()
         );
@@ -127,7 +151,19 @@ async fn fulfill_at_url(
     params: &FulfillIntentParams,
 ) -> Result<IntentPayment, MoyasarError> {
     execute_with_retry(retries, || async {
-        let resp = http.post(url).json(params).send().await?;
+        let mut body_bytes =
+            serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
+                status: 500,
+                message: format!("failed to serialize fulfill request: {err}"),
+            })?;
+        let send_res = http
+            .post(url)
+            .header(CONTENT_TYPE, "application/json")
+            .body(body_bytes.clone())
+            .send()
+            .await;
+        body_bytes.zeroize();
+        let resp = send_res?;
         parse_fulfill_response(resp).await
     })
     .await
@@ -236,6 +272,27 @@ mod tests {
             }
         ));
         assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn intent_payment_debug_redacts_source_payload() {
+        let raw = r#"{
+            "id": "pay_intent_dbg",
+            "status": "paid",
+            "amount": 25000,
+            "currency": "SAR",
+            "source": {
+                "type": "stcpay",
+                "mobile": "0512345678",
+                "token": "secret_source_token"
+            },
+            "created_at": "2026-11-13T11:00:00Z"
+        }"#;
+        let payment: IntentPayment = serde_json::from_str(raw).expect("valid IntentPayment");
+        let dbg = format!("{payment:?}");
+        assert!(dbg.contains(r#"source: "[REDACTED]""#));
+        assert!(!dbg.contains("0512345678"));
+        assert!(!dbg.contains("secret_source_token"));
     }
 
     #[test]

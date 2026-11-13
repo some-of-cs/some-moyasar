@@ -18,7 +18,7 @@ pub const TOKEN_ID_PREFIX: &str = "token_";
 /// Validated Moyasar card token identifier (`token_...`).
 ///
 /// Guarantees at construction and deserialization time that the value starts
-/// with [`TOKEN_ID_PREFIX`] (`"token_"`) and has a non-empty suffix.
+/// with [`TOKEN_ID_PREFIX`] (`"token_"`) and has a non-empty, URL-safe suffix.
 ///
 /// # Examples
 ///
@@ -36,17 +36,28 @@ pub const TOKEN_ID_PREFIX: &str = "token_";
 #[serde(transparent)]
 pub struct TokenId(String);
 
+fn is_valid_id_char(c: char) -> bool {
+    !c.is_whitespace() && !"/?#\\".contains(c)
+}
+
+fn is_valid_token_suffix(suffix: &str) -> bool {
+    !suffix.is_empty() && !suffix.contains("..") && suffix.chars().all(is_valid_id_char)
+}
+
 impl TokenId {
     /// Constructs a validated [`TokenId`], rejecting missing `token_` prefixes
-    /// or empty suffixes.
+    /// or empty/unsafe suffixes.
     ///
     /// # Errors
     ///
     /// Returns [`MoyasarError::InvalidTokenId`] when `raw` does not start with
-    /// `"token_"` or has no characters after the prefix.
+    /// `"token_"` or has an empty or path-unsafe suffix after the prefix.
     pub fn new(raw: impl Into<String>) -> Result<Self, MoyasarError> {
         let raw = raw.into();
-        if raw.len() > TOKEN_ID_PREFIX.len() && raw.starts_with(TOKEN_ID_PREFIX) {
+        if raw
+            .strip_prefix(TOKEN_ID_PREFIX)
+            .is_some_and(is_valid_token_suffix)
+        {
             return Ok(Self(raw));
         }
         Err(MoyasarError::InvalidTokenId)
@@ -244,23 +255,34 @@ mod tests {
         let parsed: TokenId = "token_xyz".parse().expect("FromStr succeeds");
         assert_eq!(parsed.as_str(), "token_xyz");
 
-        assert!(matches!(
-            TokenId::new(""),
-            Err(MoyasarError::InvalidTokenId)
-        ));
-        assert!(matches!(
-            TokenId::new("token_"),
-            Err(MoyasarError::InvalidTokenId)
-        ));
-        assert!(matches!(
-            TokenId::new("tok_123"),
-            Err(MoyasarError::InvalidTokenId)
-        ));
-
         let roundtrip: TokenId = serde_json::from_str(r#""token_serde_1""#).unwrap();
         assert_eq!(roundtrip, TokenId::new("token_serde_1").unwrap());
-        assert!(serde_json::from_str::<TokenId>(r#""token_""#).is_err());
-        assert!(serde_json::from_str::<TokenId>(r#""invalid_1""#).is_err());
+
+        for invalid in [
+            "pay_",
+            "ca_",
+            "",
+            "token_",
+            "tok_123",
+            "pi_123/cancel",
+            "ca_123/../admin",
+            "token_123/delete",
+            "token_123\\admin",
+            "token_123..admin",
+            "token_123?foo=bar",
+            "token_123#frag",
+            "token_ 123",
+        ] {
+            assert!(
+                matches!(TokenId::new(invalid), Err(MoyasarError::InvalidTokenId)),
+                "expected TokenId::new Err for {invalid:?}"
+            );
+            let json_str = serde_json::to_string(invalid).expect("json string");
+            assert!(
+                serde_json::from_str::<TokenId>(&json_str).is_err(),
+                "expected serde_json::from_str Err for {invalid:?}"
+            );
+        }
     }
 
     #[test]
