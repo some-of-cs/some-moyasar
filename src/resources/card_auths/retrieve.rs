@@ -240,8 +240,13 @@ impl<'a, K: SecretAuthKey> CardAuthsService<'a, K> {
     /// ```
     pub async fn retrieve(&self, id: &CardAuthId) -> Result<CardAuthentication, MoyasarError> {
         let cfg = self.client().config();
-        retrieve_from_base_url(self.client().http(), &cfg.base_url, cfg.max_network_retries, id)
-            .await
+        retrieve_from_base_url(
+            self.client().http(),
+            &cfg.base_url,
+            cfg.max_network_retries,
+            id,
+        )
+        .await
     }
 }
 

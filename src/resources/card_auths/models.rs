@@ -328,7 +328,9 @@ mod tests {
         let auth = CardAuthentication {
             id: CardAuthId::new("ca_law_test").unwrap(),
             status: CardAuthStatus::Authenticated,
-            transaction_url: Some("https://api.moyasar.com/v1/card_auth/ca_law_test/prepare".into()),
+            transaction_url: Some(
+                "https://api.moyasar.com/v1/card_auth/ca_law_test/prepare".into(),
+            ),
             result: Some(CardAuthResult {
                 eci: Some("05".into()),
                 authentication_value: Some(secret_cavv.into()),
