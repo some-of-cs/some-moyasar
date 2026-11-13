@@ -1,0 +1,14 @@
+{
+  "moduleId": "module-2-payments",
+  "title": "Module 2: Payments (US-2.1.0..US-2.5.0)",
+  "branch": "feat/module-2-payments",
+  "baseCommit": "9587b33bec1357439eb260544772a202c175c068",
+  "updatedAt": "2026-11-13T11:02:00Z",
+  "items": {
+    "us-2.1.0": { "status": "In Progress", "branch": "feat/us-2.1.0-payment-create-retrieve-list", "unitCount": 5 },
+    "us-2.2.0": { "status": "In Progress", "branch": "feat/us-2.2.0-payment-lifecycle-operations", "unitCount": 5 },
+    "us-2.3.0": { "status": "In Progress", "branch": "feat/us-2.3.0-source-request-types", "unitCount": 6 },
+    "us-2.4.0": { "status": "In Progress", "branch": "feat/us-2.4.0-source-stcpay-sadad", "unitCount": 4 },
+    "us-2.5.0": { "status": "In Progress", "branch": "feat/us-2.5.0-marketplace-splits-aft", "unitCount": 4 }
+  }
+}

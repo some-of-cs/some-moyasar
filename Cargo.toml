@@ -10,6 +10,7 @@ repository = "https://github.com/some-of-cs/some-moyasar"
 default = ["core", "env-keys"]
 core = []
 env-keys = []
+payments = ["core"]
 
 [dependencies]
 base64 = "0.22"
