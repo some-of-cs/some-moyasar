@@ -1,0 +1,87 @@
+{
+  "moduleId": "module-4-tokens-invoices-3ds",
+  "title": "Module 4: Tokens, Invoices & 3DS Card Auth",
+  "baseBranch": "main",
+  "moduleBranch": "feat/module-4-tokens-invoices-3ds",
+  "updatedAt": "2026-11-13T11:05:00Z",
+  "items": {
+    "us-4.1.0": {
+      "status": "In Progress",
+      "branch": "feat/us-4.1.0-card-tokens",
+      "prNumber": null,
+      "unitCount": 4
+    },
+    "us-4.1.0/unit-1": {
+      "status": "Todo",
+      "branch": "feat/us-4.1.0/unit-1-token-model",
+      "prNumber": null
+    },
+    "us-4.1.0/unit-2": {
+      "status": "Todo",
+      "branch": "feat/us-4.1.0/unit-2-token-create",
+      "prNumber": null
+    },
+    "us-4.1.0/unit-3": {
+      "status": "Todo",
+      "branch": "feat/us-4.1.0/unit-3-token-retrieve",
+      "prNumber": null
+    },
+    "us-4.1.0/unit-4": {
+      "status": "Todo",
+      "branch": "feat/us-4.1.0/unit-4-token-delete",
+      "prNumber": null
+    },
+    "us-4.2.0": {
+      "status": "In Progress",
+      "branch": "feat/us-4.2.0-invoices",
+      "prNumber": null,
+      "unitCount": 5
+    },
+    "us-4.2.0/unit-1": {
+      "status": "Todo",
+      "branch": "feat/us-4.2.0/unit-1-invoice-model",
+      "prNumber": null
+    },
+    "us-4.2.0/unit-2": {
+      "status": "Todo",
+      "branch": "feat/us-4.2.0/unit-2-invoice-create",
+      "prNumber": null
+    },
+    "us-4.2.0/unit-3": {
+      "status": "Todo",
+      "branch": "feat/us-4.2.0/unit-3-invoice-retrieve-list",
+      "prNumber": null
+    },
+    "us-4.2.0/unit-4": {
+      "status": "Todo",
+      "branch": "feat/us-4.2.0/unit-4-invoice-update",
+      "prNumber": null
+    },
+    "us-4.2.0/unit-5": {
+      "status": "Todo",
+      "branch": "feat/us-4.2.0/unit-5-invoice-cancel",
+      "prNumber": null
+    },
+    "us-4.3.0": {
+      "status": "In Progress",
+      "branch": "feat/us-4.3.0-card-auth-3ds",
+      "prNumber": null,
+      "unitCount": 3
+    },
+    "us-4.3.0/unit-1": {
+      "status": "Todo",
+      "branch": "feat/us-4.3.0/unit-1-card-auth-model",
+      "prNumber": null
+    },
+    "us-4.3.0/unit-2": {
+      "status": "Todo",
+      "branch": "feat/us-4.3.0/unit-2-card-auth-create",
+      "prNumber": null
+    },
+    "us-4.3.0/unit-3": {
+      "status": "Todo",
+      "branch": "feat/us-4.3.0/unit-3-card-auth-retrieve",
+      "prNumber": null
+    }
+  }
+}

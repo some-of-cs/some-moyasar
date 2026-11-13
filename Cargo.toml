@@ -10,6 +10,10 @@ repository = "https://github.com/some-of-cs/some-moyasar"
 default = ["core", "env-keys"]
 core = []
 env-keys = []
+tokens = ["core"]
+invoices = ["core"]
+card-auths = ["core"]
+tokens-invoices-3ds = ["tokens", "invoices", "card-auths"]
 
 [dependencies]
 base64 = "0.22"

@@ -10,3 +10,6 @@ pub mod kernel;
 
 #[cfg(feature = "core")]
 pub mod prelude;
+
+#[cfg(any(feature = "tokens", feature = "invoices", feature = "card-auths"))]
+pub mod resources;
