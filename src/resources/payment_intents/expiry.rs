@@ -45,8 +45,8 @@ impl PaymentIntent {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Duration;
     use super::*;
+    use chrono::Duration;
 
     fn sample_intent(status: &str, expires_at: DateTime<Utc>) -> PaymentIntent {
         let created_at = expires_at - Duration::seconds(3600);

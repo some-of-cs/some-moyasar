@@ -46,8 +46,8 @@ pub fn validate_pre_fulfillment(
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, Utc};
     use super::*;
+    use chrono::{Duration, Utc};
 
     fn intent_with_expiry(status: &str, offset_secs: i64) -> PaymentIntent {
         let now = Utc::now();
