@@ -7,9 +7,10 @@ description = "Idiomatic, microkernel-architected Rust SDK for the Moyasar Payme
 repository = "https://github.com/some-of-cs/some-moyasar"
 
 [features]
-default = ["core", "env-keys"]
+default = ["core", "env-keys", "payment-intents"]
 core = []
 env-keys = []
+payment-intents = ["core"]
 
 [dependencies]
 base64 = "0.22"

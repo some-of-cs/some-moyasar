@@ -10,3 +10,6 @@ pub mod kernel;
 
 #[cfg(feature = "core")]
 pub mod prelude;
+
+#[cfg(feature = "core")]
+pub mod resources;
