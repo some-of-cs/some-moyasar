@@ -18,11 +18,18 @@ pub const MOYASAR_VERSION_HEADER: &str = "moyasar-version";
 /// `Basic base64("{api_key}:")` with a trailing colon and empty password.
 pub fn encode_basic_auth(key: &dyn AuthKey) -> Result<HeaderValue, MoyasarError> {
     let mut raw = format!("{}:", key.expose_secret());
-    let encoded = STANDARD.encode(raw.as_bytes());
+    let mut encoded = STANDARD.encode(raw.as_bytes());
     raw.zeroize();
 
-    let header_str = format!("Basic {encoded}");
-    HeaderValue::from_str(&header_str).map_err(|_| MoyasarError::InvalidKey)
+    let mut header_str = format!("Basic {encoded}");
+    encoded.zeroize();
+
+    let result = HeaderValue::from_str(&header_str).map_err(|_| MoyasarError::InvalidKey);
+    header_str.zeroize();
+
+    let mut header = result?;
+    header.set_sensitive(true);
+    Ok(header)
 }
 
 /// Builds default headers (`Authorization`, `Moyasar-Version`, `Accept`) for all requests.
@@ -63,6 +70,7 @@ mod tests {
         let header = HeaderValue::try_from(&key).expect("encodes header");
         let expected_b64 = STANDARD.encode("sk_test_YOUR_SECRET_KEY:");
         assert_eq!(header.to_str().unwrap(), format!("Basic {expected_b64}"));
+        assert!(header.is_sensitive());
     }
 
     #[test]
