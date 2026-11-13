@@ -2,6 +2,8 @@
 
 use core::fmt;
 use secrecy::{ExposeSecret, SecretString};
+#[cfg(feature = "env-keys")]
+use zeroize::Zeroize;
 
 use crate::kernel::error::MoyasarError;
 
@@ -45,36 +47,69 @@ pub struct PublishableKey {
 
 impl SecretKey {
     /// Parses and validates a Moyasar secret key (`sk_live_...` or `sk_test_...`).
+    ///
+    /// With the `env-keys` feature enabled, values starting with `$` (`$VAR` or `${VAR}`)
+    /// are resolved from the process environment or `.env*` files before validation.
     pub fn new(raw: &str) -> Result<Self, MoyasarError> {
-        let mode = if raw.starts_with("sk_live_") {
-            AuthMode::Live
-        } else if raw.starts_with("sk_test_") {
-            AuthMode::Test
-        } else {
-            return Err(MoyasarError::InvalidKey);
-        };
-        Ok(Self {
-            inner: SecretString::from(raw.to_owned()),
-            mode,
-        })
+        let (inner, mode) = resolve_and_build(raw, parse_secret_mode)?;
+        Ok(Self { inner, mode })
     }
 }
 
 impl PublishableKey {
     /// Parses and validates a Moyasar publishable key (`pk_live_...` or `pk_test_...`).
+    ///
+    /// With the `env-keys` feature enabled, values starting with `$` (`$VAR` or `${VAR}`)
+    /// are resolved from the process environment or `.env*` files before validation.
     pub fn new(raw: &str) -> Result<Self, MoyasarError> {
-        let mode = if raw.starts_with("pk_live_") {
-            AuthMode::Live
-        } else if raw.starts_with("pk_test_") {
-            AuthMode::Test
-        } else {
-            return Err(MoyasarError::InvalidKey);
-        };
-        Ok(Self {
-            inner: SecretString::from(raw.to_owned()),
-            mode,
-        })
+        let (inner, mode) = resolve_and_build(raw, parse_publishable_mode)?;
+        Ok(Self { inner, mode })
     }
+}
+
+fn parse_secret_mode(key: &str) -> Result<AuthMode, MoyasarError> {
+    if key.starts_with("sk_live_") {
+        Ok(AuthMode::Live)
+    } else if key.starts_with("sk_test_") {
+        Ok(AuthMode::Test)
+    } else {
+        Err(MoyasarError::InvalidKey)
+    }
+}
+
+fn parse_publishable_mode(key: &str) -> Result<AuthMode, MoyasarError> {
+    if key.starts_with("pk_live_") {
+        Ok(AuthMode::Live)
+    } else if key.starts_with("pk_test_") {
+        Ok(AuthMode::Test)
+    } else {
+        Err(MoyasarError::InvalidKey)
+    }
+}
+
+#[cfg(feature = "env-keys")]
+fn resolve_and_build(
+    raw: &str,
+    parse_mode: fn(&str) -> Result<AuthMode, MoyasarError>,
+) -> Result<(SecretString, AuthMode), MoyasarError> {
+    if raw.starts_with('$') {
+        let mut resolved = crate::kernel::env::resolve_env_secret(raw)?;
+        let mode = parse_mode(&resolved);
+        let inner = SecretString::from(resolved.as_str());
+        resolved.zeroize();
+        return Ok((inner, mode?));
+    }
+    let mode = parse_mode(raw)?;
+    Ok((SecretString::from(raw), mode))
+}
+
+#[cfg(not(feature = "env-keys"))]
+fn resolve_and_build(
+    raw: &str,
+    parse_mode: fn(&str) -> Result<AuthMode, MoyasarError>,
+) -> Result<(SecretString, AuthMode), MoyasarError> {
+    let mode = parse_mode(raw)?;
+    Ok((SecretString::from(raw), mode))
 }
 
 impl AuthKey for SecretKey {
@@ -125,8 +160,11 @@ mod tests {
         let test = SecretKey::new("sk_test_abc123").expect("valid test secret");
         assert_eq!(test.mode(), AuthMode::Test);
 
-        let pk = PublishableKey::new("pk_test_xyz").expect("valid publishable");
-        assert_eq!(pk.mode(), AuthMode::Test);
+        let pk_live = PublishableKey::new("pk_live_xyz").expect("valid live publishable");
+        assert_eq!(pk_live.mode(), AuthMode::Live);
+
+        let pk_test = PublishableKey::new("pk_test_xyz").expect("valid test publishable");
+        assert_eq!(pk_test.mode(), AuthMode::Test);
 
         assert!(matches!(
             SecretKey::new("pk_test_wrong"),
@@ -145,8 +183,88 @@ mod tests {
     #[test]
     fn redacts_keys_in_debug_output() {
         let sk = SecretKey::new("sk_live_987654321secret").expect("valid key");
-        let dbg = format!("{sk:?}");
-        assert_eq!(dbg, "SecretKey([REDACTED])");
-        assert!(!dbg.contains("sk_live"));
+        let sk_dbg = format!("{sk:?}");
+        assert_eq!(sk_dbg, "SecretKey([REDACTED])");
+        assert!(!sk_dbg.contains("sk_live"));
+
+        let pk = PublishableKey::new("pk_test_987654321pub").expect("valid key");
+        let pk_dbg = format!("{pk:?}");
+        assert_eq!(pk_dbg, "PublishableKey([REDACTED])");
+        assert!(!pk_dbg.contains("pk_test"));
+    }
+
+    #[cfg(feature = "env-keys")]
+    mod env_resolution_tests {
+        use super::*;
+        use std::fs;
+        use std::path::PathBuf;
+        use std::sync::Mutex;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static CWD_LOCK: Mutex<()> = Mutex::new(());
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        struct ScopedDir {
+            original: PathBuf,
+            temp: PathBuf,
+        }
+
+        impl ScopedDir {
+            fn enter(prefix: &str, env_content: &str) -> Self {
+                let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let temp = std::env::temp_dir().join(format!(
+                    "some_moyasar_auth_test_{prefix}_{}_{id}",
+                    std::process::id()
+                ));
+                fs::create_dir_all(&temp).expect("create temp dir");
+                fs::write(temp.join(".env"), env_content).expect("write .env");
+                let original = std::env::current_dir().expect("read current_dir");
+                std::env::set_current_dir(&temp).expect("set current_dir");
+                Self { original, temp }
+            }
+        }
+
+        impl Drop for ScopedDir {
+            fn drop(&mut self) {
+                let _ = std::env::set_current_dir(&self.original);
+                let _ = fs::remove_dir_all(&self.temp);
+            }
+        }
+
+        #[test]
+        fn resolves_secret_and_publishable_keys_from_dotenv() {
+            let _guard = CWD_LOCK.lock().expect("lock cwd");
+            let _dir = ScopedDir::enter(
+                "valid",
+                "MOYASAR_SK=sk_test_from_dotenv\nMOYASAR_PK=pk_live_from_dotenv\n",
+            );
+
+            let sk = SecretKey::new("$MOYASAR_SK").expect("resolve secret key");
+            assert_eq!(sk.mode(), AuthMode::Test);
+            assert_eq!(sk.expose_secret(), "sk_test_from_dotenv");
+
+            let pk = PublishableKey::new("${MOYASAR_PK}").expect("resolve publishable key");
+            assert_eq!(pk.mode(), AuthMode::Live);
+            assert_eq!(pk.expose_secret(), "pk_live_from_dotenv");
+        }
+
+        #[test]
+        fn rejects_invalid_or_missing_env_keys() {
+            let _guard = CWD_LOCK.lock().expect("lock cwd");
+            let _dir = ScopedDir::enter("invalid", "BAD_SK=pk_test_wrong_prefix\n");
+
+            assert!(matches!(
+                SecretKey::new("$BAD_SK"),
+                Err(MoyasarError::InvalidKey)
+            ));
+            assert!(matches!(
+                SecretKey::new("$MISSING_MOYASAR_KEY_XYZ"),
+                Err(MoyasarError::InvalidKey)
+            ));
+            assert!(matches!(
+                SecretKey::new("$PATH"),
+                Err(MoyasarError::InvalidKey)
+            ));
+        }
     }
 }

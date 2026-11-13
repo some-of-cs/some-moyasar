@@ -2,6 +2,8 @@
 
 pub mod auth;
 pub mod client;
+#[cfg(feature = "env-keys")]
+pub mod env;
 pub mod transport;
 
 pub mod idempotency;
