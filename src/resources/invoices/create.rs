@@ -402,21 +402,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_invoice_retries_transient_503_and_recovers() {
+    async fn create_invoice_does_not_retry_transient_503() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/v1/invoices"))
             .respond_with(ResponseTemplate::new(503).set_body_string("Service Unavailable"))
-            .up_to_n_times(1)
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        let response_json =
-            sample_invoice_json("33333333-3333-4333-8333-333333333333", 50_000, "Recovered");
-        Mock::given(method("POST"))
-            .and(path("/v1/invoices"))
-            .respond_with(ResponseTemplate::new(201).set_body_json(&response_json))
             .expect(1)
             .mount(&server)
             .await;
@@ -426,10 +416,11 @@ mod tests {
         let params = CreateInvoiceParams::new(Amount::from_minor(50_000), Currency::SAR)
             .description("Recovered");
 
-        let invoice: Invoice = post_with_base_url(&client, &server.uri(), INVOICES_PATH, &params)
-            .await
-            .expect("recovers on retry");
+        let err =
+            post_with_base_url::<_, _, Invoice>(&client, &server.uri(), INVOICES_PATH, &params)
+                .await
+                .expect_err("invoice creation must not retry");
 
-        assert_eq!(invoice.description.as_deref(), Some("Recovered"));
+        assert!(matches!(err, MoyasarError::ServerError { status: 503, .. }));
     }
 }

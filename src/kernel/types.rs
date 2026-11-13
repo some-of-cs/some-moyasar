@@ -54,7 +54,10 @@ impl Amount {
     /// Returns `None` when the conversion cannot be represented by `i64`.
     pub const fn from_major(major: i64, currency: Currency) -> Option<Self> {
         let factor = 10_i64.pow(currency.exponent());
-        major.checked_mul(factor).map(Self)
+        match major.checked_mul(factor) {
+            Some(minor) => Some(Self(minor)),
+            None => None,
+        }
     }
 
     /// Returns the raw integer value in minor units.
