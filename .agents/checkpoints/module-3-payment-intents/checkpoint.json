@@ -2,17 +2,59 @@
   "moduleId": "module-3-payment-intents",
   "title": "Module 3: Payment Intents",
   "baseCommit": "9587b33bec1357439eb260544772a202c175c068",
-  "updatedAt": "2026-11-13T11:05:00Z",
+  "updatedAt": "2026-11-13T11:07:00Z",
   "items": {
-    "us-3.1.0": { "status": "In Progress", "branch": "feat/us-3.1.0-intent-create-retrieve-cancel", "prNumber": null, "unitCount": 4 },
-    "us-3.1.0/unit-1": { "status": "In Progress", "branch": "feat/us-3.1.0/unit-1-intent-model", "prNumber": null },
-    "us-3.1.0/unit-2": { "status": "In Progress", "branch": "feat/us-3.1.0/unit-2-create-cancel", "prNumber": null },
-    "us-3.1.0/unit-3": { "status": "In Progress", "branch": "feat/us-3.1.0/unit-3-expiry-guard", "prNumber": null },
-    "us-3.1.0/unit-4": { "status": "In Progress", "branch": "feat/us-3.1.0/unit-4-retrieve-endpoint", "prNumber": null },
-    "us-3.2.0": { "status": "In Progress", "branch": "feat/us-3.2.0-intent-fulfill", "prNumber": null, "unitCount": 4 },
-    "us-3.2.0/unit-1": { "status": "In Progress", "branch": "feat/us-3.2.0/unit-1-fulfill-params", "prNumber": null },
-    "us-3.2.0/unit-2": { "status": "In Progress", "branch": "feat/us-3.2.0/unit-2-fulfill-endpoint", "prNumber": null },
-    "us-3.2.0/unit-3": { "status": "In Progress", "branch": "feat/us-3.2.0/unit-3-fulfill-lifecycle", "prNumber": null },
-    "us-3.2.0/unit-4": { "status": "In Progress", "branch": "feat/us-3.2.0/unit-4-fulfill-guard", "prNumber": null }
+    "us-3.1.0": {
+      "status": "Merged",
+      "branch": "feat/us-3.1.0-intent-create-retrieve-cancel",
+      "prNumber": 39,
+      "unitCount": 4
+    },
+    "us-3.1.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-3.1.0/unit-1-intent-model",
+      "prNumber": 20
+    },
+    "us-3.1.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-3.1.0/unit-2-create-cancel",
+      "prNumber": 21
+    },
+    "us-3.1.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-3.1.0/unit-3-expiry-guard",
+      "prNumber": 19
+    },
+    "us-3.1.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-3.1.0/unit-4-retrieve-endpoint",
+      "prNumber": 22
+    },
+    "us-3.2.0": {
+      "status": "Merged",
+      "branch": "feat/us-3.2.0-intent-fulfill",
+      "prNumber": 38,
+      "unitCount": 4
+    },
+    "us-3.2.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-3.2.0/unit-1-fulfill-params",
+      "prNumber": 23
+    },
+    "us-3.2.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-3.2.0/unit-2-fulfill-endpoint",
+      "prNumber": 24
+    },
+    "us-3.2.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-3.2.0/unit-3-fulfill-lifecycle",
+      "prNumber": 25
+    },
+    "us-3.2.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-3.2.0/unit-4-fulfill-guard",
+      "prNumber": 26
+    }
   }
 }
