@@ -40,96 +40,231 @@ pub struct SecretKey {
 
 /// Client-originated Moyasar publishable key with zeroized storage and redacted `Debug`.
 #[derive(Clone)]
-pub struÐAÕ‰±¥Í¡…‰±•-•äì(€€€¥¹¹•ÈèM•É•ÑMÑÉ¥¹œ°(€€€»ÙNˆ]][ÙKŸB‚š[\ÙXÜ™]Ù^HÂˆËËÈ\œÙ\È[™˜[Y]\ÈH[ÞX\Ø\ˆÙXÜ™]Ù^H
-Ú×Û]™WË‹‹˜ÜˆÚ×Ý\ÝË‹‹˜
-K‚ˆËËÂˆËËÈÚ[ˆH[‹ZÙ^\Ø™X]\™H\È[˜X›Y[œ]ÈÝ\[™ÈÚ]	\™H™\ÛÛ™YˆËËÈœ›ÛHH›ØÙ\ÜÈ[š\›Û›Y[Üˆ™[Š˜š[\È™Y›Ü™H™Yš^˜[Y][Û‹‚ˆXˆ›ˆ™]Ê˜]Îˆ	œÝŠHOˆ™\Ý[Ù[‹[ÞX\Ø\‘\œ›ÜˆÂˆÖØÙ™Ê™X]\™HH™[‹ZÙ^\ÈŠWBˆYˆ˜]ËœÝ\×ÝÚ]
-	É	ÊHÂˆ]]]™\ÛÛ™YHÜ˜]NŽšÙ\›™[Ž™[ŽŽœ™\ÛÛ™WÙ[—ÜÙXÜ™]
-˜]ÊOÎÂˆ]Ý]HÙ[ŽŽ™œ›ÛWÜ™\ÛÛ™Y
-	œ™\ÛÛ™Y
-NÂˆ™\ÛÛ™Yž™\›Ú^™J
-NÂˆ™]\›ˆÝ]ÂˆBˆÙ[ŽŽ™œ›ÛWÜ™\ÛÛ™Y
-˜]ÊBˆB‚ˆ›ˆœ›ÛWÜ™\ÛÛ™Y
-˜]Îˆ	œÝŠHOˆ™\Ý[Ù[‹[ÞX\Ø\‘\œ›ÜˆÂˆ][ÙHHÙ[ŽŽœ\œÙWÛ[ÙJ˜]ÊOÎÂˆÚÊÙ[ˆÂˆ[›™\ŽˆÙXÜ™]Ýš[™ÎŽ™œ›ÛJ˜]Ë×ÛÝÛ™Y
+pub struct PublishableKey {
+    inner: SecretString,
+    mode: AuthMode,
+}
 
-JKˆ[ÙKˆJBˆB‚ˆ›ˆ\œÙWÛ[ÙJ˜]Îˆ	œÝŠHOˆ™\Ý[]][ÙK[ÞX\Ø\‘\œ›ÜˆÂˆYˆ˜]ËœÝ\×ÝÚ]
-œÚ×Û]™WÈŠHÂˆÚÊ]][ÙNŽ“]™JBˆH[ÙHYˆ˜]ËœÝ\×ÝÚ]
-œÚ×Ý\ÝÈŠHÂˆÚÊ]][ÙNŽ•\Ý
-BˆH[ÙHÂˆ\œŠ[ÞX\Ø\‘\œ›ÜŽŽ’[˜[YÙ^JBˆBˆBŸB‚š[\X›\ÚX›RÙ^HÂˆËËÈ\œÙ\È[™˜[Y]\ÈH[ÞX\Ø\ˆX›\ÚX›HÙ^H
-×Û]™WË‹‹˜Üˆ×Ý\ÝË‹‹˜
-K‚ˆËËÂˆËËÈÚ[ˆH[‹ZÙ^\Ø™X]\™H\È[˜X›Y[œ]ÈÝ\[™ÈÚ]	\™H™\ÛÛ™YˆËËÈœ›ÛHH›ØÙ\ÜÈ[š\›Û›Y[Üˆ™[Š˜š[\È™Y›Ü™H™Yš^˜[Y][Û‹‚ˆXˆ›ˆ™]Ê˜]Îˆ	œÝŠHOˆ™\Ý[Ù[‹[ÞX\Ø\‘\œ›ÜˆÂˆÖØÙ™Ê™X]\™HH™[‹ZÙ^\ÈŠWBˆYˆ˜]ËœÝ\×ÝÚ]
-	É	ÊHÂˆ]]]™\ÛÛ™YHÜ˜]NŽšÙ\›™[Ž™[ŽŽœ™\ÛÛ™WÙ[—ÜÙXÜ™]
-˜]ÊOÎÂˆ]Ý]HÙ[ŽŽ™œ›ÛWÜ™\ÛÛ™Y
-	œ™\ÛÛ™Y
-NÂˆ™\ÛÛ™Yž™\›Ú^™J
-NÂˆ™]\›ˆÝ]ÂˆBˆÙ[ŽŽ™œ›ÛWÜ™\ÛÛ™Y
-˜]ÊBˆB‚ˆ›ˆœ›ÛWÜ™\ÛÛ™Y
-˜]Îˆ	œÝŠHOˆ™\Ý[Ù[‹[ÞX\Ø\‘\œ›ÜˆÂˆ][ÙHHÙ[ŽŽœ\œÙWÛ[ÙJ˜]ÊOÎÂˆÚÊÙ[ˆÂˆ[›™\ŽˆÙXÜ™]Ýš[™ÎŽ™œ›ÛJ˜]Ë×ÛÝÛ™Y
+impl SecretKey {
+    /// Parses and validates a Moyasar secret key (`sk_live_...` or `sk_test_...`).
+    ///
+    /// With the `env-keys` feature enabled, values starting with `$` (`$VAR` or `${VAR}`)
+    /// are resolved from the process environment or `.env*` files before validation.
+    pub fn new(raw: &str) -> Result<Self, MoyasarError> {
+        let (inner, mode) = resolve_and_build(raw, parse_secret_mode)?;
+        Ok(Self { inner, mode })
+    }
+}
 
-JKˆ[ÙKˆJBˆB‚ˆ›ˆ\œÙWÛ[ÙJ˜]Îˆ	œÝŠHOˆ™\Ý[]][ÙK[ÞX\Ø\‘\œ›ÜˆÂˆYˆ˜]ËœÝ\×ÝÚ]
-œ×Û]™WÈŠHÂˆÚÊ]][ÙNŽ“]™JBˆH[ÙHYˆ˜]ËœÝ\×ÝÚ]
-œ×Ý\ÝÈŠHÂˆÚÊ]][ÙNŽ•\Ý
-BˆH[ÙHÂˆ\œŠ[ÞX\Ø\‘\œ›ÜŽŽ’[˜[YÙ^JBˆBˆBŸB‚š[\]]Ù^H›ÜˆÙXÜ™]Ù^HÂˆ›ˆ^ÜÙWÜÙXÜ™]
-	œÙ[ŠHOˆ	œÝˆÂˆÙ[‹š[›™\‹™^ÜÙWÜÙXÜ™]
+impl PublishableKey {
+    /// Parses and validates a Moyasar publishable key (`pk_live_...` or `pk_test_...`).
+    ///
+    /// With the `env-keys` feature enabled, values starting with `$` (`$VAR` or `${VAR}`)
+    /// are resolved from the process environment or `.env*` files before validation.
+    pub fn new(raw: &str) -> Result<Self, MoyasarError> {
+        let (inner, mode) = resolve_and_build(raw, parse_publishable_mode)?;
+        Ok(Self { inner, mode })
+    }
+}
 
-BˆB‚ˆ›ˆ[ÙJ	œÙ[ŠHOˆ]][ÙHÂˆÙ[‹›[ÙBˆBŸB‚š[\ÙXÜ™]]]Ù^H›ÜˆÙXÜ™]Ù^HßB‚š[\]]Ù^H›ÜˆX›\ÚX›RÙ^HÂˆ›ˆ^ÜÙWÜÙXÜ™]
-	œÙ[ŠHOˆ	œÝˆÂˆÙ[‹š[›™\‹™^ÜÙWÜÙXÜ™]
+fn parse_secret_mode(key: &str) -> Result<AuthMode, MoyasarError> {
+    if key.starts_with("sk_live_") {
+        Ok(AuthMode::Live)
+    } else if key.starts_with("sk_test_") {
+        Ok(AuthMode::Test)
+    } else {
+        Err(MoyasarError::InvalidKey)
+    }
+}
 
-BˆB‚ˆ›ˆ[ÙJ	œÙ[ŠHOˆ]][ÙHÂˆÙ[‹›[ÙBˆBŸB‚š[\X›\ÚX›P]]Ù^H›ÜˆX›\ÚX›RÙ^HßB‚š[\›]Ž‘XYÈ›ÜˆÙXÜ™]Ù^HÂˆ›ˆ›]
-	œÙ[‹Žˆ	›]]›]Ž‘›Ü›X]\	×ÏŠHOˆ›]Ž”™\Ý[Âˆ‹Üš]WÜÝŠ”ÙXÜ™]Ù^JÔ‘QPÕQJHŠBˆBŸB‚š[\›]Ž‘XYÈ›ÜˆX›\ÚX›RÙ^HÂˆ›ˆ›]
-	œÙ[‹Žˆ	›]]›]Ž‘›Ü›X]\	×ÏŠHOˆ›]Ž”™\Ý[Âˆ‹Üš]WÜÝŠ”X›\ÚX›RÙ^JÔ‘QPÕQJHŠBˆBŸB‚ˆÖØÙ™Ê\Ý
-WB›[Ù\ÝÈÂˆ\ÙHÝ\\ŽŽŠŽÂ‚ˆÖÝ\ÝBˆ›ˆ˜[Y]\×ÚÙ^WÜ™Yš^\×Ø[™Û[Ù\Ê
-HÂˆ]]™HHÙXÜ™]Ù^NŽ›™]ÊœÚ×Û]™WØX˜ÌLŒÈŠK™^XÝ
-˜[Y]™HÙXÜ™]ŠNÂˆ\ÜÙ\Ù\HJ]™K›[ÙJ
-K]][ÙNŽ“]™JNÂ‚ˆ]\ÝHÙXÜ™]Ù^NŽ›™]ÊœÚ×Ý\ÝØX˜ÌLŒÈŠK™^XÝ
-˜[Y\ÝÙXÜ™]ŠNÂˆ\ÜÙ\Ù\HJ\Ý›[ÙJ
-K]][ÙNŽ•\Ý
-NÂ‚ˆ]ÈHX›\ÚX›RÙ^NŽ›™]Êœ×Ý\ÝÞ^ˆŠK™^XÝ
-˜[YX›\ÚX›HŠNÂˆ\ÜÙ\Ù\HJË›[ÙJ
-K]][ÙNŽ•\Ý
-NÂ‚ˆ\ÜÙ\JX]Ú\ÈJˆÙXÜ™]Ù^NŽ›™]Êœ×Ý\ÝÝÜ›Û™ÈŠKˆ\œŠ[ÞX\Ø\‘\œ›ÜŽŽ’[˜[YÙ^JBˆ
-JNÂˆ\ÜÙ\JX]Ú\ÈJˆÙXÜ™]Ù^NŽ›™]Ê˜X˜ÌLŒÈŠKˆ\œŠ[ÞX\Ø\‘\œ›ÜŽŽ’[˜[YÙ^JBˆ
-JNÂˆ\ÜÙ\JX]Ú\ÈJˆX›\ÚX›RÙ^NŽ›™]ÊœÚ×Û]™WÝÜ›Û™ÈŠKˆ\œŠ[ÞX\Ø\‘\œ›ÜŽŽ’[˜[YÙ^JBˆ
-JNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™YXÝ×ÚÙ^\×Ú[—ÙXY×ÛÝ]]
+fn parse_publishable_mode(key: &str) -> Result<AuthMode, MoyasarError> {
+    if key.starts_with("pk_live_") {
+        Ok(AuthMode::Live)
+    } else if key.starts_with("pk_test_") {
+        Ok(AuthMode::Test)
+    } else {
+        Err(MoyasarError::InvalidKey)
+    }
+}
 
-HÂˆ]ÚÈHÙXÜ™]Ù^NŽ›™]ÊœÚ×Û]™WÎNÍMÌŒ\ÙXÜ™]ŠK™^XÝ
-˜[YÙ^HŠNÂˆ]™ÈH›Ü›X]JžÜÚÎßHŠNÂˆ\ÜÙ\Ù\HJ™Ë”ÙXÜ™]Ù^JÔ‘QPÕQJHŠNÂˆ\ÜÙ\JY™Ë˜ÛÛZ[œÊœÚ×Û]™HŠJNÂˆB‚ˆÖØÙ™Ê™X]\™HH™[‹ZÙ^\ÈŠWBˆ[Ù[—Ü™\ÛÛ][Û—Ý\ÝÈÂˆ\ÙHÝ\\ŽŽŠŽÂˆ\ÙHÝŽ™œÎÂˆ\ÙHÝŽœ]Ž”]YŽÂˆ\ÙHÝŽœÞ[˜ÎŽ“]]^Âˆ\ÙHÝŽœÞ[˜ÎŽ˜]ÛZXÎŽžÐ]ÛZXÕMÜ™\š[™ßNÂ‚ˆÝ]XÈÕÑÓÐÒÎˆ]]^
+#[cfg(feature = "env-keys")]
+fn resolve_and_build(
+    raw: &str,
+    parse_mode: fn(&str) -> Result<AuthMode, MoyasarError>,
+) -> Result<(SecretString, AuthMode), MoyasarError> {
+    if raw.starts_with('$') {
+        let mut resolved = crate::kernel::env::resolve_env_secret(raw)?;
+        let mode = parse_mode(&resolved);
+        let inner = SecretString::from(resolved.as_str());
+        resolved.zeroize();
+        return Ok((inner, mode?));
+    }
+    let mode = parse_mode(raw)?;
+    Ok((SecretString::from(raw), mode))
+}
 
-OˆH]]^Ž›™]Ê
+#[cfg(not(feature = "env-keys"))]
+fn resolve_and_build(
+    raw: &str,
+    parse_mode: fn(&str) -> Result<AuthMode, MoyasarError>,
+) -> Result<(SecretString, AuthMode), MoyasarError> {
+    let mode = parse_mode(raw)?;
+    Ok((SecretString::from(raw), mode))
+}
 
-JNÂˆÝ]XÈÓÕS•TŽˆ]ÛZXÕMH]ÛZXÕMŽ›™]Ê
-NÂ‚ˆÝXÝÝÙ[\ÝX\™Âˆ™]Žˆ]Y‹ˆ[\ˆ]Y‹ˆB‚ˆ[\ÝÙ[\ÝX\™Âˆ›ˆ[\Š[—ØÛÛ[ˆ	œÝŠHOˆÙ[ˆÂˆ]YHÓÕS•T‹™™]ÚØY
-KÜ™\š[™ÎŽ”™[^Y
-NÂˆ][\HÝŽ™[ŽŽ[\Ù\Š
-Kš›Ú[Š›Ü›X]JˆœÛÛYWÛ[ÞX\Ø\—Ø]]Ý\ÝÞßWÞÚYH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+impl AuthKey for SecretKey {
+    fn expose_secret(&self) -> &str {
+        self.inner.expose_secret()
+    }
 
-Bˆ
-JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
-	[\
-K™^XÝ
-˜Ü™X]H[\\ˆŠNÂˆœÎŽÜš]J[\š›Ú[Š‹™[ˆŠK[—ØÛÛ[
-K™^XÝ
-Üš]H™[ˆŠNÂˆ]™]ˆHÝŽ™[ŽŽ˜Ý\œ™[Ù\Š
-K™^XÝ
-™Ù]ÝÙŠNÂˆÝŽ™[ŽŽœÙ]ØÝ\œ™[Ù\Š	[\
-K™^XÝ
-œÙ]ÝÙŠNÂˆÙ[ˆÈ™]‹[\BˆBˆB‚ˆ[\›Ü›ÜˆÝÙ[\ÝX\™Âˆ›ˆ›Ü
-	›]]Ù[ŠHÂˆ]ÈHÝŽ™[ŽŽœÙ]ØÝ\œ™[Ù\Š	œÙ[‹œ™]ŠNÂˆ]ÈHœÎŽœ™[[Ý™WÙ\—Ø[
-	œÙ[‹[\
-NÂˆBˆB‚ˆÖÝ\ÝBˆ›ˆ™\ÛÛ™\×ÜÙXÜ™]Ø[™ÜX›\ÚX›WÚÙ^\×Ùœ›ÛWÙÝ[Š
-HÂˆ]ÛØÚÈHÕÑÓÐÒË›ØÚÊ
-K™^XÝ
-˜XÜ]Z\™HÝÙØÚÈŠNÂˆ]ÙÝX\™HÝÙ[\ÝX\™Ž™[\Šˆ“SÖPTÐT—ÔÑPÔ‘UÒÑVO\Ú×Û]™WÙœ›ÛWÙÝ[—“SÖPTÐT—ÔP—ÒÑVOWœ×Ý\ÝÙœ›ÛWÙÝ[——ˆ‹ˆ
-NÂ‚ˆ]ÚÈHÙXÜ™]Ù^NŽ›™]Ê‰SÖPTÐT—ÔÑPÔ‘UÒÑVHŠK™^XÝ
-œ™\ÛÛ™HÙXÜ™]Ù^HŠNÂˆ\ÜÙ\Ù\HJÚË›[ÙJ
-K]][ÙNŽ“]™JNÂˆ\ÜÙ\Ù\HJÚË™^ÜÙWÜÙXÜ™]
+    fn mode(&self) -> AuthMode {
+        self.mode
+    }
+}
 
-KœÚ×Û]™WÙœ›ÛWÙÝ[ˆŠNÂ‚ˆ]ÈHX›\ÚX›RÙ^NŽ›™]Ê‰ÓSÖPTÐT—ÔP—ÒÑV_HŠK™^XÝ
-œ™\ÛÛ™HX›\ÚX›HÙ^HŠNÂˆ\ÜÙ\Ù\HJË›[ÙJ
-K]][ÙNŽ•\Ý
-NÂˆ\ÜÙ\Ù\HJË™^ÜÙWÜÙXÜ™]
+impl SecretAuthKey for SecretKey {}
 
-Kœ×Ý\ÝÙœ›ÛWÙÝ[ˆŠNÂ‚ˆ\ÜÙ\JX]Ú\ÈJˆÙXÜ™]Ù^NŽ›™]Ê‰SÖPTÐT—ÔP—ÒÑVHŠKˆ\œŠ[ÞX\Ø\‘\œ›ÜŽŽ’[˜[YÙ^JBˆ
-JNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™\ÛÛ™\×Ü›ØÙ\Ü×Ù[—Ø[™Ü™Z™XÝ×Ú[˜[YÜ™Yš^
+impl AuthKey for PublishableKey {
+    fn expose_secret(&self) -> &str {
+        self.inner.expose_secret()
+    }
 
-HÂˆ\ÜÙ\JX]Ú\ÈJˆÙXÜ™]Ù^NŽ›™]Ê‰UŠKˆ\œŠ[ÞX\Ø\‘\œ›ÜŽŽ’[˜[YÙ^JBˆ
-JNÂˆBˆBŸB
+    fn mode(&self) -> AuthMode {
+        self.mode
+    }
+}
+
+impl PublishableAuthKey for PublishableKey {}
+
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SecretKey([REDACTED])")
+    }
+}
+
+impl fmt::Debug for PublishableKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PublishableKey([REDACTED])")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_key_prefixes_and_modes() {
+        let live = SecretKey::new("sk_live_abc123").expect("valid live secret");
+        assert_eq!(live.mode(), AuthMode::Live);
+
+        let test = SecretKey::new("sk_test_abc123").expect("valid test secret");
+        assert_eq!(test.mode(), AuthMode::Test);
+
+        let pk_live = PublishableKey::new("pk_live_xyz").expect("valid live publishable");
+        assert_eq!(pk_live.mode(), AuthMode::Live);
+
+        let pk_test = PublishableKey::new("pk_test_xyz").expect("valid test publishable");
+        assert_eq!(pk_test.mode(), AuthMode::Test);
+
+        assert!(matches!(
+            SecretKey::new("pk_test_wrong"),
+            Err(MoyasarError::InvalidKey)
+        ));
+        assert!(matches!(
+            SecretKey::new("abc123"),
+            Err(MoyasarError::InvalidKey)
+        ));
+        assert!(matches!(
+            PublishableKey::new("sk_live_wrong"),
+            Err(MoyasarError::InvalidKey)
+        ));
+    }
+
+    #[test]
+    fn redacts_keys_in_debug_output() {
+        let sk = SecretKey::new("sk_live_987654321secret").expect("valid key");
+        let sk_dbg = format!("{sk:?}");
+        assert_eq!(sk_dbg, "SecretKey([REDACTED])");
+        assert!(!sk_dbg.contains("sk_live"));
+
+        let pk = PublishableKey::new("pk_test_987654321pub").expect("valid key");
+        let pk_dbg = format!("{pk:?}");
+        assert_eq!(pk_dbg, "PublishableKey([REDACTED])");
+        assert!(!pk_dbg.contains("pk_test"));
+    }
+
+    #[cfg(feature = "env-keys")]
+    mod env_resolution_tests {
+        use super::*;
+        use std::fs;
+        use std::path::PathBuf;
+        use std::sync::Mutex;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static CWD_LOCK: Mutex<()> = Mutex::new(());
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        struct ScopedDir {
+            original: PathBuf,
+            temp: PathBuf,
+        }
+
+        impl ScopedDir {
+            fn enter(prefix: &str, env_content: &str) -> Self {
+                let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let temp = std::env::temp_dir().join(format!(
+                    "some_moyasar_auth_test_{prefix}_{}_{id}",
+                    std::process::id()
+                ));
+                fs::create_dir_all(&temp).expect("create temp dir");
+                fs::write(temp.join(".env"), env_content).expect("write .env");
+                let original = std::env::current_dir().expect("read current_dir");
+                std::env::set_current_dir(&temp).expect("set current_dir");
+                Self { original, temp }
+            }
+        }
+
+        impl Drop for ScopedDir {
+            fn drop(&mut self) {
+                let _ = std::env::set_current_dir(&self.original);
+                let _ = fs::remove_dir_all(&self.temp);
+            }
+        }
+
+        #[test]
+        fn resolves_secret_and_publishable_keys_from_dotenv() {
+            let _guard = CWD_LOCK.lock().expect("lock cwd");
+            let _dir = ScopedDir::enter(
+                "valid",
+                "MOYASAR_SK=sk_test_from_dotenv\nMOYASAR_PK=pk_live_from_dotenv\n",
+            );
+
+            let sk = SecretKey::new("$MOYASAR_SK").expect("resolve secret key");
+            assert_eq!(sk.mode(), AuthMode::Test);
+            assert_eq!(sk.expose_secret(), "sk_test_from_dotenv");
+
+            let pk = PublishableKey::new("${MOYASAR_PK}").expect("resolve publishable key");
+            assert_eq!(pk.mode(), AuthMode::Live);
+            assert_eq!(pk.expose_secret(), "pk_live_from_dotenv");
+        }
+
+        #[test]
+        fn rejects_invalid_or_missing_env_keys() {
+            let _guard = CWD_LOCK.lock().expect("lock cwd");
+            let _dir = ScopedDir::enter("invalid", "BAD_SK=pk_test_wrong_prefix\n");
+
+            assert!(matches!(
+                SecretKey::new("$BAD_SK"),
+                Err(MoyasarError::InvalidKey)
+            ));
+            assert!(matches!(
+                SecretKey::new("$MISSING_MOYASAR_KEY_XYZ"),
+                Err(MoyasarError::InvalidKey)
+            ));
+            assert!(matches!(
+                SecretKey::new("$PATH"),
+                Err(MoyasarError::InvalidKey)
+            ));
+        }
+    }
+}
