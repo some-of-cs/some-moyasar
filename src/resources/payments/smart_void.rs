@@ -98,9 +98,14 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
             ReversalStrategy::Void => match self.void(id).await {
                 Ok(voided) => Ok(voided),
                 Err(MoyasarError::Api {
-                    error_type: ApiErrorType::InvalidRequestError | ApiErrorType::IntentNotCancelable,
+                    error_type:
+                        ApiErrorType::InvalidRequestError | ApiErrorType::IntentNotCancelable,
                     ..
-                }) if matches!(payment.status, PaymentStatus::Paid | PaymentStatus::Captured) => {
+                }) if matches!(
+                    payment.status,
+                    PaymentStatus::Paid | PaymentStatus::Captured
+                ) =>
+                {
                     self.refund(id, None).await
                 }
                 Err(err) => Err(err),
@@ -171,35 +176,59 @@ mod tests {
         let settled = now - Duration::hours(5);
 
         assert_eq!(
-            svc.plan_reversal(&sample_payment("pay_auth_new", PaymentStatus::Authorized, within), now),
+            svc.plan_reversal(
+                &sample_payment("pay_auth_new", PaymentStatus::Authorized, within),
+                now
+            ),
             ReversalStrategy::Void
         );
         assert_eq!(
-            svc.plan_reversal(&sample_payment("pay_auth_old", PaymentStatus::Authorized, settled), now),
+            svc.plan_reversal(
+                &sample_payment("pay_auth_old", PaymentStatus::Authorized, settled),
+                now
+            ),
             ReversalStrategy::Void
         );
         assert_eq!(
-            svc.plan_reversal(&sample_payment("pay_paid_new", PaymentStatus::Paid, within), now),
+            svc.plan_reversal(
+                &sample_payment("pay_paid_new", PaymentStatus::Paid, within),
+                now
+            ),
             ReversalStrategy::Void
         );
         assert_eq!(
-            svc.plan_reversal(&sample_payment("pay_cap_new", PaymentStatus::Captured, within), now),
+            svc.plan_reversal(
+                &sample_payment("pay_cap_new", PaymentStatus::Captured, within),
+                now
+            ),
             ReversalStrategy::Void
         );
         assert_eq!(
-            svc.plan_reversal(&sample_payment("pay_paid_edge", PaymentStatus::Paid, at_boundary), now),
+            svc.plan_reversal(
+                &sample_payment("pay_paid_edge", PaymentStatus::Paid, at_boundary),
+                now
+            ),
             ReversalStrategy::Refund { amount: None }
         );
         assert_eq!(
-            svc.plan_reversal(&sample_payment("pay_paid_old", PaymentStatus::Paid, settled), now),
+            svc.plan_reversal(
+                &sample_payment("pay_paid_old", PaymentStatus::Paid, settled),
+                now
+            ),
             ReversalStrategy::Refund { amount: None }
         );
         assert_eq!(
-            svc.plan_reversal(&sample_payment("pay_cap_old", PaymentStatus::Captured, settled), now),
+            svc.plan_reversal(
+                &sample_payment("pay_cap_old", PaymentStatus::Captured, settled),
+                now
+            ),
             ReversalStrategy::Refund { amount: None }
         );
         assert_eq!(
-            svc.plan_reversal(&sample_payment("pay_voided", PaymentStatus::Voided, within), now),
+            svc.plan_reversal(
+                &sample_payment("pay_voided", PaymentStatus::Voided, within),
+                now
+            ),
             ReversalStrategy::Refund { amount: None }
         );
     }
@@ -249,8 +278,11 @@ mod tests {
         let key = SecretKey::new("sk_test_reverse_id").expect("valid key");
         let client = MoyasarClient::new(key).expect("client builds");
         let now = Utc::now();
-        let bad_payment =
-            sample_payment("pay_123/refund", PaymentStatus::Paid, now - Duration::hours(5));
+        let bad_payment = sample_payment(
+            "pay_123/refund",
+            PaymentStatus::Paid,
+            now - Duration::hours(5),
+        );
 
         let err = client
             .payments()

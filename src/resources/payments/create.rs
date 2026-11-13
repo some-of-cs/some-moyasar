@@ -35,7 +35,8 @@ impl<'a, K: AuthKey> PaymentsService<'a, K> {
     /// # }
     /// ```
     pub async fn create(&self, params: &CreatePaymentParams) -> Result<Payment, MoyasarError> {
-        self.create_with_policy(params, &GivenIdPolicy::Random).await
+        self.create_with_policy(params, &GivenIdPolicy::Random)
+            .await
     }
 
     /// Creates a new payment via `POST /v1/payments` with an explicit [`GivenIdPolicy`].
@@ -94,9 +95,8 @@ mod tests {
     fn create_is_available_for_both_secret_and_publishable_keys() {
         let sk_client =
             MoyasarClient::new(SecretKey::new("sk_test_123").expect("valid sk")).expect("client");
-        let pk_client =
-            MoyasarClient::new(PublishableKey::new("pk_test_123").expect("valid pk"))
-                .expect("client");
+        let pk_client = MoyasarClient::new(PublishableKey::new("pk_test_123").expect("valid pk"))
+            .expect("client");
         let _sk_svc = sk_client.payments();
         let _pk_svc = pk_client.payments();
     }

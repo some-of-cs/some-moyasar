@@ -53,11 +53,7 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
     /// let _ = client.payments().capture("pay_123", Some(4000)).await;
     /// # }
     /// ```
-    pub async fn capture(
-        &self,
-        id: &str,
-        amount: Option<u64>,
-    ) -> Result<Payment, MoyasarError> {
+    pub async fn capture(&self, id: &str, amount: Option<u64>) -> Result<Payment, MoyasarError> {
         validate_payment_id(id)?;
         if let Some(0) = amount {
             return Err(MoyasarError::Api {
@@ -68,7 +64,10 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
             });
         }
 
-        let url = format!("{}/v1/payments/{id}/capture", self.client().config().base_url);
+        let url = format!(
+            "{}/v1/payments/{id}/capture",
+            self.client().config().base_url
+        );
         let http = self.client().http();
         let retries = self.client().config().max_network_retries;
         let payload = amount.map(|amt| CapturePaymentRequest { amount: amt });

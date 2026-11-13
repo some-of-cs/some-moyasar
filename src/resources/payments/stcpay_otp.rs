@@ -180,7 +180,10 @@ mod tests {
 
         let key = SecretKey::new("sk_test_stcpay_otp").expect("valid key");
         let client = MoyasarClient::new(key).expect("client builds");
-        let url = format!("{}/v1/stc_pays/pay_123/proceed?otp_token=tok_xyz", server.uri());
+        let url = format!(
+            "{}/v1/stc_pays/pay_123/proceed?otp_token=tok_xyz",
+            server.uri()
+        );
 
         let payment = client
             .payments()

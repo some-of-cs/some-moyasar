@@ -7,7 +7,10 @@ use serde::{Serialize, Serializer};
 
 use crate::kernel::error::MoyasarError;
 
-fn serialize_secret<S: Serializer>(secret: &SecretString, serializer: S) -> Result<S::Ok, S::Error> {
+fn serialize_secret<S: Serializer>(
+    secret: &SecretString,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     serializer.serialize_str(secret.expose_secret())
 }
 

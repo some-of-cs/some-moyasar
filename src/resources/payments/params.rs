@@ -142,12 +142,15 @@ impl CreatePaymentParamsBuilder {
 
     /// Validates required fields and builds [`CreatePaymentParams`].
     pub fn build(self) -> Result<CreatePaymentParams, MoyasarError> {
-        let amount = self.amount.filter(|&a| a > 0).ok_or_else(|| MoyasarError::Api {
-            error_type: ApiErrorType::InvalidRequestError,
-            message: "amount must be strictly positive".to_owned(),
-            errors: Vec::new(),
-            response_code: None,
-        })?;
+        let amount = self
+            .amount
+            .filter(|&a| a > 0)
+            .ok_or_else(|| MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                message: "amount must be strictly positive".to_owned(),
+                errors: Vec::new(),
+                response_code: None,
+            })?;
         let currency = self.currency.ok_or_else(|| MoyasarError::Api {
             error_type: ApiErrorType::InvalidRequestError,
             message: "currency is required".to_owned(),

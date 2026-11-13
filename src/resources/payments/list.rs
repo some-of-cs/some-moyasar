@@ -164,11 +164,9 @@ async fn parse_list_response(
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
-    serde_json::from_str::<PaginatedList<Payment>>(&body).map_err(|err| {
-        MoyasarError::ServerError {
-            status: status.as_u16(),
-            message: format!("failed to decode PaginatedList<Payment>: {err}"),
-        }
+    serde_json::from_str::<PaginatedList<Payment>>(&body).map_err(|err| MoyasarError::ServerError {
+        status: status.as_u16(),
+        message: format!("failed to decode PaginatedList<Payment>: {err}"),
     })
 }
 

@@ -42,11 +42,7 @@ impl AftSender {
     }
 
     /// Sets the sender's `id_type` and `id_number`.
-    pub fn with_id(
-        mut self,
-        id_type: impl Into<String>,
-        id_number: impl Into<String>,
-    ) -> Self {
+    pub fn with_id(mut self, id_type: impl Into<String>, id_number: impl Into<String>) -> Self {
         self.id_type = Some(id_type.into());
         self.id_number = Some(id_number.into());
         self

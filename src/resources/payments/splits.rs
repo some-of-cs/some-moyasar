@@ -55,17 +55,16 @@ pub struct PaymentSplitRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fee_source: Option<bool>,
     /// Whether this split reverses proportionally on parent payment refund (defaults to `true`).
-    #[serde(default = "default_refundable", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default = "default_refundable",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub refundable: Option<bool>,
 }
 
 impl PaymentSplitRequest {
     /// Constructs a new [`PaymentSplitRequest`] with `refundable` defaulting to `true`.
-    pub const fn new(
-        amount: u64,
-        recipient_type: SplitRecipientType,
-        recipient_id: Uuid,
-    ) -> Self {
+    pub const fn new(amount: u64, recipient_type: SplitRecipientType, recipient_id: Uuid) -> Self {
         Self {
             amount,
             recipient_type,

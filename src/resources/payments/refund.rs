@@ -80,11 +80,7 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
     /// let _ = client.payments().refund("pay_123", None).await;
     /// # }
     /// ```
-    pub async fn refund(
-        &self,
-        id: &str,
-        amount: Option<u64>,
-    ) -> Result<Payment, MoyasarError> {
+    pub async fn refund(&self, id: &str, amount: Option<u64>) -> Result<Payment, MoyasarError> {
         validate_payment_id(id)?;
         if let Some(0) = amount {
             return Err(MoyasarError::Api {
@@ -95,7 +91,10 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
             });
         }
 
-        let url = format!("{}/v1/payments/{id}/refund", self.client().config().base_url);
+        let url = format!(
+            "{}/v1/payments/{id}/refund",
+            self.client().config().base_url
+        );
         let http = self.client().http();
         let retries = self.client().config().max_network_retries;
         let payload = amount.map(|amt| RefundPaymentRequest { amount: amt });

@@ -193,9 +193,10 @@ mod tests {
         let card_json = serde_json::to_value(PaymentSourceRequest::CreditCard(card)).expect("ok");
         assert_eq!(card_json["type"], "creditcard");
 
-        let apple_json =
-            serde_json::to_value(PaymentSourceRequest::ApplePay(ApplePaySource::new("ap_tok")))
-                .expect("ok");
+        let apple_json = serde_json::to_value(PaymentSourceRequest::ApplePay(ApplePaySource::new(
+            "ap_tok",
+        )))
+        .expect("ok");
         assert_eq!(apple_json["type"], "applepay");
 
         let samsung_json = serde_json::to_value(PaymentSourceRequest::SamsungPay(

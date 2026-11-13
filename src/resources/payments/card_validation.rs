@@ -28,7 +28,10 @@ pub fn luhn_valid(number: &str) -> bool {
 /// Returns `true` if the PAN begins with an American Express prefix (`34` or `37`).
 pub fn is_amex(number: &str) -> bool {
     let mut digits = number.bytes().filter(u8::is_ascii_digit);
-    matches!((digits.next(), digits.next()), (Some(b'3'), Some(b'4' | b'7')))
+    matches!(
+        (digits.next(), digits.next()),
+        (Some(b'3'), Some(b'4' | b'7'))
+    )
 }
 
 /// Validates CVC digit length against card brand (4 digits for AMEX, 3 digits otherwise).
