@@ -11,5 +11,10 @@ pub mod kernel;
 #[cfg(feature = "core")]
 pub mod prelude;
 
-#[cfg(feature = "core")]
+#[cfg(any(
+    feature = "payment-intents",
+    feature = "tokens",
+    feature = "invoices",
+    feature = "card-auths"
+))]
 pub mod resources;

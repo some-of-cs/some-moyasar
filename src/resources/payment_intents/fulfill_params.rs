@@ -59,7 +59,10 @@ impl fmt::Debug for PaymentSourceRequest {
     }
 }
 
-fn serialize_secret<S: Serializer>(secret: &SecretString, serializer: S) -> Result<S::Ok, S::Error> {
+fn serialize_secret<S: Serializer>(
+    secret: &SecretString,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     serializer.serialize_str(secret.expose_secret())
 }
 
