@@ -13,7 +13,10 @@ use crate::kernel::types::Currency;
 /// Fixed, non-configurable Moyasar Payment Intent lifetime in seconds (1 hour).
 pub const INTENT_EXPIRY_SECS: i64 = 3600;
 
-/// Strongly-typed, non-empty Payment Intent identifier.
+/// Strongly-typed, non-empty, URL-safe Payment Intent identifier.
+///
+/// Rejects empty strings, whitespace, and URL path/query delimiter characters
+/// (`'/'`, `'?'`, `'#'`, `'\\'`) to prevent URL path traversal.
 ///
 /// # Examples
 ///
@@ -23,19 +26,31 @@ pub const INTENT_EXPIRY_SECS: i64 = 3600;
 /// let id = IntentId::new("pi_test_12345").unwrap();
 /// assert_eq!(id.as_str(), "pi_test_12345");
 /// assert!(IntentId::new("   ").is_err());
+/// assert!(IntentId::new("../admin").is_err());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct IntentId(String);
 
+fn is_valid_id_char(c: char) -> bool {
+    c.is_ascii_graphic() && !matches!(c, '/' | '?' | '#' | '\\')
+}
+
+fn is_valid_intent_id(raw: &str) -> bool {
+    !raw.is_empty() && raw.chars().all(is_valid_id_char)
+}
+
 impl IntentId {
-    /// Validates and constructs an [`IntentId`], rejecting empty or whitespace-only strings.
+    /// Validates and constructs an [`IntentId`], rejecting empty strings, whitespace,
+    /// and URL path/query delimiter characters.
     pub fn new(id: impl Into<String>) -> Result<Self, MoyasarError> {
         let raw = id.into();
-        if raw.trim().is_empty() {
+        if !is_valid_intent_id(&raw) {
             return Err(MoyasarError::Api {
                 error_type: ApiErrorType::InvalidRequestError,
-                message: "payment intent id must not be empty".to_owned(),
+                message:
+                    "payment intent id must be non-empty ASCII without path delimiters or whitespace"
+                        .to_owned(),
                 errors: Vec::new(),
                 response_code: None,
             });
@@ -152,9 +167,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_empty_and_whitespace_intent_ids() {
-        assert!(IntentId::new("").is_err());
-        assert!(IntentId::new("   \t\n").is_err());
+    fn rejects_empty_whitespace_and_path_traversal_intent_ids() {
+        for invalid in [
+            "",
+            "   \t\n",
+            "pi_123/cancel",
+            "../admin",
+            "pi_123?foo=bar",
+            "pi_123#frag",
+            "pi_123\\bar",
+            "pi 123",
+        ] {
+            assert!(
+                IntentId::new(invalid).is_err(),
+                "expected Err for {invalid:?}"
+            );
+        }
         assert_eq!(IntentId::new("pi_123").expect("valid").as_str(), "pi_123");
     }
 
