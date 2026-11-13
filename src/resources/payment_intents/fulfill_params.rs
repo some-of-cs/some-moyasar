@@ -5,8 +5,9 @@ use core::fmt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Serialize, Serializer};
 
-use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::error::MoyasarError;
 use crate::kernel::metadata::Metadata;
+use crate::resources::payment_intents::fulfill_guard::validate_client_secret;
 
 /// Payment instrument payload accepted by `POST /v1/payment_intents/:id/fulfill`.
 #[derive(Clone, Serialize)]
@@ -93,7 +94,8 @@ pub struct FulfillIntentParams {
 }
 
 impl FulfillIntentParams {
-    /// Constructs a [`FulfillIntentParams`] payload, rejecting empty `client_secret` values.
+    /// Constructs a [`FulfillIntentParams`] payload, rejecting empty or whitespace-padded
+    /// `client_secret` values.
     ///
     /// # Examples
     ///
@@ -116,14 +118,7 @@ impl FulfillIntentParams {
         source: PaymentSourceRequest,
     ) -> Result<Self, MoyasarError> {
         let raw = client_secret.into();
-        if raw.trim().is_empty() {
-            return Err(MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                message: "client_secret must not be empty".to_owned(),
-                errors: Vec::new(),
-                response_code: None,
-            });
-        }
+        validate_client_secret(&raw)?;
         Ok(Self {
             client_secret: SecretString::from(raw),
             source,
@@ -204,16 +199,19 @@ mod tests {
     }
 
     #[test]
-    fn redacts_client_secret_in_debug_and_rejects_empty_secret() {
-        assert!(
-            FulfillIntentParams::new(
-                "  ",
-                PaymentSourceRequest::Token {
-                    token: "token_123".to_owned(),
-                },
-            )
-            .is_err()
-        );
+    fn redacts_client_secret_in_debug_and_rejects_empty_or_padded_secret() {
+        for bad in ["", "  ", " cs_padded", "cs_padded "] {
+            assert!(
+                FulfillIntentParams::new(
+                    bad,
+                    PaymentSourceRequest::Token {
+                        token: "token_123".to_owned(),
+                    },
+                )
+                .is_err(),
+                "expected Err for {bad:?}"
+            );
+        }
 
         let params = FulfillIntentParams::new(
             "cs_do_not_leak_in_logs",

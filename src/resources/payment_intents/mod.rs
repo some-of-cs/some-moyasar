@@ -12,3 +12,11 @@ pub mod lifecycle;
 pub mod models;
 pub mod retrieve;
 pub mod service;
+
+pub use create::CreatePaymentIntentParams;
+pub use fulfill::{IntentPayment, IntentPaymentStatus};
+pub use fulfill_guard::{validate_client_secret, validate_pre_fulfillment};
+pub use fulfill_params::{FulfillIntentParams, PaymentSourceRequest};
+pub use lifecycle::FulfillmentOutcome;
+pub use models::{INTENT_EXPIRY_SECS, IntentId, PaymentIntent, PaymentIntentStatus};
+pub use service::PaymentIntentsService;

@@ -46,6 +46,7 @@ impl FulfillmentOutcome {
     /// }"#).unwrap();
     /// let outcome = FulfillmentOutcome::from_payment(payment);
     /// assert!(!outcome.is_settled());
+    /// assert_eq!(outcome.payment().status, IntentPaymentStatus::Initiated);
     /// ```
     pub fn from_payment(payment: IntentPayment) -> Self {
         match payment.status {
@@ -68,6 +69,14 @@ impl FulfillmentOutcome {
     /// Returns `true` only when the underlying payment is settled (`Paid` / `Captured`).
     pub const fn is_settled(&self) -> bool {
         matches!(self, Self::Paid(_))
+    }
+
+    /// Returns a shared reference to the underlying [`IntentPayment`] regardless of outcome variant.
+    pub const fn payment(&self) -> &IntentPayment {
+        match self {
+            Self::Paid(p) | Self::Authorized(p) | Self::Failed(p) => p,
+            Self::RequiresAction { payment, .. } => payment,
+        }
     }
 }
 
@@ -107,6 +116,7 @@ mod tests {
         let initiated = payment_with_status("initiated", Some("https://moyasar.com/3ds/1"));
         let outcome = FulfillmentOutcome::from_payment(initiated);
         assert!(!outcome.is_settled());
+        assert_eq!(outcome.payment().id, "pay_test_lc");
         assert!(matches!(
             outcome,
             FulfillmentOutcome::RequiresAction {

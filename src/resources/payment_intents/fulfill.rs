@@ -110,13 +110,27 @@ impl<'a, K: AuthKey> PaymentIntentsService<'a, K> {
             PAYMENT_INTENTS_PATH,
             id.as_str()
         );
-        let retries = self.client.config().max_network_retries;
-        execute_with_retry(retries, || async {
-            let resp = self.client.http().post(&url).json(&params).send().await?;
-            parse_fulfill_response(resp).await
-        })
+        fulfill_at_url(
+            self.client.http(),
+            self.client.config().max_network_retries,
+            &url,
+            &params,
+        )
         .await
     }
+}
+
+async fn fulfill_at_url(
+    http: &reqwest::Client,
+    retries: u32,
+    url: &str,
+    params: &FulfillIntentParams,
+) -> Result<IntentPayment, MoyasarError> {
+    execute_with_retry(retries, || async {
+        let resp = http.post(url).json(params).send().await?;
+        parse_fulfill_response(resp).await
+    })
+    .await
 }
 
 async fn parse_fulfill_response(resp: reqwest::Response) -> Result<IntentPayment, MoyasarError> {
@@ -138,9 +152,13 @@ mod tests {
     use crate::kernel::auth::PublishableKey;
     use crate::kernel::client::MoyasarClient;
     use crate::kernel::error::ApiErrorType;
+    use crate::resources::payment_intents::fulfill_params::PaymentSourceRequest;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    #[test]
-    fn tc_3_2_0_01_deserializes_fulfilled_intent_payment() {
+    #[tokio::test]
+    async fn tc_3_2_0_01_and_02_fulfills_over_wire_and_preserves_locked_amount() {
+        let server = MockServer::start().await;
         let raw = r#"{
             "id": "pay_intent_001",
             "status": "initiated",
@@ -152,16 +170,64 @@ mod tests {
             },
             "created_at": "2026-11-13T11:00:00Z"
         }"#;
-        let payment: IntentPayment = serde_json::from_str(raw).expect("valid payment");
+        Mock::given(method("POST"))
+            .and(path("/v1/payment_intents/pi_fulfill_1/fulfill"))
+            .respond_with(ResponseTemplate::new(201).set_body_string(raw))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let params = FulfillIntentParams::new(
+            "cs_valid_secret",
+            PaymentSourceRequest::Token {
+                token: "token_abc".to_owned(),
+            },
+        )
+        .expect("valid params")
+        .save_card(true)
+        .three_ds(true);
+
+        let http = reqwest::Client::new();
+        let url = format!(
+            "{}{}/pi_fulfill_1/fulfill",
+            server.uri(),
+            PAYMENT_INTENTS_PATH
+        );
+        let payment = fulfill_at_url(&http, 2, &url, &params)
+            .await
+            .expect("fulfilled over wire");
         assert_eq!(payment.id, "pay_intent_001");
         assert_eq!(payment.status, IntentPaymentStatus::Initiated);
         assert_eq!(payment.amount, 25000);
     }
 
-    #[test]
-    fn tc_3_2_0_03_and_04_map_4xx_mismatch_and_expired_to_non_retryable() {
+    #[tokio::test]
+    async fn tc_3_2_0_03_and_04_wrong_secret_and_expired_intent_do_not_retry() {
+        let server = MockServer::start().await;
         let wrong_secret = r#"{"type":"invalid_request_error","message":"client_secret mismatch"}"#;
-        let err = MoyasarError::from_api_response(400, wrong_secret);
+        Mock::given(method("POST"))
+            .and(path("/v1/payment_intents/pi_bad_secret/fulfill"))
+            .respond_with(ResponseTemplate::new(400).set_body_string(wrong_secret))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let params = FulfillIntentParams::new(
+            "cs_wrong",
+            PaymentSourceRequest::Token {
+                token: "token_abc".to_owned(),
+            },
+        )
+        .expect("valid");
+        let http = reqwest::Client::new();
+        let url = format!(
+            "{}{}/pi_bad_secret/fulfill",
+            server.uri(),
+            PAYMENT_INTENTS_PATH
+        );
+        let err = fulfill_at_url(&http, 2, &url, &params)
+            .await
+            .expect_err("must reject wrong secret");
         assert!(matches!(
             err,
             MoyasarError::Api {

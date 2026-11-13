@@ -4,7 +4,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::kernel::auth::SecretAuthKey;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::idempotency::{GivenIdPolicy, inject_given_id};
 use crate::kernel::metadata::Metadata;
 use crate::kernel::transport::execute_with_retry;
@@ -91,13 +91,25 @@ impl<'a, K: SecretAuthKey> PaymentIntentsService<'a, K> {
         &self,
         params: CreatePaymentIntentParams,
     ) -> Result<PaymentIntent, MoyasarError> {
-        let mut payload = serde_json::to_value(&params).map_err(|e| MoyasarError::ServerError {
-            status: 0,
-            message: e.to_string(),
-        })?;
-        inject_given_id(&mut payload, &GivenIdPolicy::Random)?;
+        self.create_with_policy(params, &GivenIdPolicy::Random)
+            .await
+    }
+
+    /// Creates a new [`PaymentIntent`] with an explicit [`GivenIdPolicy`].
+    pub async fn create_with_policy(
+        &self,
+        params: CreatePaymentIntentParams,
+        policy: &GivenIdPolicy,
+    ) -> Result<PaymentIntent, MoyasarError> {
+        let payload = prepare_create_payload(&params, policy)?;
         let url = format!("{}{}", self.client.config().base_url, PAYMENT_INTENTS_PATH);
-        post_intent_json(self, &url, Some(&payload)).await
+        post_intent_json(
+            self.client.http(),
+            self.client.config().max_network_retries,
+            &url,
+            Some(&payload),
+        )
+        .await
     }
 
     /// Cancels an active [`PaymentIntent`] via `POST /v1/payment_intents/:id/cancel`.
@@ -123,18 +135,38 @@ impl<'a, K: SecretAuthKey> PaymentIntentsService<'a, K> {
             PAYMENT_INTENTS_PATH,
             id.as_str()
         );
-        post_intent_json(self, &url, None).await
+        post_intent_json(
+            self.client.http(),
+            self.client.config().max_network_retries,
+            &url,
+            None,
+        )
+        .await
     }
 }
 
-async fn post_intent_json<K: SecretAuthKey>(
-    service: &PaymentIntentsService<'_, K>,
+fn prepare_create_payload(
+    params: &CreatePaymentIntentParams,
+    policy: &GivenIdPolicy,
+) -> Result<serde_json::Value, MoyasarError> {
+    let mut payload = serde_json::to_value(params).map_err(|e| MoyasarError::Api {
+        error_type: ApiErrorType::InvalidRequestError,
+        message: e.to_string(),
+        errors: Vec::new(),
+        response_code: None,
+    })?;
+    inject_given_id(&mut payload, policy)?;
+    Ok(payload)
+}
+
+async fn post_intent_json(
+    http: &reqwest::Client,
+    retries: u32,
     url: &str,
     body: Option<&serde_json::Value>,
 ) -> Result<PaymentIntent, MoyasarError> {
-    let retries = service.client.config().max_network_retries;
     execute_with_retry(retries, || async {
-        let req = service.client.http().post(url);
+        let req = http.post(url);
         let req = match body {
             Some(json) => req.json(json),
             None => req,
@@ -163,13 +195,12 @@ mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
     use crate::kernel::client::MoyasarClient;
-    use crate::kernel::error::ApiErrorType;
     use crate::resources::payment_intents::models::{INTENT_EXPIRY_SECS, PaymentIntentStatus};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
-    async fn tc_3_1_0_01_creates_intent_with_given_id_and_1h_expiry() {
+    async fn tc_3_1_0_01_creates_intent_with_given_id_and_1h_expiry_over_wire() {
         let server = MockServer::start().await;
         let body = r#"{
             "id": "pi_created_1",
@@ -185,33 +216,75 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/v1/payment_intents"))
             .respond_with(ResponseTemplate::new(201).set_body_string(body))
+            .expect(1)
             .mount(&server)
             .await;
 
-        let https_uri = server.uri().replacen("http://", "https://", 1);
-        let _ = https_uri;
-        let mut payload = serde_json::to_value(
-            CreatePaymentIntentParams::new(25000, Currency::SAR, "https://example.com/cb")
-                .description("Order 100"),
-        )
-        .expect("serializes");
-        let injected = inject_given_id(&mut payload, &GivenIdPolicy::Random).expect("valid");
-        assert!(injected.is_some());
+        let params = CreatePaymentIntentParams::new(25000, Currency::SAR, "https://example.com/cb")
+            .description("Order 100");
+        let payload = prepare_create_payload(&params, &GivenIdPolicy::Random).expect("valid");
         assert!(payload.get("given_id").is_some());
 
-        let intent: PaymentIntent = serde_json::from_str(body).expect("valid intent");
+        let url = format!("{}{}", server.uri(), PAYMENT_INTENTS_PATH);
+        let http = reqwest::Client::new();
+        let intent = post_intent_json(&http, 2, &url, Some(&payload))
+            .await
+            .expect("created over wire");
+
         assert_eq!(intent.status, PaymentIntentStatus::Created);
-        assert!(intent.client_secret().is_some());
+        assert_eq!(intent.client_secret(), Some("cs_test_secret_1"));
         assert_eq!(
             (intent.expires_at - intent.created_at).num_seconds(),
             INTENT_EXPIRY_SECS
         );
     }
 
-    #[test]
-    fn tc_3_1_0_06_maps_intent_not_cancelable_and_is_not_retryable() {
-        let raw = r#"{"type":"intent_not_cancelable","message":"Intent cannot be canceled"}"#;
-        let err = MoyasarError::from_api_response(400, raw);
+    #[tokio::test]
+    async fn tc_3_1_0_04_and_06_cancel_succeeds_or_maps_intent_not_cancelable_without_retry() {
+        let server = MockServer::start().await;
+        let canceled_body = r#"{
+            "id": "pi_cancel_ok",
+            "status": "canceled",
+            "amount": 25000,
+            "currency": "SAR",
+            "callback_url": "https://example.com/cb",
+            "expires_at": "2026-11-13T12:00:00Z",
+            "created_at": "2026-11-13T11:00:00Z"
+        }"#;
+        Mock::given(method("POST"))
+            .and(path("/v1/payment_intents/pi_cancel_ok/cancel"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(canceled_body))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let ok_url = format!(
+            "{}{}/pi_cancel_ok/cancel",
+            server.uri(),
+            PAYMENT_INTENTS_PATH
+        );
+        let canceled = post_intent_json(&http, 2, &ok_url, None)
+            .await
+            .expect("canceled");
+        assert_eq!(canceled.status, PaymentIntentStatus::Canceled);
+
+        let err_body = r#"{"type":"intent_not_cancelable","message":"Intent cannot be canceled"}"#;
+        Mock::given(method("POST"))
+            .and(path("/v1/payment_intents/pi_fulfilled/cancel"))
+            .respond_with(ResponseTemplate::new(400).set_body_string(err_body))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let err_url = format!(
+            "{}{}/pi_fulfilled/cancel",
+            server.uri(),
+            PAYMENT_INTENTS_PATH
+        );
+        let err = post_intent_json(&http, 2, &err_url, None)
+            .await
+            .expect_err("must fail with IntentNotCancelable");
         assert!(matches!(
             err,
             MoyasarError::Api {

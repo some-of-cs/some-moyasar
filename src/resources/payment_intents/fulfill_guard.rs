@@ -3,7 +3,12 @@
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::resources::payment_intents::models::PaymentIntent;
 
-/// Validates that a `client_secret` string is non-empty and contains no surrounding whitespace.
+fn is_valid_secret(secret: &str) -> bool {
+    !secret.is_empty() && secret.chars().all(|c| c.is_ascii_graphic())
+}
+
+/// Validates that a `client_secret` string is non-empty and contains only printable
+/// ASCII graphic characters (no surrounding or embedded whitespace/control characters).
 ///
 /// # Examples
 ///
@@ -13,12 +18,13 @@ use crate::resources::payment_intents::models::PaymentIntent;
 /// assert!(validate_client_secret("cs_test_valid_123").is_ok());
 /// assert!(validate_client_secret("").is_err());
 /// assert!(validate_client_secret("   ").is_err());
+/// assert!(validate_client_secret(" cs_padded ").is_err());
 /// ```
 pub fn validate_client_secret(secret: &str) -> Result<(), MoyasarError> {
-    if secret.trim().is_empty() {
+    if !is_valid_secret(secret) {
         return Err(MoyasarError::Api {
             error_type: ApiErrorType::InvalidRequestError,
-            message: "client_secret must not be empty".to_owned(),
+            message: "client_secret must be non-empty ASCII without whitespace".to_owned(),
             errors: Vec::new(),
             response_code: None,
         });
@@ -70,10 +76,12 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_secret_and_expired_or_fulfilled_intents() {
+    fn rejects_empty_padded_or_whitespace_secret_and_expired_or_fulfilled_intents() {
         let active = intent_with_expiry("created", 1800);
         assert!(validate_pre_fulfillment(&active, "cs_valid_secret").is_ok());
         assert!(validate_pre_fulfillment(&active, "").is_err());
+        assert!(validate_pre_fulfillment(&active, " cs_valid_secret ").is_err());
+        assert!(validate_pre_fulfillment(&active, "cs invalid").is_err());
 
         let expired = intent_with_expiry("created", -60);
         assert!(validate_pre_fulfillment(&expired, "cs_valid_secret").is_err());
