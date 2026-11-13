@@ -179,7 +179,7 @@ impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {
     /// # async fn example() -> Result<(), some_moyasar::prelude::MoyasarError> {
     /// let client = MoyasarClient::new(SecretKey::new("sk_test_example")?)?;
     /// let invoice = client.invoices().retrieve(Uuid::nil()).await?;
-    /// println!("Hosted URL: {}", invoice.url);
+    /// println!("Hosted URL: {:?}", invoice.url);
     /// # Ok(())
     /// # }
     /// ```
@@ -395,10 +395,9 @@ mod tests {
             .created_gt(created_gt);
         let http = test_http_client();
         let url = format!("{}{INVOICES_PATH}", server.uri());
-        let page: PaginatedList<Invoice> =
-            send_get(&http, &url, 0, &params.to_query_pairs())
-                .await
-                .expect("list succeeds");
+        let page: PaginatedList<Invoice> = send_get(&http, &url, 0, &params.to_query_pairs())
+            .await
+            .expect("list succeeds");
 
         assert_eq!(page.items.len(), 1);
         assert_eq!(page.items[0].id, invoice_id);
@@ -444,7 +443,7 @@ mod tests {
             .expect("retrieve succeeds");
         assert_eq!(invoice.id, invoice_id);
         assert_eq!(invoice.status, InvoiceStatus::Created);
-        assert_eq!(invoice.amount, 50000);
+        assert_eq!(invoice.amount, crate::kernel::types::Amount(50000));
 
         let err_url = format!("{}{INVOICES_PATH}/{missing_id}", server.uri());
         let err = send_get::<Invoice>(&http, &err_url, 2, &[])

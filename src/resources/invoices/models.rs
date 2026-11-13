@@ -212,11 +212,11 @@ mod tests {
             invoice.callback_url.as_deref(),
             Some("https://example.com/webhook")
         );
+        assert_eq!(invoice.expired_at.as_deref(), Some("2026-12-01T00:00:00Z"));
         assert_eq!(
-            invoice.expired_at.as_deref(),
-            Some("2026-12-01T00:00:00Z")
+            invoice.back_url.as_deref(),
+            Some("https://example.com/back")
         );
-        assert_eq!(invoice.back_url.as_deref(), Some("https://example.com/back"));
         assert_eq!(
             invoice.success_url.as_deref(),
             Some("https://example.com/success")
@@ -226,14 +226,8 @@ mod tests {
             Some("ORD-1001")
         );
         assert_eq!(invoice.payments.len(), 1);
-        assert_eq!(
-            invoice.created_at.as_deref(),
-            Some("2026-11-01T10:00:00Z")
-        );
-        assert_eq!(
-            invoice.updated_at.as_deref(),
-            Some("2026-11-01T10:05:00Z")
-        );
+        assert_eq!(invoice.created_at.as_deref(), Some("2026-11-01T10:00:00Z"));
+        assert_eq!(invoice.updated_at.as_deref(), Some("2026-11-01T10:05:00Z"));
 
         let serialized = serde_json::to_string(&invoice).expect("serializes cleanly");
         let round_tripped: Invoice =

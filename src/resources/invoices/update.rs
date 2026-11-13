@@ -215,7 +215,9 @@ mod tests {
         assert_eq!(empty_json, json!({}));
 
         let mut metadata = Metadata::new();
-        metadata.insert("order_id", "ORD-420").expect("valid metadata");
+        metadata
+            .insert("order_id", "ORD-420")
+            .expect("valid metadata");
         let params = UpdateInvoiceParams::new()
             .description("Updated Q4 retainer")
             .metadata(metadata);
@@ -236,7 +238,9 @@ mod tests {
         let expected_path = format!("/v1/invoices/{invoice_id}");
 
         let mut metadata = Metadata::new();
-        metadata.insert("order_id", "ORD-420").expect("valid metadata");
+        metadata
+            .insert("order_id", "ORD-420")
+            .expect("valid metadata");
         let params = UpdateInvoiceParams::new()
             .description("Updated Q4 retainer invoice")
             .metadata(metadata);
@@ -249,8 +253,10 @@ mod tests {
                 "metadata": { "order_id": "ORD-420" }
             })))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(sample_invoice_json(invoice_id, "Updated Q4 retainer invoice")),
+                ResponseTemplate::new(200).set_body_json(sample_invoice_json(
+                    invoice_id,
+                    "Updated Q4 retainer invoice",
+                )),
             )
             .expect(1)
             .mount(&server)
@@ -330,6 +336,9 @@ mod tests {
             .await
             .expect("recovers after transient 503");
 
-        assert_eq!(updated.description.as_deref(), Some("Recovered description"));
+        assert_eq!(
+            updated.description.as_deref(),
+            Some("Recovered description")
+        );
     }
 }
