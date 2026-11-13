@@ -22,7 +22,7 @@ pub fn luhn_valid(number: &str) -> bool {
         sum += if doubled > 9 { doubled - 9 } else { doubled };
         count += 1;
     }
-    (12..=19).contains(&count) && sum % 10 == 0
+    (12..=19).contains(&count) && sum.is_multiple_of(10)
 }
 
 /// Returns `true` if the PAN begins with an American Express prefix (`34` or `37`).

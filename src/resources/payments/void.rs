@@ -27,11 +27,10 @@ pub fn is_within_void_window(created_at: DateTime<Utc>, now: DateTime<Utc>) -> b
 /// - `Paid` and `Captured` payments can be voided only while [`is_within_void_window`] is `true`.
 pub fn can_void_payment(payment: &Payment, now: DateTime<Utc>) -> bool {
     let unsettled = is_within_void_window(payment.created_at, now);
-    match (&payment.status, unsettled) {
-        (PaymentStatus::Authorized, _) => true,
-        (PaymentStatus::Paid | PaymentStatus::Captured, true) => true,
-        _ => false,
-    }
+    matches!(
+        (&payment.status, unsettled),
+        (PaymentStatus::Authorized, _) | (PaymentStatus::Paid | PaymentStatus::Captured, true)
+    )
 }
 
 impl<K: SecretAuthKey> PaymentsService<'_, K> {
