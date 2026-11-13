@@ -4,6 +4,12 @@ pub mod create;
 pub mod models;
 pub mod retrieve;
 
+pub use create::CreateCardAuthParams;
+pub use models::{CardAuthId, CardAuthResult, CardAuthStatus, CardAuthentication};
+pub use retrieve::{
+    CardAuthBridgeData, ExternalMpiData, MpiParameters, extract_mpi_from_auth, extract_mpi_result,
+};
+
 use crate::kernel::auth::AuthKey;
 use crate::kernel::client::MoyasarClient;
 

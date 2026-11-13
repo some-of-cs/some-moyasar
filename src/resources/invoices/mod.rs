@@ -6,6 +6,12 @@ pub mod models;
 pub mod retrieve_list;
 pub mod update;
 
+pub use cancel::{MAX_SADAD_EXPIRY_DAYS, sync_sadad_expiry};
+pub use create::CreateInvoiceParams;
+pub use models::{Invoice, InvoiceStatus};
+pub use retrieve_list::ListInvoicesParams;
+pub use update::UpdateInvoiceParams;
+
 use crate::kernel::auth::AuthKey;
 use crate::kernel::client::MoyasarClient;
 

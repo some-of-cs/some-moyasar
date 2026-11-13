@@ -2,8 +2,10 @@
 
 use core::fmt;
 
+use http::header::CONTENT_TYPE;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
+use zeroize::Zeroize;
 
 use crate::kernel::auth::AuthKey;
 use crate::kernel::error::MoyasarError;
@@ -206,14 +208,21 @@ impl<'a, K: AuthKey> CardAuthsService<'a, K> {
         url: &str,
         payload: &CreateCardAuthPayload<'_>,
     ) -> Result<CardAuthentication, MoyasarError> {
-        let response = self
+        let mut body_bytes =
+            serde_json::to_vec(payload).map_err(|err| MoyasarError::ServerError {
+                status: 500,
+                message: format!("failed to serialize card_auth request: {err}"),
+            })?;
+        let send_res = self
             .client()
             .http()
             .post(url)
-            .json(payload)
+            .header(CONTENT_TYPE, "application/json")
+            .body(body_bytes.clone())
             .send()
-            .await
-            .map_err(map_reqwest_error)?;
+            .await;
+        body_bytes.zeroize();
+        let response = send_res.map_err(map_reqwest_error)?;
         let status = response.status();
         if status.is_success() {
             return response

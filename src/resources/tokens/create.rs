@@ -2,8 +2,10 @@
 
 use core::fmt;
 
+use http::header::CONTENT_TYPE;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Serialize, Serializer};
+use zeroize::Zeroize;
 
 use crate::kernel::auth::AuthKey;
 use crate::kernel::client::MoyasarClient;
@@ -184,12 +186,18 @@ async fn dispatch_post(
     url: &str,
     params: &CreateTokenParams,
 ) -> Result<(u16, String), MoyasarError> {
-    let response = http
+    let mut body_bytes = serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
+        status: 500,
+        message: format!("failed to serialize token request: {err}"),
+    })?;
+    let send_res = http
         .post(url)
-        .json(params)
+        .header(CONTENT_TYPE, "application/json")
+        .body(body_bytes.clone())
         .send()
-        .await
-        .map_err(map_reqwest_error)?;
+        .await;
+    body_bytes.zeroize();
+    let response = send_res.map_err(map_reqwest_error)?;
     let status = response.status().as_u16();
     let body = response.text().await.map_err(map_reqwest_error)?;
     if status >= 500 {

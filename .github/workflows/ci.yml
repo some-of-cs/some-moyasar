@@ -34,6 +34,16 @@ jobs:
       - name: Check core + payment-intents features
         run: cargo check --no-default-features --features "core,payment-intents"
 
+      - name: Check core + payments features
+        run: cargo check --no-default-features --features "core,payments"
+
+      - name: Check Module 4 individual & umbrella features
+        run: |
+          cargo check --no-default-features --features tokens
+          cargo check --no-default-features --features invoices
+          cargo check --no-default-features --features card-auths
+          cargo check --no-default-features --features tokens-invoices-3ds
+
       - name: Check default library target
         run: cargo check --lib
 

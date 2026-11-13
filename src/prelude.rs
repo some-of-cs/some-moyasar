@@ -1,4 +1,4 @@
-//! Public prelude re-exporting all core microkernel types.
+//! Public prelude re-exporting core microkernel and feature-enabled resource types.
 
 pub use crate::kernel::auth::{
     AuthKey, AuthMode, PublishableAuthKey, PublishableKey, SecretAuthKey, SecretKey,
@@ -13,3 +13,18 @@ pub use crate::kernel::paginator_stream::Paginator;
 pub use crate::kernel::response_code::{FieldError, ResponseCode, deserialize_field_errors};
 pub use crate::kernel::transport::{execute_with_retry, send_with_retry};
 pub use crate::kernel::types::{Amount, Currency, RecipientType};
+
+#[cfg(feature = "tokens")]
+pub use crate::resources::tokens::{CreateTokenParams, Token, TokenId, TokenStatus, TokensService};
+
+#[cfg(feature = "invoices")]
+pub use crate::resources::invoices::{
+    CreateInvoiceParams, Invoice, InvoiceStatus, InvoicesService, ListInvoicesParams,
+    UpdateInvoiceParams, sync_sadad_expiry,
+};
+
+#[cfg(feature = "card-auths")]
+pub use crate::resources::card_auths::{
+    CardAuthBridgeData, CardAuthId, CardAuthResult, CardAuthStatus, CardAuthentication,
+    CardAuthsService, CreateCardAuthParams, ExternalMpiData, MpiParameters,
+};
