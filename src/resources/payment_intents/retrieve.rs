@@ -101,8 +101,7 @@ mod tests {
         assert_eq!(intent.id.as_str(), "pi_ret_1");
         assert_eq!(intent.client_secret(), Some("cs_retrieved_secret"));
 
-        let not_found_body =
-            r#"{"type":"record_not_found","message":"Payment intent not found"}"#;
+        let not_found_body = r#"{"type":"record_not_found","message":"Payment intent not found"}"#;
         Mock::given(method("GET"))
             .and(path("/v1/payment_intents/pi_missing"))
             .respond_with(ResponseTemplate::new(404).set_body_string(not_found_body))
