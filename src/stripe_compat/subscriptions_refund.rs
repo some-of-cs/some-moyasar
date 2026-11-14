@@ -76,7 +76,7 @@ impl<K: SecretAuthKey> SubscriptionsService<'_, K> {
 mod tests {
     use chrono::{Duration, TimeZone};
     use serde_json::json;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -133,6 +133,30 @@ mod tests {
             .mount(&server)
             .await;
 
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_recent/refund"))
+            .and(body_json(json!({"amount": 19934})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "pay_recent",
+                "status": "refunded",
+                "amount": 29900,
+                "amount_format": "299.00 SAR",
+                "fee": 0,
+                "fee_format": "0.00 SAR",
+                "refunded": 19934,
+                "refunded_format": "199.34 SAR",
+                "captured": 29900,
+                "captured_format": "299.00 SAR",
+                "currency": "SAR",
+                "source": {"type": "token"},
+                "refunded_at": now.to_rfc3339(),
+                "created_at": recent_created,
+                "updated_at": now.to_rfc3339()
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
         let client = MoyasarClient::builder(SecretKey::new("sk_test_123").unwrap())
             .base_url(server.uri())
             .build()
@@ -140,7 +164,7 @@ mod tests {
 
         let start = Utc.with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap();
         let end = start + Duration::days(30);
-        let res = client
+        let void_res = client
             .subscriptions()
             .refund_cycle(&SubscriptionCycleRefundParams {
                 subscription_id: "sub_99".to_owned(),
@@ -152,7 +176,24 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(res.action, ReversalAction::Voided);
-        assert_eq!(res.amount_reversed, 29900);
+        assert_eq!(void_res.action, ReversalAction::Voided);
+        assert_eq!(void_res.amount_reversed, 29900);
+
+        let prorata_res = client
+            .subscriptions()
+            .refund_cycle(&SubscriptionCycleRefundParams {
+                subscription_id: "sub_99".to_owned(),
+                cycle_payment_id: "pay_recent".to_owned(),
+                period_start: start,
+                period_end: end,
+                strategy: RefundStrategy::ProRata {
+                    canceled_at: start + Duration::days(10),
+                },
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(prorata_res.action, ReversalAction::Refunded);
+        assert_eq!(prorata_res.amount_reversed, 19934);
     }
 }
