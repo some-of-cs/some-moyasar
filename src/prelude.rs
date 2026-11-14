@@ -57,7 +57,7 @@ pub use crate::resources::settlements::internal_txn_models::{
     InternalTransaction, InternalTransactionId,
 };
 #[cfg(feature = "settlements-ledger")]
-pub use crate::resources::settlements::lines::{ListSettlementLineParams, SettlementLine};
+pub use crate::resources::settlements::lines::{ListSettlementLinesParams, SettlementLine};
 #[cfg(feature = "settlements-ledger")]
 pub use crate::resources::settlements::list::ListSettlementsParams;
 #[cfg(feature = "settlements-ledger")]
@@ -71,7 +71,7 @@ pub use crate::resources::settlements::service::{
 #[cfg(feature = "settlements-ledger")]
 pub use crate::resources::settlements::transfer_models::{Transfer, TransferId, TransferLine};
 #[cfg(feature = "settlements-ledger")]
-pub use crate::resources::settlements::transfers::{ListTransferLineParams, ListTransfersParams};
+pub use crate::resources::settlements::transfers::{ListTransferLinesParams, ListTransfersParams};
 
 #[cfg(feature = "payouts")]
 pub use crate::resources::payouts::{
