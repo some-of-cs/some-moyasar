@@ -86,7 +86,10 @@ mod tests {
         let recent = sample_payment(now - Duration::minutes(30));
         let settled = sample_payment(now - Duration::hours(3));
 
-        assert_eq!(select_refund_route(&recent, None, true, now), RefundRoute::Void);
+        assert_eq!(
+            select_refund_route(&recent, None, true, now),
+            RefundRoute::Void
+        );
         assert_eq!(
             select_refund_route(&recent, Some(5000), true, now),
             RefundRoute::Refund { amount: Some(5000) }
@@ -157,7 +160,11 @@ mod tests {
             .base_url(server.uri())
             .build()
             .unwrap();
-        let refunded = client.payments().refund("pay_01J9ROUTE", Some(5000)).await.unwrap();
+        let refunded = client
+            .payments()
+            .refund("pay_01J9ROUTE", Some(5000))
+            .await
+            .unwrap();
         assert_eq!(refunded.refunded, 5000);
         let voided = client.payments().void("pay_01J9VOID").await.unwrap();
         assert_eq!(voided.status, PaymentStatus::Voided);
