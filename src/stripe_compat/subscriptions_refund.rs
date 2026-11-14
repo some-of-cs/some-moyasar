@@ -83,12 +83,10 @@ mod tests {
     use crate::kernel::auth::SecretKey;
     use crate::kernel::client::MoyasarClient;
 
-    #[tokio::test]
-    async fn tc_8_2_0_04_full_within_2h_voids_and_pro_rata_refunds() {
+    async fn setup_recent_payment_server() -> (MockServer, MoyasarClient<SecretKey>, String) {
         let server = MockServer::start().await;
         let now = Utc::now();
-        let recent_created = (now - Duration::minutes(20)).to_rfc3339();
-
+        let recent = (now - Duration::minutes(20)).to_rfc3339();
         Mock::given(method("GET"))
             .and(path("/v1/payments/pay_recent"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -104,96 +102,86 @@ mod tests {
                 "captured_format": "299.00 SAR",
                 "currency": "SAR",
                 "source": {"type": "token"},
-                "created_at": recent_created,
-                "updated_at": recent_created
+                "created_at": recent,
+                "updated_at": recent
             })))
             .mount(&server)
             .await;
-
-        Mock::given(method("POST"))
-            .and(path("/v1/payments/pay_recent/void"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "id": "pay_recent",
-                "status": "voided",
-                "amount": 29900,
-                "amount_format": "299.00 SAR",
-                "fee": 0,
-                "fee_format": "0.00 SAR",
-                "refunded": 0,
-                "refunded_format": "0.00 SAR",
-                "captured": 0,
-                "captured_format": "0.00 SAR",
-                "currency": "SAR",
-                "source": {"type": "token"},
-                "voided_at": now.to_rfc3339(),
-                "created_at": recent_created,
-                "updated_at": now.to_rfc3339()
-            })))
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        Mock::given(method("POST"))
-            .and(path("/v1/payments/pay_recent/refund"))
-            .and(body_json(json!({"amount": 19934})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "id": "pay_recent",
-                "status": "refunded",
-                "amount": 29900,
-                "amount_format": "299.00 SAR",
-                "fee": 0,
-                "fee_format": "0.00 SAR",
-                "refunded": 19934,
-                "refunded_format": "199.34 SAR",
-                "captured": 29900,
-                "captured_format": "299.00 SAR",
-                "currency": "SAR",
-                "source": {"type": "token"},
-                "refunded_at": now.to_rfc3339(),
-                "created_at": recent_created,
-                "updated_at": now.to_rfc3339()
-            })))
-            .expect(1)
-            .mount(&server)
-            .await;
-
         let client = MoyasarClient::builder(SecretKey::new("sk_test_123").unwrap())
             .base_url(server.uri())
             .build()
             .unwrap();
+        (server, client, recent)
+    }
+
+    #[tokio::test]
+    async fn tc_8_2_0_04_full_within_2h_routes_to_void() {
+        let (server, client, recent) = setup_recent_payment_server().await;
+        let now = Utc::now().to_rfc3339();
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_recent/void"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "pay_recent", "status": "voided", "amount": 29900,
+                "amount_format": "299.00 SAR", "fee": 0, "fee_format": "0.00 SAR",
+                "refunded": 0, "refunded_format": "0.00 SAR", "captured": 0,
+                "captured_format": "0.00 SAR", "currency": "SAR",
+                "source": {"type": "token"}, "voided_at": now,
+                "created_at": recent, "updated_at": now
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
 
         let start = Utc.with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap();
-        let end = start + Duration::days(30);
-        let void_res = client
+        let res = client
             .subscriptions()
             .refund_cycle(&SubscriptionCycleRefundParams {
                 subscription_id: "sub_99".to_owned(),
                 cycle_payment_id: "pay_recent".to_owned(),
                 period_start: start,
-                period_end: end,
+                period_end: start + Duration::days(30),
                 strategy: RefundStrategy::Full,
             })
             .await
             .unwrap();
+        assert_eq!(res.action, ReversalAction::Voided);
+        assert_eq!(res.amount_reversed, 29900);
+    }
 
-        assert_eq!(void_res.action, ReversalAction::Voided);
-        assert_eq!(void_res.amount_reversed, 29900);
+    #[tokio::test]
+    async fn tc_8_2_0_04_pro_rata_routes_to_refund() {
+        let (server, client, recent) = setup_recent_payment_server().await;
+        let now = Utc::now().to_rfc3339();
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_recent/refund"))
+            .and(body_json(json!({"amount": 19934})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "pay_recent", "status": "refunded", "amount": 29900,
+                "amount_format": "299.00 SAR", "fee": 0, "fee_format": "0.00 SAR",
+                "refunded": 19934, "refunded_format": "199.34 SAR", "captured": 29900,
+                "captured_format": "299.00 SAR", "currency": "SAR",
+                "source": {"type": "token"}, "refunded_at": now,
+                "created_at": recent, "updated_at": now
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
 
-        let prorata_res = client
+        let start = Utc.with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap();
+        let res = client
             .subscriptions()
             .refund_cycle(&SubscriptionCycleRefundParams {
                 subscription_id: "sub_99".to_owned(),
                 cycle_payment_id: "pay_recent".to_owned(),
                 period_start: start,
-                period_end: end,
+                period_end: start + Duration::days(30),
                 strategy: RefundStrategy::ProRata {
                     canceled_at: start + Duration::days(10),
                 },
             })
             .await
             .unwrap();
-
-        assert_eq!(prorata_res.action, ReversalAction::Refunded);
-        assert_eq!(prorata_res.amount_reversed, 19934);
+        assert_eq!(res.action, ReversalAction::Refunded);
+        assert_eq!(res.amount_reversed, 19934);
     }
 }
