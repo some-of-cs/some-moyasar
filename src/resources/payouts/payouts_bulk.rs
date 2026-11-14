@@ -75,16 +75,14 @@ impl BulkPayoutEntry {
     ///
     /// # Errors
     ///
-    /// Returns [`MoyasarError::Api`] with [`ApiErrorType::InvalidRequestError`] if `amount == 0`
-    /// or `destination` has an invalid field, [`MoyasarError::InvalidPayoutAmount`] if
-    /// `sequence_number` is not a valid 16-digit ASCII numeric string, or
+    /// Returns [`MoyasarError::InvalidPayoutAmount`] if `amount == 0` or `sequence_number` is not
+    /// a valid 16-digit ASCII numeric string, [`MoyasarError::Api`] with
+    /// [`ApiErrorType::InvalidRequestError`] if `destination` has an invalid field, or
     /// [`MoyasarError::InvalidIban`] / [`MoyasarError::InvalidMobile`] if `destination` fails
     /// validation.
     pub fn validate(&self) -> Result<(), MoyasarError> {
         if self.amount == 0 {
-            return Err(invalid_request_error(
-                "payout amount must be greater than zero",
-            ));
+            return Err(MoyasarError::InvalidPayoutAmount);
         }
         if let Some(seq) = self.sequence_number.as_deref() {
             validate_sequence_number(seq)?;
@@ -145,9 +143,8 @@ impl CreateBulkPayoutParams {
     /// # Errors
     ///
     /// Returns [`MoyasarError::Api`] with [`ApiErrorType::InvalidRequestError`] if `payouts` is
-    /// empty or any entry has `amount == 0`, [`MoyasarError::InvalidPayoutAmount`] if any entry
-    /// has an invalid `sequence_number`, or destination validation errors if any `destination` is
-    /// invalid.
+    /// empty, [`MoyasarError::InvalidPayoutAmount`] if any entry has `amount == 0` or an invalid
+    /// `sequence_number`, or destination validation errors if any `destination` is invalid.
     pub fn validate(&self) -> Result<(), MoyasarError> {
         if self.payouts.is_empty() {
             return Err(invalid_request_error(
@@ -475,13 +472,7 @@ mod tests {
             .create_bulk_at(&server.uri(), &zero_params)
             .await
             .expect_err("zero amount must fail");
-        assert!(matches!(
-            zero_err,
-            MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                ..
-            }
-        ));
+        assert!(matches!(zero_err, MoyasarError::InvalidPayoutAmount));
     }
 
     #[tokio::test]

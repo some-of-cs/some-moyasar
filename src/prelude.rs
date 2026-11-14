@@ -77,10 +77,10 @@ pub use crate::resources::settlements::transfers::{ListTransferLinesParams, List
 pub use crate::resources::payouts::{
     BankDestination, BulkPayoutEntry, BulkPayoutResponse, CreateBulkPayoutParams,
     CreatePayoutAccountParams, CreatePayoutParams, KNOWN_PURPOSES, ListPayoutAccountsParams,
-    ListPayoutsParams, Payout, PayoutAccount, PayoutAccountId, PayoutAccountProperties,
-    PayoutAccountType, PayoutAccountsService, PayoutChannel, PayoutDestination, PayoutId,
-    PayoutPurpose, PayoutStatus, PayoutsService, WalletDestination, validate_sa_iban,
-    validate_sa_mobile, validate_sequence_number,
+    ListPayoutsParams, PAYOUT_SEQUENCE_NUMBER_LEN, ParsePayoutPurposeError, Payout, PayoutAccount,
+    PayoutAccountId, PayoutAccountProperties, PayoutAccountType, PayoutAccountsService,
+    PayoutChannel, PayoutDestination, PayoutId, PayoutPurpose, PayoutStatus, PayoutsService,
+    WalletDestination, validate_sa_iban, validate_sa_mobile, validate_sequence_number,
 };
 
 #[cfg(feature = "sources")]

@@ -241,8 +241,10 @@ async fn send_create_request<K: SecretAuthKey>(
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &text));
     }
-    serde_json::from_str::<PayoutAccount>(&text)
-        .map_err(|_| MoyasarError::from_api_response(status.as_u16(), &text))
+    serde_json::from_str::<PayoutAccount>(&text).map_err(|err| MoyasarError::ServerError {
+        status: status.as_u16(),
+        message: format!("failed to decode PayoutAccount response: {err}"),
+    })
 }
 
 fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
