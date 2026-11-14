@@ -39,8 +39,7 @@ impl Drop for TempDotenvFile {
 
 #[tokio::test]
 async fn dotenv_secret_and_publishable_keys_load_and_authenticate_requests() {
-    let dotenv_body =
-        "MOYASAR_DOTENV_IT_SK=sk_test_from_dotenv_file_777\nMOYASAR_DOTENV_IT_PK=pk_test_from_dotenv_file_888\n";
+    let dotenv_body = "MOYASAR_DOTENV_IT_SK=sk_test_from_dotenv_file_777\nMOYASAR_DOTENV_IT_PK=pk_test_from_dotenv_file_888\n";
     let _guard = TempDotenvFile::create(dotenv_body);
 
     let sk = SecretKey::new("$MOYASAR_DOTENV_IT_SK").expect("resolve SK from temp .env file");
