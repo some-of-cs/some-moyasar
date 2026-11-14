@@ -71,6 +71,9 @@ jobs:
         run: |
           cargo check --no-default-features --features stripe-compat
           cargo check --no-default-features --features unified-gateway
+          cargo check --no-default-features --features some-payments-trait
+          cargo check --no-default-features --features some-payment-trait
+          cargo check --no-default-features --features async-stream
           cargo check --no-default-features --features test-utils
           cargo check --no-default-features --features full
           cargo check --all-features

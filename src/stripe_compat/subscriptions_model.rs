@@ -107,3 +107,55 @@ pub struct Subscription {
     /// Current billing cycle index.
     pub current_cycle: u64,
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, TimeZone};
+
+    use super::*;
+
+    #[test]
+    fn subscription_models_and_refund_strategy_roundtrip_serde() {
+        let cycle_id = SubscriptionCycleId::new("sub_pro_99", 4);
+        assert_eq!(cycle_id.as_str(), "sub_pro_99:4");
+
+        let sub = Subscription {
+            id: "sub_pro_99".to_owned(),
+            customer_id: "cus_101".to_owned(),
+            token_id: TokenId::new("token_abc123").unwrap(),
+            current_cycle: 4,
+        };
+        let sub_json = serde_json::to_string(&sub).unwrap();
+        let sub_back: Subscription = serde_json::from_str(&sub_json).unwrap();
+        assert_eq!(sub_back, sub);
+
+        let start = Utc.with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap();
+        let end = start + Duration::days(30);
+        let cycle = SubscriptionCycle {
+            id: cycle_id,
+            cycle_index: 4,
+            amount: 29_900,
+            currency: Currency::SAR,
+            payment_id: Some("pay_sub_4".to_owned()),
+            period_start: start,
+            period_end: end,
+        };
+        let cycle_json = serde_json::to_string(&cycle).unwrap();
+        let cycle_back: SubscriptionCycle = serde_json::from_str(&cycle_json).unwrap();
+        assert_eq!(cycle_back, cycle);
+
+        for strategy in [
+            RefundStrategy::Full,
+            RefundStrategy::Partial {
+                amount_halalas: 5000,
+            },
+            RefundStrategy::ProRata {
+                canceled_at: start + Duration::days(10),
+            },
+        ] {
+            let encoded = serde_json::to_string(&strategy).unwrap();
+            let decoded: RefundStrategy = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(decoded, strategy);
+        }
+    }
+}

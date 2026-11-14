@@ -161,6 +161,9 @@ pub enum MoyasarError {
     /// Webhook endpoint URL must use HTTPS.
     #[error("webhook endpoint URL must use HTTPS")]
     InvalidWebhookUrl,
+    /// Webhook secret token verification failed.
+    #[error("invalid webhook secret")]
+    InvalidWebhookSecret,
 }
 
 impl From<reqwest::Error> for MoyasarError {

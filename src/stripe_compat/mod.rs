@@ -19,16 +19,18 @@ pub mod subscriptions_model;
 /// Subscription cycle refund and void-fallback orchestration.
 pub mod subscriptions_refund;
 
-pub use customers::{
+pub use self::in_memory_vault as customer_vault;
+
+pub use self::customers::{
     CustomerChargeParams, CustomerVault, CustomersService, inject_customer_metadata,
 };
-pub use in_memory_vault::InMemoryCustomerVault;
-pub use pro_rata::pro_rata_refund;
-pub use refund_strategy::{RefundRoute, select_refund_route};
-pub use refunds::{RefundCreateParams, RefundReceipt, RefundsService};
-pub use subscription_plan::{PlanInterval, SubscriptionPlan, next_period_bounds};
-pub use subscriptions_billing::SubscriptionsService;
-pub use subscriptions_model::{
+pub use self::in_memory_vault::InMemoryCustomerVault;
+pub use self::pro_rata::pro_rata_refund;
+pub use self::refund_strategy::{RefundRoute, select_refund_route};
+pub use self::refunds::{RefundCreateParams, RefundReceipt, RefundsService};
+pub use self::subscription_plan::{PlanInterval, SubscriptionPlan, next_period_bounds};
+pub use self::subscriptions_billing::{SubscriptionCycleChargeParams, SubscriptionsService};
+pub use self::subscriptions_model::{
     RefundStrategy, ReversalAction, Subscription, SubscriptionCycle, SubscriptionCycleId,
     SubscriptionCycleRefundParams, SubscriptionCycleRefundResult,
 };

@@ -103,21 +103,23 @@ pub use crate::webhook_engine::{
 pub use crate::stripe_compat::{
     CustomerChargeParams, CustomerVault, CustomersService, InMemoryCustomerVault, PlanInterval,
     RefundCreateParams, RefundReceipt, RefundRoute, RefundStrategy, RefundsService, ReversalAction,
-    Subscription, SubscriptionCycle, SubscriptionCycleId, SubscriptionCycleRefundParams,
-    SubscriptionCycleRefundResult, SubscriptionPlan, SubscriptionsService,
-    inject_customer_metadata, next_period_bounds, pro_rata_refund, select_refund_route,
+    Subscription, SubscriptionCycle, SubscriptionCycleChargeParams, SubscriptionCycleId,
+    SubscriptionCycleRefundParams, SubscriptionCycleRefundResult, SubscriptionPlan,
+    SubscriptionsService, inject_customer_metadata, next_period_bounds, pro_rata_refund,
+    select_refund_route,
 };
 
 #[cfg(feature = "unified-gateway")]
 pub use crate::unified::{
-    UnifiedChargeResponse, UnifiedIntentResponse, UnifiedPaymentGateway, UnifiedReversalResponse,
-    UnifiedWebhookEvent,
+    PaymentCapability, PayoutCapability, PayoutEngine, UnifiedChargeResponse, UnifiedIntentRequest,
+    UnifiedIntentResponse, UnifiedPaymentGateway, UnifiedReversalResponse,
+    UnifiedTokenChargeRequest, UnifiedWebhookEvent, WebhookCapability, WebhookVerifier,
 };
 
 #[cfg(any(test, feature = "test-utils"))]
 pub use crate::test_utils::{
-    ALL_WEBHOOK_EVENT_STRINGS, MoyasarMockServer, SADAD_SANDBOX_BILLER,
+    ALL_WEBHOOK_EVENT_STRINGS, FIXTURE_TIMESTAMP, MoyasarMockServer, SADAD_SANDBOX_BILLER,
     STCPAY_SANDBOX_INSUFFICIENT_FUNDS, STCPAY_SANDBOX_REJECTED, STCPAY_SANDBOX_SUCCESS,
     all_webhook_event_fixtures, iso8583_error_fixture, sadad_sandbox_fixture,
-    stcpay_sandbox_fixture, webhook_event_fixture,
+    stcpay_sandbox_fixture, webhook_event_fixture, webhook_event_fixture_at,
 };

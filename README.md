@@ -67,7 +67,9 @@ Building high-concurrency Rust backend systems for Saudi Arabia and GCC commerce
 | `webhook-engine` | **Yes** (via `sources-webhooks`) | `core`, `hmac`, `sha2`, `subtle` | `ConstantTimeSecretVerifier` — Zero-leak constant-time `secret_token` verification & `payment_faild` alias ([Webhook Docs](https://docs.moyasar.com/api/other/webhooks/webhook-reference)) |
 | `sources-webhooks` | **Yes** | `sources`, `webhooks-api`, `webhook-engine` | Umbrella feature enabling all Module 7 source lookup, Apple Pay session, webhooks CRUD, and constant-time verification engine |
 | `stripe-compat` | No | `payments`, `tokens`, `invoices` | `client.refunds()`, `client.customers()`, `client.subscriptions()` — Virtual refund service, token vault, and pro-rata subscription refunds ([Tokenized Cards](https://docs.moyasar.com/guides/tokenization/tokenized-cards)) |
-| `some-payment-trait` | No | `some-payment-core` | Implements `PaymentCapability`, `PayoutCapability`, and `WebhookCapability` traits for [`some-payment`](https://github.com/some-of-cs/some-payment) |
+| `some-payments-trait` (alias `some-payment-trait`) | No | `unified-gateway` (`core`, `payments`, `payment-intents`, `tokens`, `webhook-engine`) | Implements `UnifiedPaymentGateway`, `PaymentCapability`, `PayoutCapability`, `WebhookCapability`, `WebhookVerifier`, and `PayoutEngine` traits for [`some-payment`](https://github.com/some-of-cs/some-payment) |
+| `async-stream` | No | `core` | Enables asynchronous `Stream` auto-pagination over `Paginator` |
+| `test-utils` | No | `core`, `wiremock` | Provides `MoyasarMockServer` and deterministic JSON fixtures for all 11+1 webhook events, STC Pay, SADAD (`007`), and ISO 8583 codes |
 | `full` | No | All of the above | Enables every Moyasar API resource, webhook engine, auto-pagination stream, and [`some-payment`](https://github.com/some-of-cs/some-payment) adapter |
 
 ---
