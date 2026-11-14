@@ -196,23 +196,23 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-5.1.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
-- [ ] **Unit 1 (`feat/us-5.1.0/unit-1-payout-account-model`)**: `PayoutAccount` struct (id, account_type bank/wallet, currency, properties, created_at), `PayoutAccountId` newtype (Files: `src/resources/payouts/models.rs`)  
+- [x] **Unit 1 (`feat/us-5.1.0/unit-1-payout-account-model`)**: `PayoutAccount` struct (id, account_type bank/wallet, currency, properties, created_at), `PayoutAccountId` newtype (Files: `src/resources/payouts/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-5.1.0/unit-2-payout-account-create`)**: `CreatePayoutAccountParams` (account_type, properties like iban, credentials), `client.payout_accounts().create()` (Files: `src/resources/payouts/accounts_create.rs`)  
+- [x] **Unit 2 (`feat/us-5.1.0/unit-2-payout-account-create`)**: `CreatePayoutAccountParams` (account_type, properties like iban, credentials), `client.payout_accounts().create()` (Files: `src/resources/payouts/accounts_create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-5.1.0/unit-3-payout-account-list`)**: `ListPayoutAccountsParams`, `client.payout_accounts().list(params)`, pagination unit tests (Files: `src/resources/payouts/accounts_list.rs`)  
+- [x] **Unit 3 (`feat/us-5.1.0/unit-3-payout-account-list`)**: `ListPayoutAccountsParams`, `client.payout_accounts().list(params)`, pagination unit tests (Files: `src/resources/payouts/accounts_list.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-5.1.0/unit-4-payout-account-retrieve`)**: `client.payout_accounts().retrieve(id)`, Saudi IBAN validator (`validate_sa_iban`), unit tests (Files: `src/resources/payouts/accounts_retrieve.rs`)  
+- [x] **Unit 4 (`feat/us-5.1.0/unit-4-payout-account-retrieve`)**: `client.payout_accounts().retrieve(id)`, Saudi IBAN validator (`validate_sa_iban`), unit tests (Files: `src/resources/payouts/accounts_retrieve.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -241,49 +241,49 @@ sequenceDiagram
 - **UUID Identifiers**: non-sequential account ids.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Credential Test**: no credentials in `Debug` or response model.
-- [ ] **IBAN Test**: invalid IBANs rejected.
-- [ ] **Ownership Test**: foreign account id yields typed 4xx.
-- [ ] **Identity Test**: missing payee name rejected.
+- [x] **Credential Test**: no credentials in `Debug` or response model.
+- [x] **IBAN Test**: invalid IBANs rejected.
+- [x] **Ownership Test**: foreign account id yields typed 4xx.
+- [x] **Identity Test**: missing payee name rejected.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Payee/credential handling verified against OWASP ASVS Level 2.
-- [ ] Zero credential exposure.
-- [ ] IBAN validation certified.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Payee/credential handling verified against OWASP ASVS Level 2.
+- [x] Zero credential exposure.
+- [x] IBAN validation certified.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-5.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-5.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-5.1.0-G1:** ≥90% line / ≥85% branch on the payout-accounts module.
+- [x] **US-5.1.0-G1:** ≥90% line / ≥85% branch on the payout-accounts module.
 
 ### G2 — Security audit
-- [ ] **US-5.1.0-G2:** Credential/payee audit passes with zero critical/high findings.
+- [x] **US-5.1.0-G2:** Credential/payee audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-5.1.0-G3:** Accounts module independent of the payouts disbursement module.
+- [x] **US-5.1.0-G3:** Accounts module independent of the payouts disbursement module.
 
 ### G-Review — Code review
-- [ ] **US-5.1.0-G-Review:** Peer review on credential handling and IBAN validation.
+- [x] **US-5.1.0-G-Review:** Peer review on credential handling and IBAN validation.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-5.1.0-G-Borrow:** Credentials moved into the request; never cloned.
+- [x] **US-5.1.0-G-Borrow:** Credentials moved into the request; never cloned.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-5.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-5.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-5.1.0-G-Docs:** 100% public symbols documented; both account types demonstrated.
+- [x] **US-5.1.0-G-Docs:** 100% public symbols documented; both account types demonstrated.
 
 ### G-Law — Law validation
-- [ ] **US-5.1.0-G-Law:** SAMA payee-identification and IBAN requirements certified.
+- [x] **US-5.1.0-G-Law:** SAMA payee-identification and IBAN requirements certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-5.1.0-G4:** Bank and wallet account registration verified against the mock server.
+- [x] **US-5.1.0-G4:** Bank and wallet account registration verified against the mock server.

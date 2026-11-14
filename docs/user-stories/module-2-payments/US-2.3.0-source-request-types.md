@@ -220,27 +220,27 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-2.3.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..6`)
-- [ ] **Unit 1 (`feat/us-2.3.0/unit-1-source-trait`)**: `PaymentSourceRequest` tagged enum + `PaymentSourceResponse` tagged enum stubs, `Serialize`/`Deserialize` with `tag = "type"` (Files: `src/resources/payments/source.rs`)  
+- [x] **Unit 1 (`feat/us-2.3.0/unit-1-source-trait`)**: `PaymentSourceRequest` tagged enum + `PaymentSourceResponse` tagged enum stubs, `Serialize`/`Deserialize` with `tag = "type"` (Files: `src/resources/payments/source.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-2.3.0/unit-2-creditcard`)**: `CreditCardSource`: name, number, month, year, cvc (3-4 digits), statement_descriptor, manual, save_card, 3ds, card_auth_id, card_auth_data (Files: `src/resources/payments/source_card.rs`)  
+- [x] **Unit 2 (`feat/us-2.3.0/unit-2-creditcard`)**: `CreditCardSource`: name, number, month, year, cvc (3-4 digits), statement_descriptor, manual, save_card, 3ds, card_auth_id, card_auth_data (Files: `src/resources/payments/source_card.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-2.3.0/unit-3-applepay-samsungpay`)**: `ApplePaySource`: token/cryptogram, manual, save_card, statement_descriptor. `SamsungPaySource`: mirrors with sp subtype (Files: `src/resources/payments/source_digital_wallet.rs`)  
+- [x] **Unit 3 (`feat/us-2.3.0/unit-3-applepay-samsungpay`)**: `ApplePaySource`: token/cryptogram, manual, save_card, statement_descriptor. `SamsungPaySource`: mirrors with sp subtype (Files: `src/resources/payments/source_digital_wallet.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-2.3.0/unit-4-token-source`)**: `TokenSource`: token string, optional 3ds/manual/cvc flags, SecretKey-based charging (Files: `src/resources/payments/source_token.rs`)  
+- [x] **Unit 4 (`feat/us-2.3.0/unit-4-token-source`)**: `TokenSource`: token string, optional 3ds/manual/cvc flags, SecretKey-based charging (Files: `src/resources/payments/source_token.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-2.3.0/unit-5-card-validation`)**: Luhn checksum, expiry date validation (month 1-12, year ≥ current), cvc length by brand (3 for most, 4 for AMEX) (Files: `src/resources/payments/card_validation.rs`)  
+- [x] **Unit 5 (`feat/us-2.3.0/unit-5-card-validation`)**: Luhn checksum, expiry date validation (month 1-12, year ≥ current), cvc length by brand (3 for most, 4 for AMEX) (Files: `src/resources/payments/card_validation.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
-- [ ] **Unit 6 (`feat/us-2.3.0/unit-6-source-response-models`)**: `PaymentSourceResponse` tagged enum, `CardSourceResponse`, `WalletSourceResponse`, `CardBrand`, plus roundtrip JSON serde unit tests (Files: `src/resources/payments/source_response.rs`)  
+- [x] **Unit 6 (`feat/us-2.3.0/unit-6-source-response-models`)**: `PaymentSourceResponse` tagged enum, `CardSourceResponse`, `WalletSourceResponse`, `CardBrand`, plus roundtrip JSON serde unit tests (Files: `src/resources/payments/source_response.rs`)  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 6` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 6` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -269,49 +269,49 @@ sequenceDiagram
 - **Redaction**: `Display`/`Debug` forbidden on sensitive source structs.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **PAN Log Test**: `format!("{:?}", source)` contains no 12+ digit sequence.
-- [ ] **CVC Log Test**: CVC value absent from all formatted output.
-- [ ] **Luhn Table**: 10 valid / 10 invalid numbers verified.
-- [ ] **Brand CVC Test**: AMEX 4-digit enforced.
+- [x] **PAN Log Test**: `format!("{:?}", source)` contains no 12+ digit sequence.
+- [x] **CVC Log Test**: CVC value absent from all formatted output.
+- [x] **Luhn Table**: 10 valid / 10 invalid numbers verified.
+- [x] **Brand CVC Test**: AMEX 4-digit enforced.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Cardholder-data handling verified against OWASP ASVS Level 2.
-- [ ] Zero PAN/CVC in logs, errors, or telemetry.
-- [ ] Validation coverage complete for all four variants.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Cardholder-data handling verified against OWASP ASVS Level 2.
+- [x] Zero PAN/CVC in logs, errors, or telemetry.
+- [x] Validation coverage complete for all four variants.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-2.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-2.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-2.3.0-G1:** ≥90% line / ≥85% branch on source types and validators.
+- [x] **US-2.3.0-G1:** ≥90% line / ≥85% branch on source types and validators.
 
 ### G2 — Security audit
-- [ ] **US-2.3.0-G2:** Cardholder-data audit passes with zero critical/high findings.
+- [x] **US-2.3.0-G2:** Cardholder-data audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-2.3.0-G3:** Source types are pure data + validation; zero transport coupling.
+- [x] **US-2.3.0-G3:** Source types are pure data + validation; zero transport coupling.
 
 ### G-Review — Code review
-- [ ] **US-2.3.0-G-Review:** Peer review on validation and redaction.
+- [x] **US-2.3.0-G-Review:** Peer review on validation and redaction.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-2.3.0-G-Borrow:** Validation borrows `&str`; no needless `String` allocation.
+- [x] **US-2.3.0-G-Borrow:** Validation borrows `&str`; no needless `String` allocation.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-2.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-2.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-2.3.0-G-Docs:** 100% public symbols documented; one runnable example per variant.
+- [x] **US-2.3.0-G-Docs:** 100% public symbols documented; one runnable example per variant.
 
 ### G-Law — Law validation
-- [ ] **US-2.3.0-G-Law:** PCI-DSS 4.0 Requirement 3.2 (no PAN/CVC retention) certified.
+- [x] **US-2.3.0-G-Law:** PCI-DSS 4.0 Requirement 3.2 (no PAN/CVC retention) certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-2.3.0-G4:** All four variants serialize correctly and validate against the mock server.
+- [x] **US-2.3.0-G4:** All four variants serialize correctly and validate against the mock server.

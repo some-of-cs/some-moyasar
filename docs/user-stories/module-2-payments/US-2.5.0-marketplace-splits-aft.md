@@ -195,23 +195,23 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-2.5.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
-- [ ] **Unit 1 (`feat/us-2.5.0/unit-1-split-types`)**: `PaymentSplitRequest`, `SplitRecipientType` enum (`Entity`, `Platform`, `Beneficiary`), `fee_source`/`refundable` defaults (Files: `src/resources/payments/splits.rs`)  
+- [x] **Unit 1 (`feat/us-2.5.0/unit-1-split-types`)**: `PaymentSplitRequest`, `SplitRecipientType` enum (`Entity`, `Platform`, `Beneficiary`), `fee_source`/`refundable` defaults (Files: `src/resources/payments/splits.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-2.5.0/unit-2-split-validation`)**: `validate_splits` with `checked_add` sum guard (`sum <= total`), zero-amount guard, single `fee_source` check, unit tests (Files: `src/resources/payments/split_validation.rs`)  
+- [x] **Unit 2 (`feat/us-2.5.0/unit-2-split-validation`)**: `validate_splits` with `checked_add` sum guard (`sum <= total`), zero-amount guard, single `fee_source` check, unit tests (Files: `src/resources/payments/split_validation.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-2.5.0/unit-3-aft-sender`)**: `AftSender` struct (`first_name`, `last_name`, optional identification fields) and `AfTSender` alias (Files: `src/resources/payments/aft.rs`)  
+- [x] **Unit 3 (`feat/us-2.5.0/unit-3-aft-sender`)**: `AftSender` struct (`first_name`, `last_name`, optional identification fields) and `AfTSender` alias (Files: `src/resources/payments/aft.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-2.5.0/unit-4-split-response-helpers`)**: `PaymentSplitResponse` struct, proportional refund cascade calculator, and 2-way split + AFT unit tests (Files: `src/resources/payments/splits_response.rs`)  
+- [x] **Unit 4 (`feat/us-2.5.0/unit-4-split-response-helpers`)**: `PaymentSplitResponse` struct, proportional refund cascade calculator, and 2-way split + AFT unit tests (Files: `src/resources/payments/splits_response.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -240,49 +240,49 @@ sequenceDiagram
 - **Audit Fields**: `reference` persisted into settlement files.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Sum Test**: over-allocation rejected.
-- [ ] **Zero Test**: zero/negative amounts rejected.
-- [ ] **Fee Test**: multiple `fee_source` flagged.
-- [ ] **Refund Cascade Test**: non-refundable splits preserved.
+- [x] **Sum Test**: over-allocation rejected.
+- [x] **Zero Test**: zero/negative amounts rejected.
+- [x] **Fee Test**: multiple `fee_source` flagged.
+- [x] **Refund Cascade Test**: non-refundable splits preserved.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Fund-routing verified against OWASP ASVS Level 2.
-- [ ] Over-allocation impossible client-side.
-- [ ] Audit references persisted.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Fund-routing verified against OWASP ASVS Level 2.
+- [x] Over-allocation impossible client-side.
+- [x] Audit references persisted.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-2.5.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-2.5.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-2.5.0-G1:** ≥90% line / ≥85% branch on splits and AFT modules.
+- [x] **US-2.5.0-G1:** ≥90% line / ≥85% branch on splits and AFT modules.
 
 ### G2 — Security audit
-- [ ] **US-2.5.0-G2:** Fund-routing audit passes with zero critical/high findings.
+- [x] **US-2.5.0-G2:** Fund-routing audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-2.5.0-G3:** Split logic is pure validation; zero transport coupling.
+- [x] **US-2.5.0-G3:** Split logic is pure validation; zero transport coupling.
 
 ### G-Review — Code review
-- [ ] **US-2.5.0-G-Review:** Peer review on split arithmetic and refund cascade.
+- [x] **US-2.5.0-G-Review:** Peer review on split arithmetic and refund cascade.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-2.5.0-G-Borrow:** Validation borrows the slice; no split cloning.
+- [x] **US-2.5.0-G-Borrow:** Validation borrows the slice; no split cloning.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-2.5.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-2.5.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-2.5.0-G-Docs:** 100% public symbols documented; two-way split example runnable.
+- [x] **US-2.5.0-G-Docs:** 100% public symbols documented; two-way split example runnable.
 
 ### G-Law — Law validation
-- [ ] **US-2.5.0-G-Law:** SAMA marketplace funds-flow transparency certified.
+- [x] **US-2.5.0-G-Law:** SAMA marketplace funds-flow transparency certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-2.5.0-G4:** Two-way split and AFT sender verified against the mock server.
+- [x] **US-2.5.0-G4:** Two-way split and AFT sender verified against the mock server.

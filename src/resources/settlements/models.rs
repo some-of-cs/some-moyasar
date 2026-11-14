@@ -5,6 +5,7 @@ use core::fmt;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::types::{Amount, Currency};
 
 const RECIPIENT_TYPE_LABELS: &[(SettlementRecipientType, &str)] = &[
@@ -46,6 +47,28 @@ impl SettlementId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Validates that this settlement identifier is a non-empty, URL-safe path segment.
+    pub fn validate(&self) -> Result<(), MoyasarError> {
+        validate_path_segment_id(&self.0, "settlement id")
+    }
+}
+
+pub(crate) fn validate_path_segment_id(raw: &str, label: &str) -> Result<(), MoyasarError> {
+    let invalid = raw.is_empty()
+        || raw.contains("..")
+        || raw
+            .chars()
+            .any(|c| c.is_whitespace() || "/?#\\".contains(c));
+    if invalid {
+        return Err(MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            message: format!("{label} must be a non-empty URL-safe path segment"),
+            errors: Vec::new(),
+            response_code: None,
+        });
+    }
+    Ok(())
 }
 
 impl fmt::Display for SettlementId {

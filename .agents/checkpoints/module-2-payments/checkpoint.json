@@ -1,14 +1,162 @@
 {
   "moduleId": "module-2-payments",
   "title": "Module 2: Payments (US-2.1.0..US-2.5.0)",
-  "branch": "feat/module-2-payments",
+  "baseBranch": "main",
+  "moduleBranch": "feat/module-2-payments",
+  "status": "Merged",
+  "prNumber": 80,
   "baseCommit": "9587b33bec1357439eb260544772a202c175c068",
-  "updatedAt": "2026-11-13T11:02:00Z",
+  "updatedAt": "2026-11-14T05:00:00Z",
   "items": {
-    "us-2.1.0": { "status": "In Progress", "branch": "feat/us-2.1.0-payment-create-retrieve-list", "unitCount": 5 },
-    "us-2.2.0": { "status": "In Progress", "branch": "feat/us-2.2.0-payment-lifecycle-operations", "unitCount": 5 },
-    "us-2.3.0": { "status": "In Progress", "branch": "feat/us-2.3.0-source-request-types", "unitCount": 6 },
-    "us-2.4.0": { "status": "In Progress", "branch": "feat/us-2.4.0-source-stcpay-sadad", "unitCount": 4 },
-    "us-2.5.0": { "status": "In Progress", "branch": "feat/us-2.5.0-marketplace-splits-aft", "unitCount": 4 }
+    "us-2.1.0": {
+      "status": "Merged",
+      "branch": "feat/us-2.1.0-payment-create-retrieve-list",
+      "prNumber": 69,
+      "unitCount": 5
+    },
+    "us-2.1.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-2.1.0/unit-1-payment-model",
+      "prNumber": 31
+    },
+    "us-2.1.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-2.1.0/unit-2-create-params",
+      "prNumber": 33
+    },
+    "us-2.1.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-2.1.0/unit-3-create-endpoint",
+      "prNumber": 46
+    },
+    "us-2.1.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-2.1.0/unit-4-retrieve-endpoint",
+      "prNumber": 55
+    },
+    "us-2.1.0/unit-5": {
+      "status": "Merged",
+      "branch": "feat/us-2.1.0/unit-5-list-endpoint",
+      "prNumber": 67
+    },
+    "us-2.2.0": {
+      "status": "Merged",
+      "branch": "feat/us-2.2.0-payment-lifecycle-operations",
+      "prNumber": 59,
+      "unitCount": 5
+    },
+    "us-2.2.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-2.2.0/unit-1-update",
+      "prNumber": 32
+    },
+    "us-2.2.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-2.2.0/unit-2-capture",
+      "prNumber": 35
+    },
+    "us-2.2.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-2.2.0/unit-3-void",
+      "prNumber": 36
+    },
+    "us-2.2.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-2.2.0/unit-4-refund",
+      "prNumber": 37
+    },
+    "us-2.2.0/unit-5": {
+      "status": "Merged",
+      "branch": "feat/us-2.2.0/unit-5-smart-void-refund",
+      "prNumber": 34
+    },
+    "us-2.3.0": {
+      "status": "Merged",
+      "branch": "feat/us-2.3.0-source-request-types",
+      "prNumber": 70,
+      "unitCount": 6
+    },
+    "us-2.3.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-2.3.0/unit-1-source-trait",
+      "prNumber": 64
+    },
+    "us-2.3.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-2.3.0/unit-2-creditcard",
+      "prNumber": 62
+    },
+    "us-2.3.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-2.3.0/unit-3-applepay-samsungpay",
+      "prNumber": 60
+    },
+    "us-2.3.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-2.3.0/unit-4-token-source",
+      "prNumber": 63
+    },
+    "us-2.3.0/unit-5": {
+      "status": "Merged",
+      "branch": "feat/us-2.3.0/unit-5-card-validation",
+      "prNumber": 65
+    },
+    "us-2.3.0/unit-6": {
+      "status": "Merged",
+      "branch": "feat/us-2.3.0/unit-6-source-response-models",
+      "prNumber": 61
+    },
+    "us-2.4.0": {
+      "status": "Merged",
+      "branch": "feat/us-2.4.0-source-stcpay-sadad",
+      "prNumber": 66,
+      "unitCount": 4
+    },
+    "us-2.4.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-2.4.0/unit-1-stcpay-source",
+      "prNumber": 41
+    },
+    "us-2.4.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-2.4.0/unit-2-stcpay-otp",
+      "prNumber": 43
+    },
+    "us-2.4.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-2.4.0/unit-3-sadad-source",
+      "prNumber": 42
+    },
+    "us-2.4.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-2.4.0/unit-4-sadad-expiry-guard",
+      "prNumber": 44
+    },
+    "us-2.5.0": {
+      "status": "Merged",
+      "branch": "feat/us-2.5.0-marketplace-splits-aft",
+      "prNumber": 40,
+      "unitCount": 4
+    },
+    "us-2.5.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-2.5.0/unit-1-split-types",
+      "prNumber": 30
+    },
+    "us-2.5.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-2.5.0/unit-2-split-validation",
+      "prNumber": 29
+    },
+    "us-2.5.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-2.5.0/unit-3-aft-sender",
+      "prNumber": 28
+    },
+    "us-2.5.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-2.5.0/unit-4-split-response-helpers",
+      "prNumber": 27
+    }
   }
 }

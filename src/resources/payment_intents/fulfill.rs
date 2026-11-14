@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
 use crate::kernel::auth::AuthKey;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
 use crate::kernel::transport::execute_with_retry;
 use crate::kernel::types::Currency;
@@ -151,11 +151,12 @@ async fn fulfill_at_url(
     params: &FulfillIntentParams,
 ) -> Result<IntentPayment, MoyasarError> {
     execute_with_retry(retries, || async {
-        let mut body_bytes =
-            serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
-                status: 500,
-                message: format!("failed to serialize fulfill request: {err}"),
-            })?;
+        let mut body_bytes = serde_json::to_vec(params).map_err(|err| MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            message: format!("failed to serialize fulfill request: {err}"),
+            errors: Vec::new(),
+            response_code: None,
+        })?;
         let send_res = http
             .post(url)
             .header(CONTENT_TYPE, "application/json")
@@ -173,9 +174,11 @@ async fn parse_fulfill_response(resp: reqwest::Response) -> Result<IntentPayment
     let status = resp.status().as_u16();
     let text = resp.text().await?;
     if (200..300).contains(&status) {
-        serde_json::from_str(&text).map_err(|e| MoyasarError::ServerError {
-            status,
-            message: e.to_string(),
+        serde_json::from_str(&text).map_err(|e| MoyasarError::Api {
+            error_type: ApiErrorType::Unknown,
+            message: format!("failed to decode IntentPayment response: {e}"),
+            errors: Vec::new(),
+            response_code: None,
         })
     } else {
         Err(MoyasarError::from_api_response(status, &text))
@@ -187,7 +190,6 @@ mod tests {
     use super::*;
     use crate::kernel::auth::PublishableKey;
     use crate::kernel::client::MoyasarClient;
-    use crate::kernel::error::ApiErrorType;
     use crate::resources::payment_intents::fulfill_params::PaymentSourceRequest;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

@@ -137,6 +137,7 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
         id: &SettlementId,
         params: &ListSettlementLinesParams,
     ) -> Result<PaginatedList<SettlementLine>, MoyasarError> {
+        id.validate()?;
         let url = build_lines_url(&self.client().config().base_url, id);
         let pairs = params.to_query_pairs();
         let http = self.client().http();

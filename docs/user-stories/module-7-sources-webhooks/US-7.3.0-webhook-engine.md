@@ -263,25 +263,25 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-7.3.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
-- [ ] **Unit 1 (`feat/us-7.3.0/unit-1-webhook-event-types`)**: `WebhookEventType` enum with `#[serde(rename = "payment_failed", alias = "payment_faild")]`, all 11 event variants, `WebhookEvent` struct (id, event_type, created_at, secret_token [Debug-redacted], account_name, live, data as Value) (Files: `src/webhook_engine/event_types.rs`)  
+- [x] **Unit 1 (`feat/us-7.3.0/unit-1-webhook-event-types`)**: `WebhookEventType` enum with `#[serde(rename = "payment_failed", alias = "payment_faild")]`, all 11 event variants, `WebhookEvent` struct (id, event_type, created_at, secret_token [Debug-redacted], account_name, live, data as Value) (Files: `src/webhook_engine/event_types.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-7.3.0/unit-2-constant-time-verifier`)**: `ConstantTimeSecretVerifier::new(shared_secret, tolerance)` — HMAC-SHA256 with domain-separation key "some-moyasar-webhook-domain-v1", 32-byte digest comparison via `subtle::ConstantTimeEq` (Files: `src/webhook_engine/verifier.rs`)  
+- [x] **Unit 2 (`feat/us-7.3.0/unit-2-constant-time-verifier`)**: `ConstantTimeSecretVerifier::new(shared_secret, tolerance)` — HMAC-SHA256 with domain-separation key "some-moyasar-webhook-domain-v1", 32-byte digest comparison via `subtle::ConstantTimeEq` (Files: `src/webhook_engine/verifier.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-7.3.0/unit-3-timestamp-validation`)**: `REPLAY_TOLERANCE` (4h default for 3h41m retry ladder), `validate_timestamp_at(now, tolerance)` guarding against stale and future-skewed events (Files: `src/webhook_engine/timestamp.rs`)  
+- [x] **Unit 3 (`feat/us-7.3.0/unit-3-timestamp-validation`)**: `REPLAY_TOLERANCE` (4h default for 3h41m retry ladder), `validate_timestamp_at(now, tolerance)` guarding against stale and future-skewed events (Files: `src/webhook_engine/timestamp.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-7.3.0/unit-4-deduplication`)**: `WebhookDeduplicator` trait (async, keyed by `event.id` UUID), `NoopDeduplicator` and `InMemoryDeduplicator`, integration point for Redis/PostgreSQL (Files: `src/webhook_engine/deduplication.rs`)  
+- [x] **Unit 4 (`feat/us-7.3.0/unit-4-deduplication`)**: `WebhookDeduplicator` trait (async, keyed by `event.id` UUID), `NoopDeduplicator` and `InMemoryDeduplicator`, integration point for Redis/PostgreSQL (Files: `src/webhook_engine/deduplication.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-7.3.0/unit-5-webhook-payload-extractors`)**: Typed `WebhookEvent` payload extractors (`into_payment()`, `into_card_auth()`) and cryptographic/replay-ladder unit tests (Files: `src/webhook_engine/payload.rs`)  
+- [x] **Unit 5 (`feat/us-7.3.0/unit-5-webhook-payload-extractors`)**: Typed `WebhookEvent` payload extractors (`into_payment()`, `into_card_auth()`) and cryptographic/replay-ladder unit tests (Files: `src/webhook_engine/payload.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -309,48 +309,48 @@ sequenceDiagram
 - **Freshness & Deduplication**: 4h tolerance window + `WebhookDeduplicator` trait.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Forgery & Length Test**: wrong secret (1-byte, 32-byte, 64-byte) returns `Err(SecretMismatch)`.
-- [ ] **Replay Test**: event older than 4h or `>5m` in the future returns `Err(TimestampOutOfRange)`.
-- [ ] **Retry Ladder Test**: `+1m`, `+10m`, `+30m`, `+1h`, `+2h` (`3h41m` total) all pass verification.
-- [ ] **Redaction Test**: `format!("{:?}", event)` prints `"[REDACTED]"` for `secret_token`.
+- [x] **Forgery & Length Test**: wrong secret (1-byte, 32-byte, 64-byte) returns `Err(SecretMismatch)`.
+- [x] **Replay Test**: event older than 4h or `>5m` in the future returns `Err(TimestampOutOfRange)`.
+- [x] **Retry Ladder Test**: `+1m`, `+10m`, `+30m`, `+1h`, `+2h` (`3h41m` total) all pass verification.
+- [x] **Redaction Test**: `format!("{:?}", event)` prints `"[REDACTED]"` for `secret_token`.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Crypto usage verified against OWASP ASVS Level 2 (V6 Cryptography, V11 Business Logic).
-- [ ] Double-HMAC constant-time comparison certified.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Crypto usage verified against OWASP ASVS Level 2 (V6 Cryptography, V11 Business Logic).
+- [x] Double-HMAC constant-time comparison certified.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-7.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-7.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-7.3.0-G1:** ≥95% line / ≥90% branch on `webhook_engine`.
+- [x] **US-7.3.0-G1:** ≥95% line / ≥90% branch on `webhook_engine`.
 
 ### G2 — Security audit
-- [ ] **US-7.3.0-G2:** Crypto audit passes with zero critical/high findings.
+- [x] **US-7.3.0-G2:** Crypto audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-7.3.0-G3:** `webhook_engine` has zero `reqwest` / HTTP client dependency so edge workers can compile with `default-features = false, features = ["webhook-engine"]`.
+- [x] **US-7.3.0-G3:** `webhook_engine` has zero `reqwest` / HTTP client dependency so edge workers can compile with `default-features = false, features = ["webhook-engine"]`.
 
 ### G-Review — Code review
-- [ ] **US-7.3.0-G-Review:** Security peer review on double-HMAC and `ConstantTimeEq`.
+- [x] **US-7.3.0-G-Review:** Security peer review on double-HMAC and `ConstantTimeEq`.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-7.3.0-G-Borrow:** Verification operates directly on `raw_body: &[u8]`.
+- [x] **US-7.3.0-G-Borrow:** Verification operates directly on `raw_body: &[u8]`.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-7.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-7.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-7.3.0-G-Docs:** 100% public symbols documented; transactional outbox receiver example included.
+- [x] **US-7.3.0-G-Docs:** 100% public symbols documented; transactional outbox receiver example included.
 
 ### G-Law — Law validation
-- [ ] **US-7.3.0-G-Law:** SAMA integrity and non-repudiation requirements certified.
+- [x] **US-7.3.0-G-Law:** SAMA integrity and non-repudiation requirements certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-7.3.0-G4:** All 11 event variants (including `payment_faild`), retry ladder, and constant-time verifier pass.
+- [x] **US-7.3.0-G4:** All 11 event variants (including `payment_faild`), retry ladder, and constant-time verifier pass.

@@ -209,25 +209,25 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-6.1.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
-- [ ] **Unit 1 (`feat/us-6.1.0/unit-1-settlement-model`)**: `Settlement` struct (recipient_type, currency, source_currency, invoicing_currency, amount, fee, tax, invoicing_fee, invoicing_tax, invoicing_ex_rate, reference, settlement_count, invoice_url PDF, csv_list_url, pdf_list_url) (Files: `src/resources/settlements/models.rs`)  
+- [x] **Unit 1 (`feat/us-6.1.0/unit-1-settlement-model`)**: `Settlement` struct (recipient_type, currency, source_currency, invoicing_currency, amount, fee, tax, invoicing_fee, invoicing_tax, invoicing_ex_rate, reference, settlement_count, invoice_url PDF, csv_list_url, pdf_list_url) (Files: `src/resources/settlements/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-6.1.0/unit-2-settlement-list`)**: `client.settlements().list(params)` with id/created[gt/lt]/page filters, pagination (Files: `src/resources/settlements/list.rs`)  
+- [x] **Unit 2 (`feat/us-6.1.0/unit-2-settlement-list`)**: `client.settlements().list(params)` with id/created[gt/lt]/page filters, pagination (Files: `src/resources/settlements/list.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-6.1.0/unit-3-settlement-retrieve`)**: `client.settlements().retrieve(id)`, `Settlement::net()` breakdown helper, 404 mapping, unit tests (Files: `src/resources/settlements/retrieve.rs`)  
+- [x] **Unit 3 (`feat/us-6.1.0/unit-3-settlement-retrieve`)**: `client.settlements().retrieve(id)`, `Settlement::net()` breakdown helper, 404 mapping, unit tests (Files: `src/resources/settlements/retrieve.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-6.1.0/unit-4-settlement-balance`)**: `client.settlements().fetch_balance()`, `MerchantBalance` struct (available, pending, reserved amounts), unit tests (Files: `src/resources/settlements/balance.rs`)  
+- [x] **Unit 4 (`feat/us-6.1.0/unit-4-settlement-balance`)**: `client.settlements().fetch_balance()`, `MerchantBalance` struct (available, pending, reserved amounts), unit tests (Files: `src/resources/settlements/balance.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-6.1.0/unit-5-settlement-lines`)**: `SettlementLine` struct, `ListSettlementLinesParams`, `client.settlements().list_lines(id, params)`, unit tests (Files: `src/resources/settlements/lines.rs`)  
+- [x] **Unit 5 (`feat/us-6.1.0/unit-5-settlement-lines`)**: `SettlementLine` struct, `ListSettlementLinesParams`, `client.settlements().list_lines(id, params)`, unit tests (Files: `src/resources/settlements/lines.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -256,49 +256,49 @@ sequenceDiagram
 - **Typed Filters**: dates validated before serialization.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Arithmetic Test**: `amount - fee - tax` verified on fixtures.
-- [ ] **Tenant Test**: foreign id yields typed error.
-- [ ] **URL Redaction Test**: `Debug` hides report URLs.
-- [ ] **Filter Test**: malformed dates rejected before transport.
+- [x] **Arithmetic Test**: `amount - fee - tax` verified on fixtures.
+- [x] **Tenant Test**: foreign id yields typed error.
+- [x] **URL Redaction Test**: `Debug` hides report URLs.
+- [x] **Filter Test**: malformed dates rejected before transport.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Report access verified against OWASP ASVS Level 2.
-- [ ] Zero confidential data in logs.
-- [ ] Monetary arithmetic certified.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Report access verified against OWASP ASVS Level 2.
+- [x] Zero confidential data in logs.
+- [x] Monetary arithmetic certified.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-6.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-6.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-6.1.0-G1:** ≥90% line / ≥85% branch on the settlements module.
+- [x] **US-6.1.0-G1:** ≥90% line / ≥85% branch on the settlements module.
 
 ### G2 — Security audit
-- [ ] **US-6.1.0-G2:** Financial-data audit passes with zero critical/high findings.
+- [x] **US-6.1.0-G2:** Financial-data audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-6.1.0-G3:** Read-only module; zero mutation surface.
+- [x] **US-6.1.0-G3:** Read-only module; zero mutation surface.
 
 ### G-Review — Code review
-- [ ] **US-6.1.0-G-Review:** Peer review on arithmetic and filter handling.
+- [x] **US-6.1.0-G-Review:** Peer review on arithmetic and filter handling.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-6.1.0-G-Borrow:** `SettlementId` and URL accessors avoid cloning.
+- [x] **US-6.1.0-G-Borrow:** `SettlementId` and URL accessors avoid cloning.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-6.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-6.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-6.1.0-G-Docs:** 100% public symbols documented; reconciliation example runnable.
+- [x] **US-6.1.0-G-Docs:** 100% public symbols documented; reconciliation example runnable.
 
 ### G-Law — Law validation
-- [ ] **US-6.1.0-G-Law:** SAMA reconciliation completeness and retention certified.
+- [x] **US-6.1.0-G-Law:** SAMA reconciliation completeness and retention certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-6.1.0-G4:** List/retrieve/lines/balance verified against the mock server.
+- [x] **US-6.1.0-G4:** List/retrieve/lines/balance verified against the mock server.

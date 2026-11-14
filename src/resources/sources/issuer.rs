@@ -132,9 +132,11 @@ async fn send_issuer_request<K: AuthKey>(
     url: &str,
     params: &BinLookupParams,
 ) -> Result<IssuerMetadata, MoyasarError> {
-    let mut payload = serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
-        status: 500,
+    let mut payload = serde_json::to_vec(params).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::InvalidRequestError,
         message: format!("failed to serialize BIN lookup request: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })?;
     let send_res = client
         .http()
@@ -150,9 +152,11 @@ async fn send_issuer_request<K: AuthKey>(
     if !(200..300).contains(&status) {
         return Err(MoyasarError::from_api_response(status, &body));
     }
-    serde_json::from_str::<IssuerMetadata>(&body).map_err(|err| MoyasarError::ServerError {
-        status,
+    serde_json::from_str::<IssuerMetadata>(&body).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::Unknown,
         message: format!("failed to decode IssuerMetadata response: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })
 }
 

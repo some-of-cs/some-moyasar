@@ -185,21 +185,21 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-1.1.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
-- [ ] **Unit 1 (`feat/us-1.1.0/unit-1-key-types`)**: `SecretKey` (`sk_test_`/`sk_live_`), `PublishableKey` (`pk_test_`/`pk_live_`), `ZeroizeOnDrop`, parsing validation, unit tests (Files: `src/kernel/auth.rs`)  
+- [x] **Unit 1 (`feat/us-1.1.0/unit-1-key-types`)**: `SecretKey` (`sk_test_`/`sk_live_`), `PublishableKey` (`pk_test_`/`pk_live_`), `ZeroizeOnDrop`, parsing validation, unit tests (Files: `src/kernel/auth.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-1.1.0/unit-2-http-client`)**: `MoyasarClient::builder()`, reqwest `Client` pool, base URL, default/configured headers, `max_network_retries`, `build()?` (Files: `src/kernel/client.rs`)  
+- [x] **Unit 2 (`feat/us-1.1.0/unit-2-http-client`)**: `MoyasarClient::builder()`, reqwest `Client` pool, base URL, default/configured headers, `max_network_retries`, `build()?` (Files: `src/kernel/client.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-1.1.0/unit-3-auth-encoding`)**: `TryFrom<&SecretKey>` / `TryFrom<&PublishableKey>` for `HeaderValue`, `Authorization: Basic base64("{key}:")` encoding, retry/timeout transport adapter, doc-tests (Files: `src/kernel/transport.rs`)  
+- [x] **Unit 3 (`feat/us-1.1.0/unit-3-auth-encoding`)**: `TryFrom<&SecretKey>` / `TryFrom<&PublishableKey>` for `HeaderValue`, `Authorization: Basic base64("{key}:")` encoding, retry/timeout transport adapter, doc-tests (Files: `src/kernel/transport.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -213,7 +213,7 @@ sequenceDiagram
   - `Key-Type Boundary`: compile-time split between client-side (`pk_`) and server-side (`sk_`) authority.
 - **Authorized Principals**:
   - Secret Key (`sk_`): backend authority across all 37 endpoints.
-  - Publishable Key (`pk_`): exactly 4 client-originated routes — `POST /v1/payments`, `POST /v1/payment_intents/:id/fulfill`, `POST /v1/tokens`, `GET /v1/applepay/initiate`.
+  - Publishable Key (`pk_`): client-originated routes — `POST /v1/payments`, `POST /v1/payment_intents/:id/fulfill`, `POST /v1/tokens`, `POST /v1/card_auths`, `POST /v1/source/issuer`, `POST /v1/applepay/initiate`.
 
 ### 5.2 Threat Modeling & Abuse Matrix (STRIDE / ASVS)
 
@@ -232,49 +232,49 @@ sequenceDiagram
 - **Basic Auth Note**: base64 is **encoding, not encryption** — confidentiality rests entirely on TLS.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Secret Scanning**: Gitleaks and `cargo-audit` report zero hardcoded secrets.
-- [ ] **Log Redaction Test**: `format!("{client:?}")` contains no API key.
-- [ ] **Memory Dump Audit**: Zeroized bytes confirmed after drop.
-- [ ] **Compile-Fail Guard**: `trybuild` proves `pk_` cannot reach secret routes.
+- [x] **Secret Scanning**: Gitleaks and `cargo-audit` report zero hardcoded secrets.
+- [x] **Log Redaction Test**: `format!("{client:?}")` contains no API key.
+- [x] **Memory Dump Audit**: Zeroized bytes confirmed after drop.
+- [x] **Compile-Fail Guard**: `trybuild` proves `pk_` cannot reach secret routes.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Threat boundaries verified against OWASP ASVS Level 2.
-- [ ] Key-type isolation verified; zero runtime 403s from mismatched keys.
-- [ ] Zero plaintext credentials in telemetry or log spans.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Threat boundaries verified against OWASP ASVS Level 2.
+- [x] Key-type isolation verified; zero runtime 403s from mismatched keys.
+- [x] Zero plaintext credentials in telemetry or log spans.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-1.1.0-G0:** `cargo build && cargo clippy --all-targets -- -D warnings && cargo fmt --check` passes clean.
+- [x] **US-1.1.0-G0:** `cargo build && cargo clippy --all-targets -- -D warnings && cargo fmt --check` passes clean.
 
 ### G1 — Test coverage
-- [ ] **US-1.1.0-G1:** ≥90% line and ≥85% branch coverage on the microkernel core.
+- [x] **US-1.1.0-G1:** ≥90% line and ≥85% branch coverage on the microkernel core.
 
 ### G2 — Security audit
-- [ ] **US-1.1.0-G2:** Zero-leak credential audit passes with zero critical/high findings.
+- [x] **US-1.1.0-G2:** Zero-leak credential audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-1.1.0-G3:** Microkernel compliance; zero monolithic codegen in core.
+- [x] **US-1.1.0-G3:** Microkernel compliance; zero monolithic codegen in core.
 
 ### G-Review — Code review
-- [ ] **US-1.1.0-G-Review:** Peer review by `code-reviewer` across correctness, security, performance.
+- [x] **US-1.1.0-G-Review:** Peer review by `code-reviewer` across correctness, security, performance.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-1.1.0-G-Borrow:** Zero unauthorized deep `.clone()`; `Arc::clone` only.
+- [x] **US-1.1.0-G-Borrow:** Zero unauthorized deep `.clone()`; `Arc::clone` only.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-1.1.0-G-Complexity:** All functions $CC \le 6$; nesting $\le 2$.
+- [x] **US-1.1.0-G-Complexity:** All functions $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-1.1.0-G-Docs:** 100% public symbols documented with runnable doc-tests.
+- [x] **US-1.1.0-G-Docs:** 100% public symbols documented with runnable doc-tests.
 
 ### G-Law — Law validation
-- [ ] **US-1.1.0-G-Law:** PCI-DSS 4.0 Requirements 3.4 & 8.3 and SAMA credential handling certified.
+- [x] **US-1.1.0-G-Law:** PCI-DSS 4.0 Requirements 3.4 & 8.3 and SAMA credential handling certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-1.1.0-G4:** 10k-task concurrency verified against mock server; Basic Auth header byte-exact.
+- [x] **US-1.1.0-G4:** 10k-task concurrency verified against mock server; Basic Auth header byte-exact.

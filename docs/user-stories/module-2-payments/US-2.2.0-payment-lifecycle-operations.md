@@ -188,25 +188,25 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-2.2.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
-- [ ] **Unit 1 (`feat/us-2.2.0/unit-1-update`)**: `client.payments().update(id, params)`, description + metadata mutation, empty-string metadata unset (Files: `src/resources/payments/update.rs`)  
+- [x] **Unit 1 (`feat/us-2.2.0/unit-1-update`)**: `client.payments().update(id, params)`, description + metadata mutation, empty-string metadata unset (Files: `src/resources/payments/update.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-2.2.0/unit-2-capture`)**: `client.payments().capture(id, amount_opt)`, full/partial capture of authorized holds, status → captured (Files: `src/resources/payments/capture.rs`)  
+- [x] **Unit 2 (`feat/us-2.2.0/unit-2-capture`)**: `client.payments().capture(id, amount_opt)`, full/partial capture of authorized holds, status → captured (Files: `src/resources/payments/capture.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-2.2.0/unit-3-void`)**: `client.payments().void(id)`, 2-hour unsettled-window guard, status transitions (authorized/paid/captured → voided) (Files: `src/resources/payments/void.rs`)  
+- [x] **Unit 3 (`feat/us-2.2.0/unit-3-void`)**: `client.payments().void(id)`, 2-hour unsettled-window guard, status transitions (authorized/paid/captured → voided) (Files: `src/resources/payments/void.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-2.2.0/unit-4-refund`)**: `client.payments().refund(id, amount_opt)`, full refund (omit body) vs partial (amount in body), status → refunded (Files: `src/resources/payments/refund.rs`)  
+- [x] **Unit 4 (`feat/us-2.2.0/unit-4-refund`)**: `client.payments().refund(id, amount_opt)`, full refund (omit body) vs partial (amount in body), status → refunded (Files: `src/resources/payments/refund.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-2.2.0/unit-5-smart-void-refund`)**: `VoidOrRefund` strategy: try void first if within ~2h, else refund; 14-day Mada capture/void window; unit tests for each transition (Files: `src/resources/payments/smart_void.rs`)  
+- [x] **Unit 5 (`feat/us-2.2.0/unit-5-smart-void-refund`)**: `VoidOrRefund` strategy: try void first if within ~2h, else refund; 14-day Mada capture/void window; unit tests for each transition (Files: `src/resources/payments/smart_void.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -235,49 +235,49 @@ sequenceDiagram
 - **Audit Fields**: `voided_at`, `refunded_at`, `captured_at` preserved verbatim.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Bounds Test**: refund amount > captured is rejected client-side.
-- [ ] **Key-Type Test**: no `pk_` path reaches capture/void/refund.
-- [ ] **Retry Test**: refund retry does not double-refund.
-- [ ] **Routing Test**: settled payment never issues a void.
+- [x] **Bounds Test**: refund amount > captured is rejected client-side.
+- [x] **Key-Type Test**: no `pk_` path reaches capture/void/refund.
+- [x] **Retry Test**: refund retry does not double-refund.
+- [x] **Routing Test**: settled payment never issues a void.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Reversal authorization verified against OWASP ASVS Level 2.
-- [ ] Amount bounds enforced before transmission.
-- [ ] Audit timestamps preserved on every reversal.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Reversal authorization verified against OWASP ASVS Level 2.
+- [x] Amount bounds enforced before transmission.
+- [x] Audit timestamps preserved on every reversal.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-2.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-2.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-2.2.0-G1:** ≥90% line / ≥85% branch on lifecycle operations.
+- [x] **US-2.2.0-G1:** ≥90% line / ≥85% branch on lifecycle operations.
 
 ### G2 — Security audit
-- [ ] **US-2.2.0-G2:** Financial-safety audit passes with zero critical/high findings.
+- [x] **US-2.2.0-G2:** Financial-safety audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-2.2.0-G3:** Routing strategy isolated from transport; testable without network.
+- [x] **US-2.2.0-G3:** Routing strategy isolated from transport; testable without network.
 
 ### G-Review — Code review
-- [ ] **US-2.2.0-G-Review:** Peer review on the reversal state machine.
+- [x] **US-2.2.0-G-Review:** Peer review on the reversal state machine.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-2.2.0-G-Borrow:** Zero deep clones in routing and guard paths.
+- [x] **US-2.2.0-G-Borrow:** Zero deep clones in routing and guard paths.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-2.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$ (routing expressed as a `match` table).
+- [x] **US-2.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$ (routing expressed as a `match` table).
 
 ### G-Docs — Public docs & examples
-- [ ] **US-2.2.0-G-Docs:** Window semantics documented with runnable doc-tests.
+- [x] **US-2.2.0-G-Docs:** Window semantics documented with runnable doc-tests.
 
 ### G-Law — Law validation
-- [ ] **US-2.2.0-G-Law:** SAMA reversal-reconciliation traceability certified.
+- [x] **US-2.2.0-G-Law:** SAMA reversal-reconciliation traceability certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-2.2.0-G4:** All four operations plus both routing branches verified against mock server.
+- [x] **US-2.2.0-G4:** All four operations plus both routing branches verified against mock server.

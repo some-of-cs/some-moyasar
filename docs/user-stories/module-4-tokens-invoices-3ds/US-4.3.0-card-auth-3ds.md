@@ -16,7 +16,7 @@
 **So that** I can pre-authenticate cards, reuse one authentication across gateways, and satisfy scheme mandates without coupling authentication to capture.
 
 #### 1.1.1 Preconditions
-- `features = ["card-auth"]` (enterprise entitlement).
+- `features = ["card-auths"]` (or alias `card-auth`) (enterprise entitlement).
 - A `SecretKey` (or `PublishableKey` where the route permits).
 - Card details for authentication.
 
@@ -198,21 +198,21 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-4.3.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
-- [ ] **Unit 1 (`feat/us-4.3.0/unit-1-card-auth-model`)**: `CardAuthentication` struct (id: "ca_...", status: authenticated/failed, transaction_url, result fields) (Files: `src/resources/card_auths/models.rs`)  
+- [x] **Unit 1 (`feat/us-4.3.0/unit-1-card-auth-model`)**: `CardAuthentication` struct (id: "ca_...", status: authenticated/failed, transaction_url, result fields) (Files: `src/resources/card_auths/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-4.3.0/unit-2-card-auth-create`)**: `CreateCardAuthParams`: amount, currency, callback_url, card details. `client.card_auths().create()` (Files: `src/resources/card_auths/create.rs`)  
+- [x] **Unit 2 (`feat/us-4.3.0/unit-2-card-auth-create`)**: `CreateCardAuthParams`: amount, currency, callback_url, card details. `client.card_auths().create()` (Files: `src/resources/card_auths/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-4.3.0/unit-3-card-auth-retrieve`)**: `client.card_auths().retrieve(id)`, MPI result extraction (`eci`, `authentication_value`, `ds_transaction_id`), `card_auth_id`/`card_auth_data` bridging to Payment create, unit tests (Files: `src/resources/card_auths/retrieve.rs`)  
+- [x] **Unit 3 (`feat/us-4.3.0/unit-3-card-auth-retrieve`)**: `client.card_auths().retrieve(id)`, MPI result extraction (`eci`, `authentication_value`, `ds_transaction_id`), `card_auth_id`/`card_auth_data` bridging to Payment create, unit tests (Files: `src/resources/card_auths/retrieve.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -241,49 +241,49 @@ sequenceDiagram
 - **TLS-Only**: authentication values transmitted over TLS exclusively.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **CAVV Log Test**: absent from `Debug` output.
-- [ ] **Replay Test**: reusing `ca_` for a second charge fails.
-- [ ] **PAN Test**: no full PAN in formatted output.
-- [ ] **TLS Test**: `http://` base rejected.
+- [x] **CAVV Log Test**: absent from `Debug` output.
+- [x] **Replay Test**: reusing `ca_` for a second charge fails.
+- [x] **PAN Test**: no full PAN in formatted output.
+- [x] **TLS Test**: `http://` base rejected.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] 3DS handling verified against OWASP ASVS Level 2.
-- [ ] Zero CAVV/PAN in logs.
-- [ ] Single-use enforcement verified.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] 3DS handling verified against OWASP ASVS Level 2.
+- [x] Zero CAVV/PAN in logs.
+- [x] Single-use enforcement verified.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-4.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-4.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-4.3.0-G1:** ≥90% line / ≥85% branch on the card-auth module.
+- [x] **US-4.3.0-G1:** ≥90% line / ≥85% branch on the card-auth module.
 
 ### G2 — Security audit
-- [ ] **US-4.3.0-G2:** MPI-data audit passes with zero critical/high findings.
+- [x] **US-4.3.0-G2:** MPI-data audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-4.3.0-G3:** card-auth module depends only on the kernel and payments.
+- [x] **US-4.3.0-G3:** card-auth module depends only on the kernel and payments.
 
 ### G-Review — Code review
-- [ ] **US-4.3.0-G-Review:** Peer review on CAVV handling and single-use semantics.
+- [x] **US-4.3.0-G-Review:** Peer review on CAVV handling and single-use semantics.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-4.3.0-G-Borrow:** `CardAuthId` avoids needless allocation in hot paths.
+- [x] **US-4.3.0-G-Borrow:** `CardAuthId` avoids needless allocation in hot paths.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-4.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-4.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-4.3.0-G-Docs:** 100% public symbols documented; both bridge examples runnable.
+- [x] **US-4.3.0-G-Docs:** 100% public symbols documented; both bridge examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-4.3.0-G-Law:** PCI-DSS 4.0 MFA/3DS2 compliance certified.
+- [x] **US-4.3.0-G-Law:** PCI-DSS 4.0 MFA/3DS2 compliance certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-4.3.0-G4:** authenticate→retrieve→charge cycle verified against the mock server.
+- [x] **US-4.3.0-G4:** authenticate→retrieve→charge cycle verified against the mock server.

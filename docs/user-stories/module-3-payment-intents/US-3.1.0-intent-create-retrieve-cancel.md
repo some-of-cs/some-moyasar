@@ -204,23 +204,23 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-3.1.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
-- [ ] **Unit 1 (`feat/us-3.1.0/unit-1-intent-model`)**: `PaymentIntent` struct (id, amount, currency, description, callback_url, status, client_secret, expires_at, created_at), `PaymentIntentStatus` enum (Files: `src/resources/payment_intents/models.rs`)  
+- [x] **Unit 1 (`feat/us-3.1.0/unit-1-intent-model`)**: `PaymentIntent` struct (id, amount, currency, description, callback_url, status, client_secret, expires_at, created_at), `PaymentIntentStatus` enum (Files: `src/resources/payment_intents/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-3.1.0/unit-2-create-cancel`)**: `CreatePaymentIntentParams`, `client.payment_intents().create()`, `client.payment_intents().cancel(id)` returning 400 on already cancelled/fulfilled/expired (Files: `src/resources/payment_intents/create.rs`)  
+- [x] **Unit 2 (`feat/us-3.1.0/unit-2-create-cancel`)**: `CreatePaymentIntentParams`, `client.payment_intents().create()`, `client.payment_intents().cancel(id)` returning 400 on already cancelled/fulfilled/expired (Files: `src/resources/payment_intents/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-3.1.0/unit-3-expiry-guard`)**: `PaymentIntent::is_usable(&self) -> bool` — status==Created AND Utc::now() < expires_at. Document pitfalls: status stays "created" past expiry (Files: `src/resources/payment_intents/expiry.rs`)  
+- [x] **Unit 3 (`feat/us-3.1.0/unit-3-expiry-guard`)**: `PaymentIntent::is_usable(&self) -> bool` — status==Created AND Utc::now() < expires_at. Document pitfalls: status stays "created" past expiry (Files: `src/resources/payment_intents/expiry.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-3.1.0/unit-4-retrieve-endpoint`)**: `client.payment_intents().retrieve(id)` (`SecretKey` bound), `IntentId` newtype, 403/404 handling, unit tests (Files: `src/resources/payment_intents/retrieve.rs`)  
+- [x] **Unit 4 (`feat/us-3.1.0/unit-4-retrieve-endpoint`)**: `client.payment_intents().retrieve(id)` (`SecretKey` bound), `IntentId` newtype, 403/404 handling, unit tests (Files: `src/resources/payment_intents/retrieve.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -249,49 +249,49 @@ sequenceDiagram
 - **Expiry Guard**: prevents wasted API calls and misleading state.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **client_secret Test**: absent from `Debug` output.
-- [ ] **Key-Type Test**: `pk_` cannot create/retrieve/cancel.
-- [ ] **Expiry Test**: boundary at exactly 3600 seconds.
-- [ ] **Non-Retry Test**: `intent_not_cancelable` is never retried.
+- [x] **client_secret Test**: absent from `Debug` output.
+- [x] **Key-Type Test**: `pk_` cannot create/retrieve/cancel.
+- [x] **Expiry Test**: boundary at exactly 3600 seconds.
+- [x] **Non-Retry Test**: `intent_not_cancelable` is never retried.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Checkout integrity verified against OWASP ASVS Level 2.
-- [ ] Zero `client_secret` in logs or telemetry.
-- [ ] Parameter locking verified server-side.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Checkout integrity verified against OWASP ASVS Level 2.
+- [x] Zero `client_secret` in logs or telemetry.
+- [x] Parameter locking verified server-side.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-3.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-3.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-3.1.0-G1:** ≥90% line / ≥85% branch on the intent lifecycle module.
+- [x] **US-3.1.0-G1:** ≥90% line / ≥85% branch on the intent lifecycle module.
 
 ### G2 — Security audit
-- [ ] **US-3.1.0-G2:** Client-secret and key-type audit passes with zero critical/high findings.
+- [x] **US-3.1.0-G2:** Client-secret and key-type audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-3.1.0-G3:** Intent module depends only on kernel + payments; zero cyclical coupling.
+- [x] **US-3.1.0-G3:** Intent module depends only on kernel + payments; zero cyclical coupling.
 
 ### G-Review — Code review
-- [ ] **US-3.1.0-G-Review:** Peer review on expiry semantics and status handling.
+- [x] **US-3.1.0-G-Review:** Peer review on expiry semantics and status handling.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-3.1.0-G-Borrow:** `is_usable()` takes `&self`; zero allocation.
+- [x] **US-3.1.0-G-Borrow:** `is_usable()` takes `&self`; zero allocation.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-3.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-3.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-3.1.0-G-Docs:** 100% public symbols documented; expiry pitfall documented.
+- [x] **US-3.1.0-G-Docs:** 100% public symbols documented; expiry pitfall documented.
 
 ### G-Law — Law validation
-- [ ] **US-3.1.0-G-Law:** SAMA tamper-proof origination certified.
+- [x] **US-3.1.0-G-Law:** SAMA tamper-proof origination certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-3.1.0-G4:** Create→retrieve→cancel cycle verified against the mock server.
+- [x] **US-3.1.0-G4:** Create→retrieve→cancel cycle verified against the mock server.

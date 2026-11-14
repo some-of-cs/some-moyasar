@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::kernel::auth::PublishableAuthKey;
 use crate::kernel::client::MoyasarClient;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::transport::execute_with_retry;
 
 const APPLE_PAY_INITIATE_PATH: &str = "/v1/applepay/initiate";
@@ -203,9 +203,11 @@ fn parse_session_response(
     if !(200..300).contains(&status) {
         return Err(MoyasarError::from_api_response(status, body));
     }
-    serde_json::from_str::<ApplePayMerchantSession>(body).map_err(|err| MoyasarError::ServerError {
-        status,
+    serde_json::from_str::<ApplePayMerchantSession>(body).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::Unknown,
         message: format!("failed to decode Apple Pay session response: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })
 }
 
@@ -213,7 +215,6 @@ fn parse_session_response(
 mod tests {
     use super::*;
     use crate::kernel::auth::PublishableKey;
-    use crate::kernel::error::ApiErrorType;
     use crate::kernel::transport::{API_VERSION, MOYASAR_VERSION_HEADER};
     use std::sync::atomic::{AtomicU32, Ordering};
     use wiremock::matchers::{body_json, header, header_exists, method, path};

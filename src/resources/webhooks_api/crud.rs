@@ -7,7 +7,7 @@ use zeroize::Zeroize;
 
 use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::pagination::PaginatedList;
 use crate::kernel::transport::execute_with_retry;
 use crate::resources::webhooks_api::WebhooksService;
@@ -261,9 +261,11 @@ async fn dispatch_post(
     url: &str,
     params: &CreateWebhookParams,
 ) -> Result<(u16, String), MoyasarError> {
-    let mut payload = serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
-        status: 500,
+    let mut payload = serde_json::to_vec(params).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::InvalidRequestError,
         message: format!("failed to serialize webhook request: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })?;
     let send_res = http
         .post(url)
@@ -311,9 +313,11 @@ fn decode_response<T: DeserializeOwned>(status: u16, body: &str) -> Result<T, Mo
     if !(200..300).contains(&status) {
         return Err(MoyasarError::from_api_response(status, body));
     }
-    serde_json::from_str::<T>(body).map_err(|err| MoyasarError::ServerError {
-        status,
+    serde_json::from_str::<T>(body).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::Unknown,
         message: format!("failed to decode webhook response: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })
 }
 
@@ -321,7 +325,6 @@ fn decode_response<T: DeserializeOwned>(status: u16, body: &str) -> Result<T, Mo
 mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
-    use crate::kernel::error::ApiErrorType;
     use crate::kernel::transport::{API_VERSION, MOYASAR_VERSION_HEADER};
     use serde_json::json;
     use uuid::Uuid;

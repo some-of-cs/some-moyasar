@@ -127,13 +127,20 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
     }
 }
 
-async fn parse_payment_response(response: reqwest::Response) -> Result<Payment, MoyasarError> {
+pub(crate) async fn parse_payment_response(
+    response: reqwest::Response,
+) -> Result<Payment, MoyasarError> {
     let status = response.status();
-    if status.is_success() {
-        return Ok(response.json::<Payment>().await?);
+    let body = response.text().await?;
+    if !status.is_success() {
+        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
-    let body = response.text().await.unwrap_or_default();
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
+    serde_json::from_str::<Payment>(&body).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::Unknown,
+        message: format!("failed to decode Payment response: {err}"),
+        errors: Vec::new(),
+        response_code: None,
+    })
 }
 
 #[cfg(test)]
@@ -256,5 +263,34 @@ mod tests {
         assert_eq!(payment.status, PaymentStatus::Paid);
         assert_eq!(payment.description.as_deref(), Some("Order #1024"));
         assert!(payment.metadata.get("order_id").is_none());
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_2xx_response_when_body_fails_to_decode() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/v1/payments/pay_01J9MALFORMED"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not-valid-json"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let url = format!("{}/v1/payments/pay_01J9MALFORMED", server.uri());
+        let err = execute_with_retry(2, || async {
+            let resp = http.put(&url).send().await?;
+            parse_payment_response(resp).await
+        })
+        .await
+        .expect_err("malformed 200 body must return non-retryable decode error");
+
+        assert!(!err.is_retryable());
+        assert!(matches!(
+            err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::Unknown,
+                ..
+            }
+        ));
     }
 }

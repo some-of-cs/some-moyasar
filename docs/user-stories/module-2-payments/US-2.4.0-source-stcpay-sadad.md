@@ -197,23 +197,23 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-2.4.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
-- [ ] **Unit 1 (`feat/us-2.4.0/unit-1-stcpay-source`)**: `StcPaySource`: mobile (+966/05/00966 formats), cashier, branch. Mobile validation via regex (Files: `src/resources/payments/source_stcpay.rs`)  
+- [x] **Unit 1 (`feat/us-2.4.0/unit-1-stcpay-source`)**: `StcPaySource`: mobile (+966/05/00966 formats), cashier, branch. Mobile validation via regex (Files: `src/resources/payments/source_stcpay.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-2.4.0/unit-2-stcpay-otp`)**: `client.payments().verify_stc_otp(url, otp)`, POST to `transaction_url`, otp_value injection, status: initiated → paid/failed (Files: `src/resources/payments/stcpay_otp.rs`)  
+- [x] **Unit 2 (`feat/us-2.4.0/unit-2-stcpay-otp`)**: `client.payments().verify_stc_otp(url, otp)`, POST to `transaction_url`, otp_value injection, status: initiated → paid/failed (Files: `src/resources/payments/stcpay_otp.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-2.4.0/unit-3-sadad-source`)**: `SadadBillSource` request (`expired_at`, optional sandbox `biller_code`) and `SadadBillSourceResponse` (`biller_code` 901/902/007, `sadad_number`, `provider_name`) (Files: `src/resources/payments/source_sadad.rs`)  
+- [x] **Unit 3 (`feat/us-2.4.0/unit-3-sadad-source`)**: `SadadBillSource` request (`expired_at`, optional sandbox `biller_code`) and `SadadBillSourceResponse` (`biller_code` 901/902/007, `sadad_number`, `provider_name`) (Files: `src/resources/payments/source_sadad.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-2.4.0/unit-4-sadad-expiry-guard`)**: SADAD 29-day maximum expiry validator, invoice-expiry cap helper, and sandbox unit tests (STC Pay 0515555555/58/59, SADAD biller 007) (Files: `src/resources/payments/sadad_expiry.rs`)  
+- [x] **Unit 4 (`feat/us-2.4.0/unit-4-sadad-expiry-guard`)**: SADAD 29-day maximum expiry validator, invoice-expiry cap helper, and sandbox unit tests (STC Pay 0515555555/58/59, SADAD biller 007) (Files: `src/resources/payments/sadad_expiry.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -242,49 +242,49 @@ sequenceDiagram
 - **Expiry Capping**: single source of truth for the 29-day limit.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **OTP Log Test**: OTP absent from all formatted output.
-- [ ] **URL Test**: `verify_stc_otp` uses the provided URL byte-for-byte.
-- [ ] **Expiry Test**: 29-day cap enforced.
-- [ ] **Cooldown Test**: 60-second cooldown error mapped distinctly.
+- [x] **OTP Log Test**: OTP absent from all formatted output.
+- [x] **URL Test**: `verify_stc_otp` uses the provided URL byte-for-byte.
+- [x] **Expiry Test**: 29-day cap enforced.
+- [x] **Cooldown Test**: 60-second cooldown error mapped distinctly.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] OTP handling verified against OWASP ASVS Level 2.
-- [ ] Zero OTP in logs or telemetry.
-- [ ] Expiry capping certified.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] OTP handling verified against OWASP ASVS Level 2.
+- [x] Zero OTP in logs or telemetry.
+- [x] Expiry capping certified.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-2.4.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-2.4.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-2.4.0-G1:** ≥90% line / ≥85% branch on STC Pay and SADAD modules.
+- [x] **US-2.4.0-G1:** ≥90% line / ≥85% branch on STC Pay and SADAD modules.
 
 ### G2 — Security audit
-- [ ] **US-2.4.0-G2:** OTP-handling audit passes with zero critical/high findings.
+- [x] **US-2.4.0-G2:** OTP-handling audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-2.4.0-G3:** Both sources are pure data + validation; zero transport coupling.
+- [x] **US-2.4.0-G3:** Both sources are pure data + validation; zero transport coupling.
 
 ### G-Review — Code review
-- [ ] **US-2.4.0-G-Review:** Peer review on OTP flow and expiry logic.
+- [x] **US-2.4.0-G-Review:** Peer review on OTP flow and expiry logic.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-2.4.0-G-Borrow:** Mobile normalization avoids intermediate allocations.
+- [x] **US-2.4.0-G-Borrow:** Mobile normalization avoids intermediate allocations.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-2.4.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-2.4.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-2.4.0-G-Docs:** 100% public symbols documented; OTP flow example runnable.
+- [x] **US-2.4.0-G-Docs:** 100% public symbols documented; OTP flow example runnable.
 
 ### G-Law — Law validation
-- [ ] **US-2.4.0-G-Law:** SAMA e-invoicing bill-expiry consistency certified.
+- [x] **US-2.4.0-G-Law:** SAMA e-invoicing bill-expiry consistency certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-2.4.0-G4:** STC Pay OTP round-trip and SADAD creation verified against sandbox.
+- [x] **US-2.4.0-G4:** STC Pay OTP round-trip and SADAD creation verified against sandbox.

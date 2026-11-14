@@ -198,27 +198,27 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-5.2.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..6`)
-- [ ] **Unit 1 (`feat/us-5.2.0/unit-1-payout-model`)**: `Payout` struct (id, channel, status: queued/initiated/paid/failed/canceled/returned, amount, message, failure_reason), `PayoutStatus` enum, `PayoutId` newtype (Files: `src/resources/payouts/payout_model.rs`)  
+- [x] **Unit 1 (`feat/us-5.2.0/unit-1-payout-model`)**: `Payout` struct (id, channel, status: queued/initiated/paid/failed/canceled/returned, amount, message, failure_reason), `PayoutStatus` enum, `PayoutId` newtype (Files: `src/resources/payouts/payout_model.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-5.2.0/unit-2-purpose-codes`)**: `PayoutPurpose` enum — all 20 regulated values (bills_or_rent, payroll_benefits, payment_to_merchant, own_account_transfer, etc.), `Serialize`/`Deserialize`, doc comments per variant (Files: `src/resources/payouts/purpose.rs`)  
+- [x] **Unit 2 (`feat/us-5.2.0/unit-2-purpose-codes`)**: `PayoutPurpose` enum — all 20 regulated values (bills_or_rent, payroll_benefits, payment_to_merchant, own_account_transfer, etc.), `Serialize`/`Deserialize`, doc comments per variant (Files: `src/resources/payouts/purpose.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-5.2.0/unit-3-destinations`)**: `PayoutDestination` enum: `BankDestination` (iban, name, mobile, country, city), `WalletDestination` (mobile), IBAN validation, mobile format validation (Files: `src/resources/payouts/destinations.rs`)  
+- [x] **Unit 3 (`feat/us-5.2.0/unit-3-destinations`)**: `PayoutDestination` enum: `BankDestination` (iban, name, mobile, country, city), `WalletDestination` (mobile), IBAN validation, mobile format validation (Files: `src/resources/payouts/destinations.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-5.2.0/unit-4-single-payout`)**: `CreatePayoutParams`: source_id, sequence_number (optional 16-digit), amount, purpose, destination, comment, metadata. `client.payouts().create()` (Files: `src/resources/payouts/payouts_create.rs`)  
+- [x] **Unit 4 (`feat/us-5.2.0/unit-4-single-payout`)**: `CreatePayoutParams`: source_id, sequence_number (optional 16-digit), amount, purpose, destination, comment, metadata. `client.payouts().create()` (Files: `src/resources/payouts/payouts_create.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-5.2.0/unit-5-bulk-payout`)**: `CreateBulkPayoutParams`: source_id, payouts Vec<BulkPayoutEntry>. `client.payouts().create_bulk()`, `BulkPayoutResponse` (Files: `src/resources/payouts/payouts_bulk.rs`)  
+- [x] **Unit 5 (`feat/us-5.2.0/unit-5-bulk-payout`)**: `CreateBulkPayoutParams`: source_id, payouts Vec<BulkPayoutEntry>. `client.payouts().create_bulk()`, `BulkPayoutResponse` (Files: `src/resources/payouts/payouts_bulk.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
-- [ ] **Unit 6 (`feat/us-5.2.0/unit-6-payout-list-retrieve`)**: `ListPayoutsParams`, `client.payouts().list(params)`, `client.payouts().retrieve(id)`, unit tests (Files: `src/resources/payouts/payouts_list.rs`)  
+- [x] **Unit 6 (`feat/us-5.2.0/unit-6-payout-list-retrieve`)**: `ListPayoutsParams`, `client.payouts().list(params)`, `client.payouts().retrieve(id)`, unit tests (Files: `src/resources/payouts/payouts_list.rs`)  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 6` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 6` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -247,49 +247,49 @@ sequenceDiagram
 - **Sequence Numbers**: stable 16-digit references for reconciliation.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Purpose Test**: all 20 variants serialize; unknown rejected.
-- [ ] **Amount Test**: zero/negative rejected.
-- [ ] **Destination Test**: malformed IBAN/mobile rejected.
-- [ ] **Bulk Test**: exactly one HTTP request per batch.
+- [x] **Purpose Test**: all 20 variants serialize; unknown rejected.
+- [x] **Amount Test**: zero/negative rejected.
+- [x] **Destination Test**: malformed IBAN/mobile rejected.
+- [x] **Bulk Test**: exactly one HTTP request per batch.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Disbursement controls verified against OWASP ASVS Level 2.
-- [ ] Purpose classification always present.
-- [ ] Destination validation certified.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Disbursement controls verified against OWASP ASVS Level 2.
+- [x] Purpose classification always present.
+- [x] Destination validation certified.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-5.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-5.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-5.2.0-G1:** ≥90% line / ≥85% branch on the payouts module.
+- [x] **US-5.2.0-G1:** ≥90% line / ≥85% branch on the payouts module.
 
 ### G2 — Security audit
-- [ ] **US-5.2.0-G2:** Disbursement audit passes with zero critical/high findings.
+- [x] **US-5.2.0-G2:** Disbursement audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-5.2.0-G3:** Payout purpose and destination types are pure data; zero transport coupling.
+- [x] **US-5.2.0-G3:** Payout purpose and destination types are pure data; zero transport coupling.
 
 ### G-Review — Code review
-- [ ] **US-5.2.0-G-Review:** Peer review on purpose completeness and validation.
+- [x] **US-5.2.0-G-Review:** Peer review on purpose completeness and validation.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-5.2.0-G-Borrow:** Bulk entries moved, not cloned.
+- [x] **US-5.2.0-G-Borrow:** Bulk entries moved, not cloned.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-5.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-5.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-5.2.0-G-Docs:** 100% public symbols documented; 20-code table published.
+- [x] **US-5.2.0-G-Docs:** 100% public symbols documented; 20-code table published.
 
 ### G-Law — Law validation
-- [ ] **US-5.2.0-G-Law:** SAMA mandatory purpose-of-transfer classification certified.
+- [x] **US-5.2.0-G-Law:** SAMA mandatory purpose-of-transfer classification certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-5.2.0-G4:** Single and bulk payouts verified across all three channels.
+- [x] **US-5.2.0-G4:** Single and bulk payouts verified across all three channels.

@@ -6,7 +6,7 @@ use serde::de::DeserializeOwned;
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::client::MoyasarClient;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
 use crate::kernel::transport::execute_with_retry;
 use crate::kernel::types::{Amount, Currency};
@@ -235,8 +235,12 @@ where
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &text));
     }
-    serde_json::from_str::<R>(&text)
-        .map_err(|_| MoyasarError::from_api_response(status.as_u16(), &text))
+    serde_json::from_str::<R>(&text).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::Unknown,
+        message: format!("failed to decode invoice response: {err}"),
+        errors: Vec::new(),
+        response_code: None,
+    })
 }
 
 fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
@@ -251,7 +255,6 @@ fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
 mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
-    use crate::kernel::error::ApiErrorType;
     use serde_json::json;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

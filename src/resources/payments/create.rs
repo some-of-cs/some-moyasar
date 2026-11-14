@@ -7,6 +7,7 @@ use crate::kernel::transport::execute_with_retry;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::params::CreatePaymentParams;
 use crate::resources::payments::service::PaymentsService;
+use crate::resources::payments::update::parse_payment_response;
 
 impl<'a, K: AuthKey> PaymentsService<'a, K> {
     /// Creates a new payment via `POST /v1/payments` using a random `given_id` policy.
@@ -80,18 +81,6 @@ impl<'a, K: AuthKey> PaymentsService<'a, K> {
         })
         .await
     }
-}
-
-async fn parse_payment_response(response: reqwest::Response) -> Result<Payment, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<Payment>(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
-        message: format!("failed to decode Payment response: {err}"),
-    })
 }
 
 #[cfg(test)]

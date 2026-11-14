@@ -185,23 +185,23 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-4.1.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
-- [ ] **Unit 1 (`feat/us-4.1.0/unit-1-token-model`)**: `Token` struct (id: "token_...", status: initiated/active/inactive, masked card details), `TokenStatus` enum, `TokenId` newtype (Files: `src/resources/tokens/models.rs`)  
+- [x] **Unit 1 (`feat/us-4.1.0/unit-1-token-model`)**: `Token` struct (id: "token_...", status: initiated/active/inactive, masked card details), `TokenStatus` enum, `TokenId` newtype (Files: `src/resources/tokens/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-4.1.0/unit-2-token-create`)**: `CreateTokenParams`: name, number, month, year, cvc, callback_url, save_only. `client.tokens().create()`, PublishableKey-accepted (Files: `src/resources/tokens/create.rs`)  
+- [x] **Unit 2 (`feat/us-4.1.0/unit-2-token-create`)**: `CreateTokenParams`: name, number, month, year, cvc, callback_url, save_only. `client.tokens().create()`, PublishableKey-accepted (Files: `src/resources/tokens/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-4.1.0/unit-3-token-retrieve`)**: `client.tokens().retrieve(id)` (`SecretKey` bound, returns masked card details for customer display), 404 mapping, unit tests (Files: `src/resources/tokens/retrieve.rs`)  
+- [x] **Unit 3 (`feat/us-4.1.0/unit-3-token-retrieve`)**: `client.tokens().retrieve(id)` (`SecretKey` bound, returns masked card details for customer display), 404 mapping, unit tests (Files: `src/resources/tokens/retrieve.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-4.1.0/unit-4-token-delete`)**: `client.tokens().delete(id)` (`DELETE /v1/tokens/:id` 204 No Content empty-body handler), token status gate helpers, unit tests (Files: `src/resources/tokens/delete.rs`)  
+- [x] **Unit 4 (`feat/us-4.1.0/unit-4-token-delete`)**: `client.tokens().delete(id)` (`DELETE /v1/tokens/:id` 204 No Content empty-body handler), token status gate helpers, unit tests (Files: `src/resources/tokens/delete.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -230,49 +230,49 @@ sequenceDiagram
 - **Status Gate**: `Active` required pre-charge.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **PAN Test**: no 16-digit sequence in `format!("{:?}", token)`.
-- [ ] **204 Test**: delete returns `Ok(())`.
-- [ ] **Status Gate Test**: inactive token blocks charge.
-- [ ] **Key Test**: `delete` unreachable with `pk_`.
+- [x] **PAN Test**: no 16-digit sequence in `format!("{:?}", token)`.
+- [x] **204 Test**: delete returns `Ok(())`.
+- [x] **Status Gate Test**: inactive token blocks charge.
+- [x] **Key Test**: `delete` unreachable with `pk_`.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Tokenization verified against OWASP ASVS Level 2.
-- [ ] Zero PAN retention.
-- [ ] Status gating enforced.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Tokenization verified against OWASP ASVS Level 2.
+- [x] Zero PAN retention.
+- [x] Status gating enforced.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-4.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-4.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-4.1.0-G1:** ≥90% line / ≥85% branch on the tokens module.
+- [x] **US-4.1.0-G1:** ≥90% line / ≥85% branch on the tokens module.
 
 ### G2 — Security audit
-- [ ] **US-4.1.0-G2:** PAN-retention audit passes with zero critical/high findings.
+- [x] **US-4.1.0-G2:** PAN-retention audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-4.1.0-G3:** Token module depends only on the kernel.
+- [x] **US-4.1.0-G3:** Token module depends only on the kernel.
 
 ### G-Review — Code review
-- [ ] **US-4.1.0-G-Review:** Peer review on PAN handling and 204 path.
+- [x] **US-4.1.0-G-Review:** Peer review on PAN handling and 204 path.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-4.1.0-G-Borrow:** `TokenId` avoids needless `String` cloning.
+- [x] **US-4.1.0-G-Borrow:** `TokenId` avoids needless `String` cloning.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-4.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-4.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-4.1.0-G-Docs:** 100% public symbols documented; lifecycle example runnable.
+- [x] **US-4.1.0-G-Docs:** 100% public symbols documented; lifecycle example runnable.
 
 ### G-Law — Law validation
-- [ ] **US-4.1.0-G-Law:** PCI-DSS 4.0 Requirement 3.4 tokenization guidance certified.
+- [x] **US-4.1.0-G-Law:** PCI-DSS 4.0 Requirement 3.4 tokenization guidance certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-4.1.0-G4:** Create→retrieve→delete round-trip verified against the mock server.
+- [x] **US-4.1.0-G4:** Create→retrieve→delete round-trip verified against the mock server.

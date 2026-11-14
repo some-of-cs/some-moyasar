@@ -3,10 +3,92 @@
   "title": "Module 7: Sources, Webhooks API & Constant-Time Webhook Verification Engine",
   "baseBranch": "main",
   "moduleBranch": "feat/module-7-sources-webhooks",
-  "status": "In Review",
+  "status": "Merged",
+  "prNumber": 131,
+  "updatedAt": "2026-11-14T05:00:00Z",
   "items": {
-    "us-7.1.0": { "status": "Merged", "branch": "feat/us-7.1.0-sources-applepay", "prNumber": 113, "unitCount": 3 },
-    "us-7.2.0": { "status": "Merged", "branch": "feat/us-7.2.0-webhooks-api", "prNumber": 130, "unitCount": 5 },
-    "us-7.3.0": { "status": "Merged", "branch": "feat/us-7.3.0-webhook-engine", "prNumber": 125, "unitCount": 5 }
+    "us-7.1.0": {
+      "status": "Merged",
+      "branch": "feat/us-7.1.0-sources-applepay",
+      "prNumber": 113,
+      "unitCount": 3
+    },
+    "us-7.1.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-7.1.0/unit-1-issuer-lookup",
+      "prNumber": 104
+    },
+    "us-7.1.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-7.1.0/unit-2-applepay-session",
+      "prNumber": 94
+    },
+    "us-7.1.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-7.1.0/unit-3-sources-service",
+      "prNumber": 97
+    },
+    "us-7.2.0": {
+      "status": "Merged",
+      "branch": "feat/us-7.2.0-webhooks-api",
+      "prNumber": 130,
+      "unitCount": 5
+    },
+    "us-7.2.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-7.2.0/unit-1-webhook-model",
+      "prNumber": 87
+    },
+    "us-7.2.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-7.2.0/unit-2-webhook-create-list",
+      "prNumber": 105
+    },
+    "us-7.2.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-7.2.0/unit-3-available-events",
+      "prNumber": 99
+    },
+    "us-7.2.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-7.2.0/unit-4-delivery-attempts",
+      "prNumber": 100
+    },
+    "us-7.2.0/unit-5": {
+      "status": "Merged",
+      "branch": "feat/us-7.2.0/unit-5-webhook-retrieve-delete",
+      "prNumber": 106
+    },
+    "us-7.3.0": {
+      "status": "Merged",
+      "branch": "feat/us-7.3.0-webhook-engine",
+      "prNumber": 125,
+      "unitCount": 5
+    },
+    "us-7.3.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-7.3.0/unit-1-webhook-event-types",
+      "prNumber": 89
+    },
+    "us-7.3.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-7.3.0/unit-2-constant-time-verifier",
+      "prNumber": 93
+    },
+    "us-7.3.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-7.3.0/unit-3-timestamp-validation",
+      "prNumber": 92
+    },
+    "us-7.3.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-7.3.0/unit-4-deduplication",
+      "prNumber": 102
+    },
+    "us-7.3.0/unit-5": {
+      "status": "Merged",
+      "branch": "feat/us-7.3.0/unit-5-webhook-payload-extractors",
+      "prNumber": 103
+    }
   }
 }

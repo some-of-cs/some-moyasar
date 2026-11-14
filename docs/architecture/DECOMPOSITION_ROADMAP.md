@@ -104,7 +104,7 @@ $$S_{\text{1.3}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 ## Module 2: Payments Service — CRUD, Lifecycle & Sources
 
 **Feature flag:** `payments` (default on)  
-**Branch:** `feat/module-2-payments-service`  
+**Branch:** `feat/module-2-payments`  
 **Depends on:** Module 1 (Core)  
 **Domain:** Full `/v1/payments` API: create, retrieve, list, update, refund, capture, void; polymorphic payment sources (credit card, Apple Pay, Samsung Pay, STC Pay, SADAD Bill, saved token); marketplace payment splits; Account Funding Transactions sender.
 
@@ -303,7 +303,7 @@ $$S_{\text{3.2}} = 0.35\cdot 2 + 0.25\cdot 2 + 0.20\cdot 3 + 0.20\cdot 2 = \text
 
 ## Module 4: Tokenization, Invoices & 3D Secure
 
-**Feature flags:** `tokens`, `invoices`, `card-auth` (all opt-in)  
+**Feature flags:** `tokens`, `invoices`, `card-auths` (alias `card-auth`), `tokens-invoices-3ds`  
 **Branch:** `feat/module-4-tokens-invoices-3ds`  
 **Depends on:** Modules 1-2 (Core, Payments)  
 **Domain:** Card tokenization (create/retrieve/delete, token lifecycle: initiated→active→inactive), hosted e-invoices (create, bulk, list, update, cancel via PUT), standalone 3D Secure 2.x card authentication with MPI cryptographic result extraction.
@@ -449,7 +449,7 @@ $$S_{\text{5.2}} = 0.35\cdot 4 + 0.25\cdot 3 + 0.20\cdot 3 + 0.20\cdot 3 = \text
 
 ## Module 6: Settlements, Transfers & Ledger
 
-**Feature flag:** `settlements` (opt-in)  
+**Feature flags:** `settlements-ledger` (alias `settlements`)  
 **Branch:** `feat/module-6-settlements-ledger`  
 **Depends on:** Module 1 (Core)  
 **Domain:** All read-only financial reconciliation endpoints: `/v1/settlements` (list, retrieve, lines, balance), `/v1/transfers` (list, retrieve, lines), `/v1/internal_transactions` (list). Multi-currency settlement lines with invoicing FX rates, CSV/PDF report URLs.
@@ -509,14 +509,14 @@ $$S_{\text{6.2}} = 0.35\cdot 3 + 0.25\cdot 2 + 0.20\cdot 2 + 0.20\cdot 2 = \text
 
 ## Module 7: Sources, Apple Pay & Webhooks
 
-**Feature flags:** `webhook-engine` (default on), `sources` (opt-in), `webhooks-api` (opt-in)  
+**Feature flags:** `webhook-engine`, `sources`, `webhooks-api`, `sources-webhooks`  
 **Branch:** `feat/module-7-sources-webhooks`  
 **Depends on:** Module 1 (Core)  
 **Domain:** Pre-charge BIN/IIN issuer lookup, Apple Pay Web Merchant session initiation, CRUD webhook endpoint management, delivery attempt inspection, and the constant-time webhook verification engine.
 
 ### Story 7.1 — BIN/IIN Issuer Lookup & Apple Pay Session
 **Branch:** `feat/us-7.1.0-sources-applepay`  
-**Domain:** `POST /v1/source/issuer` (BIN or full PAN → issuer metadata), `GET/POST /v1/applepay/initiate` (Apple Pay merchant session with merchantSessionIdentifier, nonce, signature).
+**Domain:** `POST /v1/source/issuer` (BIN or full PAN → issuer metadata), `POST /v1/applepay/initiate` (Apple Pay merchant session with merchantSessionIdentifier, nonce, signature).
 
 | Dimension | Score | Rationale |
 | :--- | :---: | :--- |

@@ -27,14 +27,30 @@ use crate::kernel::types::Currency;
 #[serde(transparent)]
 pub struct PayoutAccountId(String);
 
+pub(crate) fn has_unsafe_path_chars(raw: &str) -> bool {
+    raw.contains("..")
+        || raw
+            .chars()
+            .any(|c| c.is_whitespace() || "/?#\\".contains(c))
+}
+
 impl PayoutAccountId {
-    /// Constructs a new [`PayoutAccountId`], rejecting empty or whitespace-only strings.
+    /// Constructs a new [`PayoutAccountId`], rejecting empty strings, whitespace,
+    /// and URL path/query delimiter characters.
     pub fn new(id: impl Into<String>) -> Result<Self, MoyasarError> {
         let id = id.into();
         if id.trim().is_empty() {
             return Err(MoyasarError::Api {
                 error_type: ApiErrorType::InvalidRequestError,
                 message: "payout account id must not be empty".into(),
+                errors: vec![],
+                response_code: None,
+            });
+        }
+        if has_unsafe_path_chars(&id) {
+            return Err(MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                message: "payout account id must not contain whitespace or URL delimiters".into(),
                 errors: vec![],
                 response_code: None,
             });

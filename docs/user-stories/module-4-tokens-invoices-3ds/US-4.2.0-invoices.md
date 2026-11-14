@@ -183,25 +183,25 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-4.2.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
-- [ ] **Unit 1 (`feat/us-4.2.0/unit-1-invoice-model`)**: `Invoice` struct (id, amount, currency, description, callback_url, status, hosted payment url, expired_at, created_at, associated payments) (Files: `src/resources/invoices/models.rs`)  
+- [x] **Unit 1 (`feat/us-4.2.0/unit-1-invoice-model`)**: `Invoice` struct (id, amount, currency, description, callback_url, status, hosted payment url, expired_at, created_at, associated payments) (Files: `src/resources/invoices/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-4.2.0/unit-2-invoice-create`)**: `CreateInvoiceParams`, `client.invoices().create()`, `client.invoices().create_bulk(Vec<CreateInvoiceParams>)` (Files: `src/resources/invoices/create.rs`)  
+- [x] **Unit 2 (`feat/us-4.2.0/unit-2-invoice-create`)**: `CreateInvoiceParams`, `client.invoices().create()`, `client.invoices().create_bulk(Vec<CreateInvoiceParams>)` (Files: `src/resources/invoices/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-4.2.0/unit-3-invoice-retrieve-list`)**: `client.invoices().retrieve(id)`, `client.invoices().list(params)` with metadata/status/date filters, pagination (Files: `src/resources/invoices/retrieve_list.rs`)  
+- [x] **Unit 3 (`feat/us-4.2.0/unit-3-invoice-retrieve-list`)**: `client.invoices().retrieve(id)`, `client.invoices().list(params)` with metadata/status/date filters, pagination (Files: `src/resources/invoices/retrieve_list.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-4.2.0/unit-4-invoice-update`)**: `UpdateInvoiceParams` (`description`, `metadata`), `client.invoices().update(id, params)` (`PUT /v1/invoices/:id`), unit tests (Files: `src/resources/invoices/update.rs`)  
+- [x] **Unit 4 (`feat/us-4.2.0/unit-4-invoice-update`)**: `UpdateInvoiceParams` (`description`, `metadata`), `client.invoices().update(id, params)` (`PUT /v1/invoices/:id`), unit tests (Files: `src/resources/invoices/update.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-4.2.0/unit-5-invoice-cancel`)**: `client.invoices().cancel(id)` via `PUT /v1/invoices/:id/cancel`, SADAD bill expiry synchronization (`sync_sadad_expiry`), unit tests (Files: `src/resources/invoices/cancel.rs`)  
+- [x] **Unit 5 (`feat/us-4.2.0/unit-5-invoice-cancel`)**: `client.invoices().cancel(id)` via `PUT /v1/invoices/:id/cancel`, SADAD bill expiry synchronization (`sync_sadad_expiry`), unit tests (Files: `src/resources/invoices/cancel.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -230,49 +230,49 @@ sequenceDiagram
 - **Expiry Synchronization**: single formula for bill expiry.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Verb Test**: cancel issues PUT only.
-- [ ] **Immutability Test**: amount/currency unchanged by update.
-- [ ] **Expiry Test**: bill expiry ≤ invoice expiry.
-- [ ] **Terminal Test**: no transition out of `canceled`.
+- [x] **Verb Test**: cancel issues PUT only.
+- [x] **Immutability Test**: amount/currency unchanged by update.
+- [x] **Expiry Test**: bill expiry ≤ invoice expiry.
+- [x] **Terminal Test**: no transition out of `canceled`.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Document integrity verified against OWASP ASVS Level 2.
-- [ ] No DELETE path for invoices.
-- [ ] Expiry synchronization certified.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Document integrity verified against OWASP ASVS Level 2.
+- [x] No DELETE path for invoices.
+- [x] Expiry synchronization certified.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-4.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-4.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-4.2.0-G1:** ≥90% line / ≥85% branch on the invoices module.
+- [x] **US-4.2.0-G1:** ≥90% line / ≥85% branch on the invoices module.
 
 ### G2 — Security audit
-- [ ] **US-4.2.0-G2:** Document-integrity audit passes with zero critical/high findings.
+- [x] **US-4.2.0-G2:** Document-integrity audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-4.2.0-G3:** Invoices depend on kernel + payments only.
+- [x] **US-4.2.0-G3:** Invoices depend on kernel + payments only.
 
 ### G-Review — Code review
-- [ ] **US-4.2.0-G-Review:** Peer review on verb correctness and immutability.
+- [x] **US-4.2.0-G-Review:** Peer review on verb correctness and immutability.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-4.2.0-G-Borrow:** Bulk creation moves the vec; no element cloning.
+- [x] **US-4.2.0-G-Borrow:** Bulk creation moves the vec; no element cloning.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-4.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-4.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-4.2.0-G-Docs:** 100% public symbols documented; PUT-cancel quirk documented.
+- [x] **US-4.2.0-G-Docs:** 100% public symbols documented; PUT-cancel quirk documented.
 
 ### G-Law — Law validation
-- [ ] **US-4.2.0-G-Law:** SAMA e-invoicing expiry and immutability certified.
+- [x] **US-4.2.0-G-Law:** SAMA e-invoicing expiry and immutability certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-4.2.0-G4:** All six endpoints verified against the mock server.
+- [x] **US-4.2.0-G4:** All six endpoints verified against the mock server.
