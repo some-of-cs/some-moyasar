@@ -38,6 +38,19 @@ pub trait CustomerVault: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<(), MoyasarError>> + Send + 'a>>;
 }
 
+/// Parameters for charging a customer's saved token via [`CustomersService::charge`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomerChargeParams<'a> {
+    /// Merchant customer identifier.
+    pub customer_id: &'a str,
+    /// Charge amount in minor units.
+    pub amount: u64,
+    /// ISO 4217 currency.
+    pub currency: Currency,
+    /// Optional merchant metadata (will have `customer_id` injected automatically).
+    pub metadata: Option<Metadata>,
+}
+
 /// Injects `metadata["customer_id"] = customer_id` into [`Metadata`].
 ///
 /// # Errors
@@ -107,24 +120,18 @@ impl<K: SecretAuthKey, V: CustomerVault> CustomersService<'_, K, V> {
     ///
     /// Returns [`MoyasarError::InvalidTokenId`] if no active token is bound to `customer_id`,
     /// or propagates HTTP/validation errors.
-    pub async fn charge(
-        &self,
-        customer_id: &str,
-        amount: u64,
-        currency: Currency,
-        metadata: Option<Metadata>,
-    ) -> Result<Payment, MoyasarError> {
-        let tokens = self.vault.resolve_tokens(customer_id).await?;
+    pub async fn charge(&self, params: &CustomerChargeParams<'_>) -> Result<Payment, MoyasarError> {
+        let tokens = self.vault.resolve_tokens(params.customer_id).await?;
         let token_id = tokens.first().ok_or(MoyasarError::InvalidTokenId)?;
-        let enriched = inject_customer_metadata(metadata, customer_id)?;
+        let enriched = inject_customer_metadata(params.metadata.clone(), params.customer_id)?;
         let source = TokenSource::new(token_id.as_str())?;
-        let params = CreatePaymentParams::builder()
-            .amount(amount)
-            .currency(currency)
+        let req = CreatePaymentParams::builder()
+            .amount(params.amount)
+            .currency(params.currency)
             .payment_source(PaymentSourceRequest::Token(source))
             .metadata(enriched)
             .build()?;
-        self.client.payments().create(&params).await
+        self.client.payments().create(&req).await
     }
 }
 
