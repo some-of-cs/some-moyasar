@@ -17,6 +17,19 @@ use crate::resources::payments::{
 };
 use crate::webhook_engine::{ConstantTimeSecretVerifier, REPLAY_TOLERANCE};
 
+const CURRENCY_TABLE: [(&str, Currency); 10] = [
+    ("SAR", Currency::SAR),
+    ("USD", Currency::USD),
+    ("KWD", Currency::KWD),
+    ("BHD", Currency::BHD),
+    ("AED", Currency::AED),
+    ("QAR", Currency::QAR),
+    ("OMR", Currency::OMR),
+    ("EUR", Currency::EUR),
+    ("GBP", Currency::GBP),
+    ("JPY", Currency::JPY),
+];
+
 /// Unified payment intent response across payment gateways.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnifiedIntentResponse {
@@ -213,12 +226,14 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
             .and_then(|v| v.to_str().ok())
             .unwrap_or_else(|| self.key().expose_secret());
         let verifier = ConstantTimeSecretVerifier::new(secret, REPLAY_TOLERANCE);
-        let event = verifier.verify_and_construct(raw_body).map_err(|_| MoyasarError::Api {
-            error_type: ApiErrorType::AuthenticationError,
-            message: "webhook verification failed".to_owned(),
-            errors: Vec::new(),
-            response_code: None,
-        })?;
+        let event = verifier
+            .verify_and_construct(raw_body)
+            .map_err(|_| MoyasarError::Api {
+                error_type: ApiErrorType::AuthenticationError,
+                message: "webhook verification failed".to_owned(),
+                errors: Vec::new(),
+                response_code: None,
+            })?;
         Ok(UnifiedWebhookEvent {
             id: event.id,
             event_type: event.event_type.as_str().to_owned(),
@@ -230,24 +245,17 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
 }
 
 fn parse_currency(raw: &str) -> Result<Currency, MoyasarError> {
-    match raw.to_ascii_uppercase().as_str() {
-        "SAR" => Ok(Currency::SAR),
-        "USD" => Ok(Currency::USD),
-        "KWD" => Ok(Currency::KWD),
-        "BHD" => Ok(Currency::BHD),
-        "AED" => Ok(Currency::AED),
-        "QAR" => Ok(Currency::QAR),
-        "OMR" => Ok(Currency::OMR),
-        "EUR" => Ok(Currency::EUR),
-        "GBP" => Ok(Currency::GBP),
-        "JPY" => Ok(Currency::JPY),
-        _ => Err(MoyasarError::Api {
+    let upper = raw.to_ascii_uppercase();
+    CURRENCY_TABLE
+        .iter()
+        .find(|(code, _)| *code == upper)
+        .map(|(_, cur)| *cur)
+        .ok_or_else(|| MoyasarError::Api {
             error_type: ApiErrorType::InvalidRequestError,
             message: format!("unsupported currency: {raw}"),
             errors: Vec::new(),
             response_code: None,
-        }),
-    }
+        })
 }
 
 #[cfg(test)]
@@ -302,6 +310,49 @@ mod tests {
             .mount(&server)
             .await;
 
+        Mock::given(method("GET"))
+            .and(path("/v1/payments/pay_01J9UNIFIED"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "pay_01J9UNIFIED",
+                "status": "paid",
+                "amount": 15000,
+                "amount_format": "150.00 SAR",
+                "fee": 0,
+                "fee_format": "0.00 SAR",
+                "refunded": 0,
+                "refunded_format": "0.00 SAR",
+                "captured": 15000,
+                "captured_format": "150.00 SAR",
+                "currency": "SAR",
+                "source": {"type": "token"},
+                "created_at": now,
+                "updated_at": now
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_01J9UNIFIED/void"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "pay_01J9UNIFIED",
+                "status": "voided",
+                "amount": 15000,
+                "amount_format": "150.00 SAR",
+                "fee": 0,
+                "fee_format": "0.00 SAR",
+                "refunded": 0,
+                "refunded_format": "0.00 SAR",
+                "captured": 0,
+                "captured_format": "0.00 SAR",
+                "currency": "SAR",
+                "source": {"type": "token"},
+                "voided_at": now,
+                "created_at": now,
+                "updated_at": now
+            })))
+            .mount(&server)
+            .await;
+
         let client = MoyasarClient::builder(SecretKey::new("sk_test_unified").unwrap())
             .base_url(server.uri())
             .build()
@@ -319,6 +370,10 @@ mod tests {
             .unwrap();
         assert_eq!(charge.transaction_id, "pay_01J9UNIFIED");
 
+        let reversal = client.refund_or_void("pay_01J9UNIFIED", None).await.unwrap();
+        assert_eq!(reversal.action, "voided");
+        assert_eq!(reversal.amount_reversed_minor, 15000);
+
         let payload = json!({
             "id": Uuid::new_v4(),
             "type": "payment_paid",
@@ -328,7 +383,10 @@ mod tests {
             "data": {"id": "pay_01J9UNIFIED"}
         });
         let mut headers = http::HeaderMap::new();
-        headers.insert("x-moyasar-webhook-secret", "whsec_test_123".parse().unwrap());
+        headers.insert(
+            "x-moyasar-webhook-secret",
+            "whsec_test_123".parse().unwrap(),
+        );
         let evt = client
             .verify_webhook(&headers, payload.to_string().as_bytes())
             .unwrap();
