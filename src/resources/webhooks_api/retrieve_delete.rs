@@ -133,14 +133,14 @@ async fn send_retrieve_request(
 ) -> Result<WebhookEndpoint, MoyasarError> {
     let response = http.get(url).send().await.map_err(map_reqwest_error)?;
     let status = response.status();
-    if status.is_success() {
-        return response
-            .json::<WebhookEndpoint>()
-            .await
-            .map_err(map_reqwest_error);
+    let body = response.text().await.map_err(map_reqwest_error)?;
+    if !status.is_success() {
+        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
-    let body = response.text().await.unwrap_or_default();
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
+    serde_json::from_str::<WebhookEndpoint>(&body).map_err(|err| MoyasarError::ServerError {
+        status: status.as_u16(),
+        message: format!("failed to decode WebhookEndpoint response: {err}"),
+    })
 }
 
 async fn delete_webhook(

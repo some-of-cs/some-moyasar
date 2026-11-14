@@ -1,11 +1,32 @@
 //! Available webhook events listing and `WebhookEventType` re-export (US-7.2.0 Unit 3).
 
+use serde::Deserialize;
+
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::transport::execute_with_retry;
 use crate::resources::webhooks_api::WebhooksService;
 
 pub use crate::webhook_engine::event_types::WebhookEventType;
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum AvailableEventsEnvelope {
+    Array(Vec<WebhookEventType>),
+    Wrapped {
+        #[serde(alias = "events")]
+        available_events: Vec<WebhookEventType>,
+    },
+}
+
+impl AvailableEventsEnvelope {
+    fn into_vec(self) -> Vec<WebhookEventType> {
+        match self {
+            Self::Array(events) => events,
+            Self::Wrapped { available_events } => available_events,
+        }
+    }
+}
 
 impl<'a, K: SecretAuthKey> WebhooksService<'a, K> {
     /// Lists all canonical webhook event types supported by Moyasar (`GET /v1/webhooks/available_events`).
@@ -54,7 +75,7 @@ async fn fetch_available_events(
     );
 
     execute_with_retry(max_network_retries, || async {
-        let response = http.get(&url).send().await?;
+        let response = http.get(&url).send().await.map_err(map_reqwest_error)?;
         parse_available_events_response(response).await
     })
     .await
@@ -64,11 +85,24 @@ async fn parse_available_events_response(
     response: reqwest::Response,
 ) -> Result<Vec<WebhookEventType>, MoyasarError> {
     let status = response.status();
-    if status.is_success() {
-        return Ok(response.json::<Vec<WebhookEventType>>().await?);
+    let body = response.text().await.map_err(map_reqwest_error)?;
+    if !status.is_success() {
+        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
-    let body = response.text().await.unwrap_or_default();
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
+    serde_json::from_str::<AvailableEventsEnvelope>(&body)
+        .map(AvailableEventsEnvelope::into_vec)
+        .map_err(|err| MoyasarError::ServerError {
+            status: status.as_u16(),
+            message: format!("failed to decode available webhook events response: {err}"),
+        })
+}
+
+fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
+    if err.is_timeout() {
+        MoyasarError::Timeout
+    } else {
+        MoyasarError::Network(err)
+    }
 }
 
 #[cfg(test)]
@@ -132,9 +166,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn wiremock_available_events_maps_api_error_without_retry() {
+    async fn wiremock_available_events_accepts_wrapped_object_and_maps_api_error() {
         let server = MockServer::start().await;
 
+        Mock::given(method("GET"))
+            .and(path("/v1/webhooks/available_events"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "available_events": ["payment_paid", "payment_faild"]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let wrapped = fetch_available_events(&http, &server.uri(), 1)
+            .await
+            .expect("wrapped available_events object decodes");
+        assert_eq!(
+            wrapped,
+            vec![
+                WebhookEventType::PaymentPaid,
+                WebhookEventType::PaymentFailed
+            ]
+        );
+
+        let err_server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/v1/webhooks/available_events"))
             .respond_with(ResponseTemplate::new(401).set_body_json(json!({
@@ -142,11 +198,10 @@ mod tests {
                 "message": "Invalid API key"
             })))
             .expect(1)
-            .mount(&server)
+            .mount(&err_server)
             .await;
 
-        let http = reqwest::Client::new();
-        let err = fetch_available_events(&http, &server.uri(), 2)
+        let err = fetch_available_events(&http, &err_server.uri(), 2)
             .await
             .expect_err("401 must fail without retrying");
 

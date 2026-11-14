@@ -1,19 +1,12 @@
 //! SourcesService and ApplePayService client facades (US-7.1.0 Unit 3).
 
-use http::header::CONTENT_TYPE;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use zeroize::Zeroize;
-
 use crate::kernel::auth::{AuthKey, PublishableAuthKey};
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::MoyasarError;
-use crate::kernel::transport::send_with_retry;
-use crate::resources::sources::apple_pay::{ApplePayMerchantSession, InitiateApplePayParams};
-use crate::resources::sources::issuer::{BinLookupParams, IssuerMetadata};
-
-const ISSUER_PATH: &str = "/v1/source/issuer";
-const APPLE_PAY_INITIATE_PATH: &str = "/v1/applepay/initiate";
+use crate::resources::sources::apple_pay::{
+    ApplePayMerchantSession, InitiateApplePayParams, initiate_session_request,
+};
+use crate::resources::sources::issuer::{BinLookupParams, IssuerMetadata, get_issuer_request};
 
 /// Borrowed service handle for Moyasar BIN/IIN issuer lookup (`POST /v1/source/issuer`).
 ///
@@ -68,7 +61,7 @@ impl<'a, K: AuthKey> SourcesService<'a, K> {
         &self,
         params: &BinLookupParams,
     ) -> Result<IssuerMetadata, MoyasarError> {
-        post_json(self.client, ISSUER_PATH, params).await
+        get_issuer_request(self.client, params).await
     }
 }
 
@@ -104,9 +97,11 @@ impl<'a, K: PublishableAuthKey> ApplePayService<'a, K> {
     ///
     /// # Errors
     ///
-    /// Returns [`MoyasarError::Api`] on 4xx API errors, [`MoyasarError::ServerError`]
-    /// on exhausted 5xx responses, [`MoyasarError::Timeout`] on request timeout, or
-    /// [`MoyasarError::Network`] on transport failures.
+    /// Returns [`MoyasarError::InvalidBaseUrl`] if `params.validation_url` is not a
+    /// valid `https://` URL, [`MoyasarError::Api`] on 4xx API errors,
+    /// [`MoyasarError::ServerError`] on exhausted 5xx responses,
+    /// [`MoyasarError::Timeout`] on request timeout, or [`MoyasarError::Network`]
+    /// on transport failures.
     ///
     /// # Examples
     ///
@@ -140,7 +135,7 @@ impl<'a, K: PublishableAuthKey> ApplePayService<'a, K> {
         &self,
         params: &InitiateApplePayParams,
     ) -> Result<ApplePayMerchantSession, MoyasarError> {
-        post_json(self.client, APPLE_PAY_INITIATE_PATH, params).await
+        initiate_session_request(self.client, params).await
     }
 }
 
@@ -156,90 +151,10 @@ impl<K: AuthKey> MoyasarClient<K> {
     }
 }
 
-fn build_endpoint_url(base_url: &str, path: &str) -> String {
-    format!("{}{}", base_url.trim_end_matches('/'), path)
-}
-
-fn serialize_json_body<P: Serialize + ?Sized>(params: &P) -> Result<Vec<u8>, MoyasarError> {
-    serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
-        status: 500,
-        message: format!("failed to serialize request payload: {err}"),
-    })
-}
-
-async fn post_json<K, P, R>(
-    client: &MoyasarClient<K>,
-    path: &str,
-    params: &P,
-) -> Result<R, MoyasarError>
-where
-    K: AuthKey,
-    P: Serialize + ?Sized,
-    R: DeserializeOwned,
-{
-    let url = build_endpoint_url(&client.config().base_url, path);
-    let mut body_bytes = serialize_json_body(params)?;
-    let max_retries = client.config().max_network_retries;
-
-    let result = send_with_retry(max_retries, || async {
-        dispatch_post(client.http(), &url, &body_bytes).await
-    })
-    .await;
-
-    body_bytes.zeroize();
-    let (status, body) = result?;
-    parse_json_response(status, &body)
-}
-
-async fn dispatch_post(
-    http: &reqwest::Client,
-    url: &str,
-    body_bytes: &[u8],
-) -> Result<(u16, String), MoyasarError> {
-    let response = http
-        .post(url)
-        .header(CONTENT_TYPE, "application/json")
-        .body(body_bytes.to_vec())
-        .send()
-        .await
-        .map_err(map_reqwest_error)?;
-    let status = response.status().as_u16();
-    let body = response.text().await.map_err(map_reqwest_error)?;
-    if status >= 500 {
-        return Err(MoyasarError::from_api_response(status, &body));
-    }
-    Ok((status, body))
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
-
-fn parse_json_response<R: DeserializeOwned>(status: u16, body: &str) -> Result<R, MoyasarError> {
-    if !(200..300).contains(&status) {
-        return Err(MoyasarError::from_api_response(status, body));
-    }
-    serde_json::from_str::<R>(body).map_err(|err| MoyasarError::ServerError {
-        status,
-        message: format!("failed to decode response payload: {err}"),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::kernel::auth::{PublishableKey, SecretKey};
-    use crate::kernel::error::ApiErrorType;
-    use serde::Deserialize;
-
-    #[derive(Debug, Deserialize, PartialEq, Eq)]
-    struct DummyPayload {
-        ok: bool,
-    }
 
     #[test]
     fn tc_7_1_0_01_sources_service_accepts_secret_and_publishable_keys() {
@@ -258,41 +173,12 @@ mod tests {
     }
 
     #[test]
-    fn tc_7_1_0_02_endpoint_url_and_error_mapping_behave_cleanly() {
-        assert_eq!(
-            build_endpoint_url("https://api.moyasar.com/", ISSUER_PATH),
-            "https://api.moyasar.com/v1/source/issuer"
-        );
-        assert_eq!(
-            build_endpoint_url("https://api.moyasar.com", APPLE_PAY_INITIATE_PATH),
-            "https://api.moyasar.com/v1/applepay/initiate"
-        );
-
-        let err = parse_json_response::<DummyPayload>(
-            422,
-            r#"{"type":"invalid_request_error","message":"first_digits must be at least 6 digits"}"#,
-        )
-        .expect_err("422 must return MoyasarError::Api");
-        assert!(matches!(
-            err,
-            MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                ..
-            }
-        ));
-    }
-
-    #[test]
     fn tc_7_1_0_03_apple_pay_service_binds_publishable_client_with_zero_clone() {
         let pk = PublishableKey::new("pk_test_unit3_apple_pay").expect("valid publishable key");
         let pk_client = MoyasarClient::new(pk).expect("publishable client builds");
         let apple_pay: ApplePayService<'_, PublishableKey> = pk_client.apple_pay();
         let copied = apple_pay;
         assert!(std::ptr::eq(copied.client(), &pk_client));
-
-        let ok = parse_json_response::<DummyPayload>(200, r#"{"ok":true}"#)
-            .expect("200 JSON decodes cleanly");
-        assert_eq!(ok, DummyPayload { ok: true });
     }
 
     #[test]
