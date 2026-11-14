@@ -157,10 +157,21 @@ mod tests {
             .await;
 
         let good_tok = TokenId::new("token_abc").unwrap();
-        let p1 = client.subscriptions().charge_cycle("sub_pro_9921", 4, 29900, Currency::SAR, &good_tok).await.unwrap();
-        let p2 = client.subscriptions().charge_cycle("sub_pro_9921", 4, 29900, Currency::SAR, &good_tok).await.unwrap();
+        let p1 = client
+            .subscriptions()
+            .charge_cycle("sub_pro_9921", 4, 29900, Currency::SAR, &good_tok)
+            .await
+            .unwrap();
+        let p2 = client
+            .subscriptions()
+            .charge_cycle("sub_pro_9921", 4, 29900, Currency::SAR, &good_tok)
+            .await
+            .unwrap();
         assert_eq!(p1.id, "pay_sub_4");
         assert_eq!(p2.id, "pay_sub_4");
-        assert_eq!(expected_given_id, derive_subscription_given_id("sub_pro_9921", 4));
+        assert_eq!(
+            expected_given_id,
+            derive_subscription_given_id("sub_pro_9921", 4)
+        );
     }
 }
