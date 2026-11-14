@@ -5,14 +5,15 @@ pub use crate::kernel::resolve_env_secret;
 
 pub use crate::kernel::{
     API_VERSION, Amount, ApiErrorPayload, ApiErrorType, AuthKey, AuthMode, Currency,
-    DEFAULT_BASE_URL, FieldError, GivenIdPolicy, METADATA_KEY_MAX_LEN, METADATA_MAX_KEYS,
-    METADATA_VALUE_MAX_LEN, MOYASAR_SUBSCRIPTION_NAMESPACE, MOYASAR_VERSION_HEADER, Meta, Metadata,
-    MoyasarClient, MoyasarClientBuilder, MoyasarClientConfig, MoyasarError, PaginatedList,
-    Paginator, PublishableAuthKey, PublishableKey, RecipientType, ResponseCode, SecretAuthKey,
-    SecretKey, build_default_headers, decode_json_response, derive_subscription_given_id,
+    DEFAULT_BASE_URL, FieldError, GivenIdPolicy, MAX_ERROR_BODY_CHARS, MAX_RESPONSE_BODY_BYTES,
+    METADATA_KEY_MAX_LEN, METADATA_MAX_KEYS, METADATA_VALUE_MAX_LEN,
+    MOYASAR_SUBSCRIPTION_NAMESPACE, MOYASAR_VERSION_HEADER, Meta, Metadata, MoyasarClient,
+    MoyasarClientBuilder, MoyasarClientConfig, MoyasarError, PaginatedList, Paginator,
+    PublishableAuthKey, PublishableKey, RecipientType, ResponseCode, SecretAuthKey, SecretKey,
+    build_default_headers, decode_json_response, derive_subscription_given_id,
     deserialize_field_errors, encode_basic_auth, execute_with_retry, inject_given_id,
-    is_valid_id_char, is_valid_path_segment, is_valid_prefixed_id, send_get_json, send_with_retry,
-    serialize_opt_secret, serialize_secret, validate_path_segment,
+    is_valid_id_char, is_valid_path_segment, is_valid_prefixed_id, read_bounded_response_text,
+    send_get_json, send_with_retry, serialize_opt_secret, serialize_secret, validate_path_segment,
 };
 
 #[cfg(feature = "payments")]
@@ -89,7 +90,7 @@ pub use crate::resources::sources::{
 #[cfg(feature = "webhooks-api")]
 pub use crate::resources::webhooks_api::{
     CreateWebhookParams, ListWebhookAttemptsParams, WebhookAttempt, WebhookEndpoint, WebhookSecret,
-    WebhooksService, validate_https_url,
+    WebhooksService, validate_https_url, validate_webhook_url,
 };
 
 #[cfg(feature = "webhook-engine")]
@@ -101,9 +102,10 @@ pub use crate::webhook_engine::{
 
 #[cfg(feature = "stripe-compat")]
 pub use crate::stripe_compat::{
-    CustomerChargeParams, CustomerVault, CustomersService, InMemoryCustomerVault, PlanInterval,
-    RefundCreateParams, RefundReceipt, RefundRoute, RefundStrategy, RefundsService, ReversalAction,
-    Subscription, SubscriptionCycle, SubscriptionCycleChargeParams, SubscriptionCycleId,
+    CustomerChargeParams, CustomerVault, CustomersService, DEFAULT_MAX_CUSTOMERS,
+    DEFAULT_MAX_TOKENS_PER_CUSTOMER, InMemoryCustomerVault, PlanInterval, RefundCreateParams,
+    RefundReceipt, RefundRoute, RefundStrategy, RefundsService, ReversalAction, Subscription,
+    SubscriptionCycle, SubscriptionCycleChargeParams, SubscriptionCycleId,
     SubscriptionCycleRefundParams, SubscriptionCycleRefundResult, SubscriptionPlan,
     SubscriptionsService, inject_customer_metadata, next_period_bounds, pro_rata_refund,
     select_refund_route,
@@ -113,7 +115,9 @@ pub use crate::stripe_compat::{
 pub use crate::unified::{
     PaymentCapability, PayoutCapability, PayoutEngine, UnifiedChargeResponse, UnifiedIntentRequest,
     UnifiedIntentResponse, UnifiedPaymentGateway, UnifiedReversalResponse,
-    UnifiedTokenChargeRequest, UnifiedWebhookEvent, WebhookCapability, WebhookVerifier,
+    UnifiedTokenChargeRequest, UnifiedWebhookEvent, WEBHOOK_SECRET_TOKEN_HEADER,
+    WEBHOOK_SIGNATURE_HEADER, WebhookCapability, WebhookVerifier, compute_webhook_signature,
+    verify_webhook_signature,
 };
 
 #[cfg(any(test, feature = "test-utils"))]

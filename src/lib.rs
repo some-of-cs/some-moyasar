@@ -5,6 +5,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+use chrono as _;
+
 #[cfg(feature = "core")]
 pub mod kernel;
 

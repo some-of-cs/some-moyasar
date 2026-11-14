@@ -17,6 +17,9 @@ pub const API_VERSION: &str = "2024-01-01";
 /// Custom Moyasar API version header name.
 pub const MOYASAR_VERSION_HEADER: &str = "moyasar-version";
 
+/// Maximum permitted HTTP response body size (2 MiB).
+pub const MAX_RESPONSE_BODY_BYTES: usize = 2 * 1024 * 1024;
+
 /// Encodes an `AuthKey` into an HTTP Basic Auth `HeaderValue`:
 /// `Basic base64("{api_key}:")` with a trailing colon and empty password.
 ///
@@ -117,17 +120,56 @@ where
     execute_with_retry(max_network_retries, operation).await
 }
 
+/// Reads a [`reqwest::Response`] body as UTF-8 text while enforcing [`MAX_RESPONSE_BODY_BYTES`].
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::Api`] (via [`MoyasarError::decode_error`]) if the response body
+/// exceeds [`MAX_RESPONSE_BODY_BYTES`] or is not valid UTF-8, or [`MoyasarError::Network`] /
+/// [`MoyasarError::Timeout`] on transport failure.
+pub async fn read_bounded_response_text(
+    mut response: reqwest::Response,
+    context: &str,
+) -> Result<String, MoyasarError> {
+    if response
+        .content_length()
+        .is_some_and(|len| len > MAX_RESPONSE_BODY_BYTES as u64)
+    {
+        return Err(body_too_large_error(context));
+    }
+    let buf = read_bounded_chunks(&mut response, context).await?;
+    String::from_utf8(buf).map_err(|err| MoyasarError::decode_error(context, err))
+}
+
+async fn read_bounded_chunks(
+    response: &mut reqwest::Response,
+    context: &str,
+) -> Result<Vec<u8>, MoyasarError> {
+    let mut buf = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(MoyasarError::from)? {
+        if buf.len().saturating_add(chunk.len()) > MAX_RESPONSE_BODY_BYTES {
+            return Err(body_too_large_error(context));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(buf)
+}
+
+fn body_too_large_error(context: &str) -> MoyasarError {
+    MoyasarError::decode_error(context, "response body exceeds 2 MiB limit")
+}
+
 /// Decodes a `2xx` [`reqwest::Response`] body as JSON into `T`, or maps non-`2xx`
 /// responses into a structured [`MoyasarError`] via [`MoyasarError::from_api_response`].
 pub async fn decode_json_response<T: DeserializeOwned>(
     response: reqwest::Response,
 ) -> Result<T, MoyasarError> {
     let status = response.status();
-    if status.is_success() {
-        return response.json::<T>().await.map_err(MoyasarError::from);
+    let body = read_bounded_response_text(response, "HTTP").await?;
+    if !status.is_success() {
+        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
+    serde_json::from_str::<T>(&body).map_err(|err| MoyasarError::decode_error("JSON", err))
 }
 
 /// Dispatches an idempotent `GET` request with query parameters through [`execute_with_retry`]
@@ -221,5 +263,29 @@ mod tests {
         .expect_err("4xx must fail immediately");
         assert!(!err.is_retryable());
         assert_eq!(client_err_attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn rejects_response_exceeding_max_body_bytes() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        let oversized = vec![b'a'; MAX_RESPONSE_BODY_BYTES + 1];
+        Mock::given(method("GET"))
+            .and(path("/v1/oversized"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(oversized))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let url = format!("{}/v1/oversized", server.uri());
+        let err = send_get_json::<serde_json::Value>(&http, &url, 2, &[])
+            .await
+            .expect_err("oversized body must be rejected without retry");
+        assert!(!err.is_retryable());
+        let msg = err.to_string();
+        assert!(msg.contains("response body exceeds 2 MiB limit"));
     }
 }

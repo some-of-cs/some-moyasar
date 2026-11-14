@@ -3,10 +3,16 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use std::fmt::Write as _;
+
 use chrono::{DateTime, Utc};
+use hmac::{Hmac, Mac};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
+use subtle::ConstantTimeEq;
 use uuid::Uuid;
+use zeroize::Zeroize;
 
 use crate::kernel::auth::{AuthKey, SecretKey};
 use crate::kernel::client::MoyasarClient;
@@ -18,7 +24,13 @@ use crate::resources::payments::{
     is_void_fallback_eligible, remaining_refundable_amount, validate_refund_amount,
 };
 use crate::resources::tokens::{TokenId, require_active_token};
-use crate::webhook_engine::{ConstantTimeSecretVerifier, REPLAY_TOLERANCE};
+use crate::webhook_engine::{ConstantTimeSecretVerifier, REPLAY_TOLERANCE, WebhookEvent};
+
+/// Inbound HTTP header carrying the hex-encoded HMAC-SHA256 payload signature.
+pub const WEBHOOK_SIGNATURE_HEADER: &str = "x-moyasar-signature";
+
+/// Legacy inbound HTTP header carrying a static shared webhook secret token.
+pub const WEBHOOK_SECRET_TOKEN_HEADER: &str = "x-moyasar-secret-token";
 
 /// Cross-gateway request parameters for creating a hosted/client-secret payment intent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -268,24 +280,127 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
 
     fn verify_webhook(
         &self,
-        _headers: &http::HeaderMap,
+        headers: &http::HeaderMap,
         raw_body: &[u8],
     ) -> Result<UnifiedWebhookEvent, Self::Error> {
-        let secret = self
-            .webhook_secret()
-            .map(ExposeSecret::expose_secret)
-            .unwrap_or_else(|| self.key().expose_secret());
+        let sig = header_str(headers, WEBHOOK_SIGNATURE_HEADER)
+            .ok_or(MoyasarError::InvalidWebhookSignature)?;
+        let secret = resolved_webhook_secret(self);
+        verify_webhook_signature(raw_body, sig, secret)?;
         let verifier = ConstantTimeSecretVerifier::new(secret, REPLAY_TOLERANCE);
         let event = verifier
             .verify_and_construct(raw_body)
             .map_err(|_| MoyasarError::InvalidWebhookSecret)?;
-        Ok(UnifiedWebhookEvent {
-            id: event.id,
-            event_type: event.event_type.as_str().to_owned(),
-            created_at: event.created_at,
-            live: event.live,
-            data: event.data.clone(),
-        })
+        Ok(map_unified_webhook_event(&event))
+    }
+}
+
+impl MoyasarClient<SecretKey> {
+    /// Verifies an inbound webhook using the static `x-moyasar-secret-token` header and payload
+    /// `secret_token` in constant time.
+    ///
+    /// # Security Note
+    ///
+    /// Static secret-token comparison authenticates the sender token and enforces the timestamp
+    /// replay window, but unlike [`UnifiedPaymentGateway::verify_webhook`] (which requires an
+    /// `x-moyasar-signature` HMAC-SHA256 digest over `raw_body`), a static token header does not
+    /// cryptographically bind the raw payload bytes. Prefer [`UnifiedPaymentGateway::verify_webhook`]
+    /// whenever HMAC signatures are available.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoyasarError::InvalidWebhookSecret`] if the `x-moyasar-secret-token` header is
+    /// missing or mismatches the configured secret, or if payload verification fails.
+    pub fn verify_webhook_with_secret_token(
+        &self,
+        headers: &http::HeaderMap,
+        raw_body: &[u8],
+    ) -> Result<UnifiedWebhookEvent, MoyasarError> {
+        let token = header_str(headers, WEBHOOK_SECRET_TOKEN_HEADER)
+            .ok_or(MoyasarError::InvalidWebhookSecret)?;
+        let secret = resolved_webhook_secret(self);
+        verify_static_secret_token(token, secret)?;
+        let verifier = ConstantTimeSecretVerifier::new(secret, REPLAY_TOLERANCE);
+        let event = verifier
+            .verify_and_construct(raw_body)
+            .map_err(|_| MoyasarError::InvalidWebhookSecret)?;
+        Ok(map_unified_webhook_event(&event))
+    }
+}
+
+/// Computes the lowercase hex-encoded HMAC-SHA256 signature of `payload` keyed by `secret`.
+#[must_use]
+pub fn compute_webhook_signature(payload: &[u8], secret: &str) -> String {
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
+        .expect("HMAC-SHA256 accepts keys of any size");
+    mac.update(payload);
+    let bytes = mac.finalize().into_bytes();
+    let mut hex = String::with_capacity(64);
+    for b in bytes {
+        let _ = write!(&mut hex, "{b:02x}");
+    }
+    hex
+}
+
+/// Verifies a hex-encoded HMAC-SHA256 `signature_header` (with optional `sha256=` prefix)
+/// against `payload` and `secret` in constant time.
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::InvalidWebhookSignature`] if the signature is malformed or does not match.
+pub fn verify_webhook_signature(
+    payload: &[u8],
+    signature_header: &str,
+    secret: &str,
+) -> Result<(), MoyasarError> {
+    let trimmed = signature_header.trim();
+    let candidate = trimmed
+        .strip_prefix("sha256=")
+        .unwrap_or(trimmed)
+        .to_ascii_lowercase();
+    let mut expected = compute_webhook_signature(payload, secret);
+    let matched = candidate.as_bytes().ct_eq(expected.as_bytes()).unwrap_u8() == 1;
+    expected.zeroize();
+    if !matched {
+        return Err(MoyasarError::InvalidWebhookSignature);
+    }
+    Ok(())
+}
+
+fn verify_static_secret_token(token: &str, secret: &str) -> Result<(), MoyasarError> {
+    let mut provided = ConstantTimeSecretVerifier::compute_digest(token.as_bytes());
+    let mut expected = ConstantTimeSecretVerifier::compute_digest(secret.as_bytes());
+    let matched = provided.ct_eq(&expected).unwrap_u8() == 1;
+    provided.zeroize();
+    expected.zeroize();
+    if !matched {
+        return Err(MoyasarError::InvalidWebhookSecret);
+    }
+    Ok(())
+}
+
+fn header_str<'a>(headers: &'a http::HeaderMap, name: &str) -> Option<&'a str> {
+    headers
+        .get(name)
+        .and_then(|val| val.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
+fn resolved_webhook_secret(client: &MoyasarClient<SecretKey>) -> &str {
+    client
+        .webhook_secret()
+        .map(ExposeSecret::expose_secret)
+        .unwrap_or_else(|| client.key().expose_secret())
+}
+
+fn map_unified_webhook_event(event: &WebhookEvent) -> UnifiedWebhookEvent {
+    UnifiedWebhookEvent {
+        id: event.id,
+        event_type: event.event_type.as_str().to_owned(),
+        created_at: event.created_at,
+        live: event.live,
+        data: event.data.clone(),
     }
 }
 
@@ -447,34 +562,52 @@ mod tests {
             "live": false,
             "data": {"id": "pay_01J9UNIFIED"}
         });
-        let headers = http::HeaderMap::new();
-        let evt = client
-            .verify_webhook(&headers, payload.to_string().as_bytes())
-            .unwrap();
+        let raw_bytes = payload.to_string().into_bytes();
+        let sig = compute_webhook_signature(&raw_bytes, "whsec_test_123");
+        let mut headers = http::HeaderMap::new();
+        headers.insert(WEBHOOK_SIGNATURE_HEADER, sig.parse().unwrap());
+        let evt = client.verify_webhook(&headers, &raw_bytes).unwrap();
         assert_eq!(evt.event_type, "payment_paid");
     }
 
     #[test]
-    fn verify_webhook_ignores_forged_header_and_rejects_mismatched_secret_token() {
+    fn verify_webhook_requires_hmac_signature_while_opt_in_accepts_secret_token() {
         let client = MoyasarClient::builder(SecretKey::new("sk_test_unified").unwrap())
             .webhook_secret("whsec_real_secret")
             .build()
             .unwrap();
         let now = Utc::now().to_rfc3339();
-        let forged_payload = json!({
+        let payload = json!({
             "id": Uuid::new_v4(),
             "type": "payment_paid",
             "created_at": now,
-            "secret_token": "forged",
+            "secret_token": "whsec_real_secret",
             "live": false,
-            "data": {"id": "pay_forged"}
+            "data": {"id": "pay_01J9UNIFIED"}
         });
-        let mut headers = http::HeaderMap::new();
-        headers.insert("x-moyasar-webhook-secret", "forged".parse().unwrap());
+        let raw_bytes = payload.to_string().into_bytes();
+
+        let mut token_only_headers = http::HeaderMap::new();
+        token_only_headers.insert(
+            WEBHOOK_SECRET_TOKEN_HEADER,
+            "whsec_real_secret".parse().unwrap(),
+        );
 
         let err = client
-            .verify_webhook(&headers, forged_payload.to_string().as_bytes())
-            .expect_err("forged header must not override configured webhook secret");
-        assert!(matches!(err, MoyasarError::InvalidWebhookSecret));
+            .verify_webhook(&token_only_headers, &raw_bytes)
+            .expect_err("verify_webhook must reject missing x-moyasar-signature");
+        assert!(matches!(err, MoyasarError::InvalidWebhookSignature));
+
+        let evt = client
+            .verify_webhook_with_secret_token(&token_only_headers, &raw_bytes)
+            .expect("explicit opt-in accepts matching x-moyasar-secret-token");
+        assert_eq!(evt.event_type, "payment_paid");
+
+        let mut bad_token_headers = http::HeaderMap::new();
+        bad_token_headers.insert(WEBHOOK_SECRET_TOKEN_HEADER, "forged".parse().unwrap());
+        let bad_err = client
+            .verify_webhook_with_secret_token(&bad_token_headers, &raw_bytes)
+            .expect_err("mismatched x-moyasar-secret-token must fail");
+        assert!(matches!(bad_err, MoyasarError::InvalidWebhookSecret));
     }
 }
