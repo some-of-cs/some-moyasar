@@ -17,6 +17,7 @@ pub mod prelude;
     feature = "tokens",
     feature = "invoices",
     feature = "card-auths",
-    feature = "settlements-ledger"
+    feature = "settlements-ledger",
+    feature = "payouts"
 ))]
 pub mod resources;
