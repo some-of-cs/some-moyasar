@@ -102,12 +102,15 @@ impl CreatePayoutAccountParams {
 }
 
 fn validate_bank_properties(properties: &PayoutAccountProperties) -> Result<(), MoyasarError> {
-    let iban = properties.iban.as_deref().ok_or_else(|| MoyasarError::Api {
-        error_type: ApiErrorType::InvalidRequestError,
-        message: "bank payout account requires an IBAN".to_owned(),
-        errors: Vec::new(),
-        response_code: None,
-    })?;
+    let iban = properties
+        .iban
+        .as_deref()
+        .ok_or_else(|| MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            message: "bank payout account requires an IBAN".to_owned(),
+            errors: Vec::new(),
+            response_code: None,
+        })?;
     validate_sa_iban(iban)?;
 
     let has_name = properties

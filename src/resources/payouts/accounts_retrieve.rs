@@ -34,10 +34,7 @@ const PAYOUT_ACCOUNTS_PATH: &str = "/v1/payout_accounts";
 /// ));
 /// ```
 pub fn validate_sa_iban(iban: &str) -> Result<(), MoyasarError> {
-    if iban.starts_with("SA")
-        && iban.len() == 24
-        && iban[2..].bytes().all(|b| b.is_ascii_digit())
-    {
+    if iban.starts_with("SA") && iban.len() == 24 && iban[2..].bytes().all(|b| b.is_ascii_digit()) {
         Ok(())
     } else {
         Err(MoyasarError::InvalidIban)
@@ -196,10 +193,7 @@ mod tests {
             account.properties.iban.as_deref(),
             Some("SA0380000000608010167519")
         );
-        assert_eq!(
-            account.properties.name.as_deref(),
-            Some("Acme Trading LLC")
-        );
+        assert_eq!(account.properties.name.as_deref(), Some("Acme Trading LLC"));
 
         let missing_id = PayoutAccountId::new("pa_missing_404").expect("valid payout account id");
         Mock::given(method("GET"))
