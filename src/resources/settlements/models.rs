@@ -224,9 +224,18 @@ impl fmt::Debug for Settlement {
             .field("invoicing_ex_rate", &self.invoicing_ex_rate)
             .field("reference", &self.reference)
             .field("settlement_count", &self.settlement_count)
-            .field("invoice_url", &self.invoice_url.as_ref().map(|_| "[REDACTED]"))
-            .field("csv_list_url", &self.csv_list_url.as_ref().map(|_| "[REDACTED]"))
-            .field("pdf_list_url", &self.pdf_list_url.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "invoice_url",
+                &self.invoice_url.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "csv_list_url",
+                &self.csv_list_url.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "pdf_list_url",
+                &self.pdf_list_url.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("created_at", &self.created_at)
             .finish()
     }
