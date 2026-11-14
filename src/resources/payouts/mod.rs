@@ -19,7 +19,9 @@ pub use destinations::{BankDestination, PayoutDestination, WalletDestination, va
 pub use models::{PayoutAccount, PayoutAccountId, PayoutAccountProperties, PayoutAccountType};
 pub use payout_model::{Payout, PayoutChannel, PayoutId, PayoutStatus};
 pub use payouts_bulk::{BulkPayoutEntry, BulkPayoutResponse, CreateBulkPayoutParams};
-pub use payouts_create::{CreatePayoutParams, validate_sequence_number};
+pub use payouts_create::{
+    CreatePayoutParams, PAYOUT_SEQUENCE_NUMBER_LEN, validate_sequence_number,
+};
 pub use payouts_list::ListPayoutsParams;
-pub use purpose::{KNOWN_PURPOSES, PayoutPurpose};
+pub use purpose::{KNOWN_PURPOSES, ParsePayoutPurposeError, PayoutPurpose};
 pub use service::{PayoutAccountsService, PayoutsService};

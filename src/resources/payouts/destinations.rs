@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::response_code::FieldError;
+pub use crate::resources::payouts::accounts_retrieve::validate_sa_iban;
 
 /// Bank account destination for a Moyasar payout disbursement.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,22 +91,6 @@ impl PayoutDestination {
             }
             Self::Wallet(d) => validate_sa_mobile(&d.mobile),
         }
-    }
-}
-
-/// Validates that `iban` is a syntactically valid Saudi IBAN (`SA` followed by 22 ASCII digits).
-///
-/// # Errors
-///
-/// Returns [`MoyasarError::InvalidIban`] if `iban` does not start with `"SA"`, is not 24 bytes
-/// long, or contains non-digit characters after the `"SA"` prefix.
-pub fn validate_sa_iban(iban: &str) -> Result<(), MoyasarError> {
-    let ok =
-        iban.starts_with("SA") && iban.len() == 24 && iban[2..].chars().all(|c| c.is_ascii_digit());
-    if ok {
-        Ok(())
-    } else {
-        Err(MoyasarError::InvalidIban)
     }
 }
 
