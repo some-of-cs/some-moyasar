@@ -117,11 +117,13 @@ async fn mount_template(server: &MockServer, route: Route<'_>, template: Respons
 }
 
 pub async fn mount_json_endpoint(srv: &MockServer, route: Route<'_>, status: u16, body: Value) {
-    mount_template(srv, route, ResponseTemplate::new(status).set_body_json(body)).await;
+    let tpl = ResponseTemplate::new(status).set_body_json(body);
+    mount_template(srv, route, tpl).await;
 }
 
 pub async fn mount_raw_endpoint(srv: &MockServer, route: Route<'_>, status: u16, raw: &str) {
-    mount_template(srv, route, ResponseTemplate::new(status).set_body_string(raw)).await;
+    let tpl = ResponseTemplate::new(status).set_body_string(raw);
+    mount_template(srv, route, tpl).await;
 }
 
 pub fn paginated_envelope(
