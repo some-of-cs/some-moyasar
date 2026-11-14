@@ -26,3 +26,12 @@ pub mod resources;
 
 #[cfg(feature = "webhook-engine")]
 pub mod webhook_engine;
+
+#[cfg(feature = "stripe-compat")]
+pub mod stripe_compat;
+
+#[cfg(feature = "unified-gateway")]
+pub mod unified;
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;

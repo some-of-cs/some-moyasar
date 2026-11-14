@@ -24,6 +24,11 @@ sources = ["core"]
 webhooks-api = ["core", "webhook-engine"]
 webhook-engine = ["core", "dep:hmac", "dep:sha2", "dep:subtle"]
 sources-webhooks = ["sources", "webhooks-api", "webhook-engine"]
+stripe-compat = ["core", "payments", "tokens"]
+unified-gateway = ["core", "payments", "payment-intents", "tokens", "webhook-engine"]
+some-payments-trait = ["unified-gateway"]
+test-utils = ["core", "dep:wiremock"]
+full = ["core", "env-keys", "payments", "payment-intents", "tokens", "invoices", "card-auths", "payouts", "settlements-ledger", "sources", "webhooks-api", "webhook-engine", "stripe-compat", "unified-gateway"]
 
 [dependencies]
 base64 = "0.22"
@@ -39,6 +44,7 @@ sha2 = { version = "0.10", optional = true }
 subtle = { version = "2.6", optional = true }
 thiserror = "2.0"
 uuid = { version = "1.11", features = ["v4", "v5", "serde"] }
+wiremock = { version = "0.6", optional = true }
 zeroize = { version = "1.8", features = ["derive"] }
 
 [dev-dependencies]
