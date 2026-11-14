@@ -47,6 +47,12 @@ jobs:
           cargo check --no-default-features --features card-auths
           cargo check --no-default-features --features tokens-invoices-3ds
 
+      - name: Check Module 6 settlements-ledger & alias features
+        run: |
+          cargo check --no-default-features --features "core,settlements-ledger"
+          cargo check --no-default-features --features settlements-ledger
+          cargo check --no-default-features --features settlements
+
       - name: Check default library target
         run: cargo check --lib
 
