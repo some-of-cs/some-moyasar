@@ -39,11 +39,7 @@ pub struct BulkPayoutEntry {
 impl BulkPayoutEntry {
     /// Creates a new [`BulkPayoutEntry`] with required `amount`, `purpose`, and `destination`.
     #[must_use]
-    pub const fn new(
-        amount: u64,
-        purpose: PayoutPurpose,
-        destination: PayoutDestination,
-    ) -> Self {
+    pub const fn new(amount: u64, purpose: PayoutPurpose, destination: PayoutDestination) -> Self {
         Self {
             sequence_number: None,
             amount,
@@ -86,7 +82,9 @@ impl BulkPayoutEntry {
     /// validation.
     pub fn validate(&self) -> Result<(), MoyasarError> {
         if self.amount == 0 {
-            return Err(invalid_request_error("payout amount must be greater than zero"));
+            return Err(invalid_request_error(
+                "payout amount must be greater than zero",
+            ));
         }
         if let Some(seq) = self.sequence_number.as_deref() {
             validate_sequence_number(seq)?;

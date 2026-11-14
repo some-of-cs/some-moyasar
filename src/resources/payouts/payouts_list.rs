@@ -166,11 +166,7 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
         let retries = self.client().config().max_network_retries;
 
         execute_with_retry(retries, || async {
-            let response = http
-                .get(&url)
-                .send()
-                .await
-                .map_err(map_reqwest_error)?;
+            let response = http.get(&url).send().await.map_err(map_reqwest_error)?;
             decode_response(response).await
         })
         .await

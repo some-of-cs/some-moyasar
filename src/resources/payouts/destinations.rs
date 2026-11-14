@@ -100,9 +100,8 @@ impl PayoutDestination {
 /// Returns [`MoyasarError::InvalidIban`] if `iban` does not start with `"SA"`, is not 24 bytes
 /// long, or contains non-digit characters after the `"SA"` prefix.
 pub fn validate_sa_iban(iban: &str) -> Result<(), MoyasarError> {
-    let ok = iban.starts_with("SA")
-        && iban.len() == 24
-        && iban[2..].chars().all(|c| c.is_ascii_digit());
+    let ok =
+        iban.starts_with("SA") && iban.len() == 24 && iban[2..].chars().all(|c| c.is_ascii_digit());
     if ok {
         Ok(())
     } else {
