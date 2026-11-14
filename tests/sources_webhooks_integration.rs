@@ -25,7 +25,7 @@ fn sample_attempt_json(attempt_id: Uuid, hook_id: Uuid) -> Value {
         "event_type": "payment_paid",
         "response_code": 200,
         "response_headers": { "content-type": "application/json" },
-        "response_body": "{"ok":true}",
+        "response_body": "ok",
         "succeeded": true,
         "message": "OK",
         "created_at": "2026-11-14T10:01:00Z"
