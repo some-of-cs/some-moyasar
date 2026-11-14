@@ -57,7 +57,7 @@ pub use crate::resources::settlements::internal_txn_models::{
     InternalTransaction, InternalTransactionId,
 };
 #[cfg(feature = "settlements-ledger")]
-pub use crate::resources::settlements::lines::{ListSettlementLinesParams, SettlementLine};
+pub use crate::resources::settlements::lines::{ListSettlementLinesParams, SettlementLines};
 #[cfg(feature = "settlements-ledger")]
 pub use crate::resources::settlements::list::ListSettlementsParams;
 #[cfg(feature = "settlements-ledger")]
@@ -69,7 +69,7 @@ pub use crate::resources::settlements::service::{
     InternalTransactionsService, SettlementsService, TransfersService,
 };
 #[cfg(feature = "settlements-ledger")]
-pub use crate::resources::settlements::transfer_models::{Transfer, TransferId, TransferLine};
+pub use crate::resources::settlements::transfer_models::{Transfer, TransferId, TransferLines};
 #[cfg(feature = "settlements-ledger")]
 pub use crate::resources::settlements::transfers::{ListTransferLinesParams, ListTransfersParams};
 
@@ -113,3 +113,36 @@ pub use crate::webhook_engine::timestamp::{
 };
 #[cfg(feature = "webhook-engine")]
 pub use crate::webhook_engine::verifier::{ConstantTimeSecretVerifier, DOMAIN_SEPARATION_KEY};
+
+#[cfg(feature = "stripe-compat")]
+pub use crate::stripe_compat::customers::{
+    CustomerChargeParams, CustomerVault, CustomersService, inject_customer_metadata,
+};
+#[cfg(feature = "stripe-compat")]
+pub use crate::stripe_compat::in_memory_vault::InMemoryCustomerVault;
+#[cfg(feature = "stripe-compat")]
+pub use crate::stripe_compat::pro_rata::pro_rata_refund;
+#[cfg(feature = "stripe-compat")]
+pub use crate::stripe_compat::refund_strategy::{RefundRoute, select_refund_route};
+#[cfg(feature = "stripe-compat")]
+pub use crate::stripe_compat::refunds::{RefundCreateParams, RefundReceipt, RefundsService};
+#[cfg(feature = "stripe-compat")]
+pub use crate::stripe_compat::subscription_plan::{
+    PlanInterval, SubscriptionPlan, next_period_bounds,
+};
+#[cfg(feature = "stripe-compat")]
+pub use crate::stripe_compat::subscriptions_billing::SubscriptionsService;
+#[cfg(feature = "stripe-compat")]
+pub use crate::stripe_compat::subscriptions_model::{
+    RefundStrategy, ReversalAction, Subscription, SubscriptionCycle, SubscriptionCycleId,
+    SubscriptionCycleRefundParams, SubscriptionCycleRefundResult,
+};
+
+#[cfg(feature = "unified-gateway")]
+pub use crate::unified::{
+    UnifiedChargeResponse, UnifiedIntentResponse, UnifiedPaymentGateway, UnifiedReversalResponse,
+    UnifiedWebhookEvent,
+};
+
+#[cfg(any(test, feature = "test-utils"))]
+pub use crate::test_utils::mock::MoyasarMockServer;

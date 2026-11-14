@@ -1,22 +1,22 @@
 {
   "moduleId": "module-8-cross-cutting",
   "title": "Module 8: Cross-Cutting (Stripe Compatibility, Unified Gateway & Test Utils)",
-  "updatedAt": "2026-11-14T12:18:00Z",
+  "updatedAt": "2026-11-14T12:44:00Z",
   "items": {
-    "us-8.1.0": { "status": "In Progress", "branch": "feat/us-8.1.0-stripe-compat-refunds-customers", "prNumber": null, "unitCount": 4 },
-    "us-8.1.0/unit-1": { "status": "Todo", "branch": "feat/us-8.1.0/unit-1-refunds-service", "prNumber": null },
-    "us-8.1.0/unit-2": { "status": "Todo", "branch": "feat/us-8.1.0/unit-2-refund-strategy", "prNumber": null },
-    "us-8.1.0/unit-3": { "status": "Todo", "branch": "feat/us-8.1.0/unit-3-customer-vault", "prNumber": null },
-    "us-8.1.0/unit-4": { "status": "Todo", "branch": "feat/us-8.1.0/unit-4-in-memory-customer-vault", "prNumber": null },
-    "us-8.2.0": { "status": "In Progress", "branch": "feat/us-8.2.0-stripe-compat-subscriptions", "prNumber": null, "unitCount": 5 },
-    "us-8.2.0/unit-1": { "status": "Todo", "branch": "feat/us-8.2.0/unit-1-subscription-model", "prNumber": null },
-    "us-8.2.0/unit-2": { "status": "Todo", "branch": "feat/us-8.2.0/unit-2-subscription-billing", "prNumber": null },
-    "us-8.2.0/unit-3": { "status": "Todo", "branch": "feat/us-8.2.0/unit-3-pro-rata-calculator", "prNumber": null },
-    "us-8.2.0/unit-4": { "status": "Todo", "branch": "feat/us-8.2.0/unit-4-cycle-refund", "prNumber": null },
-    "us-8.2.0/unit-5": { "status": "Todo", "branch": "feat/us-8.2.0/unit-5-subscription-plan", "prNumber": null },
-    "us-8.3.0": { "status": "In Progress", "branch": "feat/us-8.3.0-some-payment-trait-tests", "prNumber": null, "unitCount": 3 },
-    "us-8.3.0/unit-1": { "status": "Todo", "branch": "feat/us-8.3.0/unit-1-unified-trait", "prNumber": null },
-    "us-8.3.0/unit-2": { "status": "Todo", "branch": "feat/us-8.3.0/unit-2-test-fixtures", "prNumber": null },
-    "us-8.3.0/unit-3": { "status": "Todo", "branch": "feat/us-8.3.0/unit-3-mock-responder", "prNumber": null }
+    "us-8.1.0": { "status": "Merged", "branch": "feat/us-8.1.0-stripe-compat-refunds-customers", "prNumber": 150, "unitCount": 4 },
+    "us-8.1.0/unit-1": { "status": "Merged", "branch": "feat/us-8.1.0/unit-1-refunds-service", "prNumber": 138 },
+    "us-8.1.0/unit-2": { "status": "Merged", "branch": "feat/us-8.1.0/unit-2-refund-strategy", "prNumber": 139 },
+    "us-8.1.0/unit-3": { "status": "Merged", "branch": "feat/us-8.1.0/unit-3-customer-vault", "prNumber": 137 },
+    "us-8.1.0/unit-4": { "status": "Merged", "branch": "feat/us-8.1.0/unit-4-in-memory-customer-vault", "prNumber": 140 },
+    "us-8.2.0": { "status": "Merged", "branch": "feat/us-8.2.0-stripe-compat-subscriptions", "prNumber": 151, "unitCount": 5 },
+    "us-8.2.0/unit-1": { "status": "Merged", "branch": "feat/us-8.2.0/unit-1-subscription-model", "prNumber": 141 },
+    "us-8.2.0/unit-2": { "status": "Merged", "branch": "feat/us-8.2.0/unit-2-subscription-billing", "prNumber": 142 },
+    "us-8.2.0/unit-3": { "status": "Merged", "branch": "feat/us-8.2.0/unit-3-pro-rata-calculator", "prNumber": 144 },
+    "us-8.2.0/unit-4": { "status": "Merged", "branch": "feat/us-8.2.0/unit-4-cycle-refund", "prNumber": 143 },
+    "us-8.2.0/unit-5": { "status": "Merged", "branch": "feat/us-8.2.0/unit-5-subscription-plan", "prNumber": 145 },
+    "us-8.3.0": { "status": "Merged", "branch": "feat/us-8.3.0-some-payment-trait-tests", "prNumber": 149, "unitCount": 3 },
+    "us-8.3.0/unit-1": { "status": "Merged", "branch": "feat/us-8.3.0/unit-1-unified-trait", "prNumber": 147 },
+    "us-8.3.0/unit-2": { "status": "Merged", "branch": "feat/us-8.3.0/unit-2-test-fixtures", "prNumber": 146 },
+    "us-8.3.0/unit-3": { "status": "Merged", "branch": "feat/us-8.3.0/unit-3-mock-responder", "prNumber": 148 }
   }
 }
