@@ -13,6 +13,9 @@ use crate::kernel::metadata::Metadata;
 use crate::kernel::types::Currency;
 use crate::resources::payments::{CreatePaymentParams, Payment, PaymentSourceRequest, TokenSource};
 use crate::resources::tokens::TokenId;
+pub use crate::stripe_compat::in_memory_vault::{
+    DEFAULT_MAX_CUSTOMERS, DEFAULT_MAX_TOKENS_PER_CUSTOMER, InMemoryCustomerVault,
+};
 
 /// Pluggable persistence trait mapping merchant customer IDs to Moyasar [`TokenId`]s.
 ///
@@ -216,7 +219,6 @@ mod tests {
 
     use super::*;
     use crate::kernel::auth::SecretKey;
-    use crate::stripe_compat::in_memory_vault::InMemoryCustomerVault;
 
     async fn mount_customer_charge_mock(server: &MockServer, given_id: Uuid) {
         Mock::given(method("POST"))
@@ -290,5 +292,29 @@ mod tests {
         let payment = customers.charge(&params).await.unwrap();
         assert_eq!(payment.id, "pay_cus_101");
         assert_eq!(payment.metadata.get("customer_id"), Some("cus_101"));
+    }
+
+    #[tokio::test]
+    async fn enforces_vault_capacity_limits() {
+        let vault = InMemoryCustomerVault::with_capacity_limits(1, 2);
+        let t1 = TokenId::new("token_cap1").unwrap();
+        let t2 = TokenId::new("token_cap2").unwrap();
+        let t3 = TokenId::new("token_cap3").unwrap();
+
+        vault.associate("cus_1", t1.clone()).await.unwrap();
+        vault.associate("cus_1", t1).await.unwrap();
+        vault.associate("cus_1", t2).await.unwrap();
+
+        let tok_err = vault
+            .associate("cus_1", t3.clone())
+            .await
+            .expect_err("exceeding max_tokens_per_customer must fail");
+        assert!(!tok_err.is_retryable());
+
+        let cus_err = vault
+            .associate("cus_2", t3)
+            .await
+            .expect_err("exceeding max_customers must fail");
+        assert!(!cus_err.is_retryable());
     }
 }

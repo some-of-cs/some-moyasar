@@ -164,6 +164,22 @@ pub enum MoyasarError {
     /// Webhook secret token verification failed.
     #[error("invalid webhook secret")]
     InvalidWebhookSecret,
+    /// Webhook HMAC-SHA256 signature verification failed.
+    #[error("invalid webhook signature")]
+    InvalidWebhookSignature,
+}
+
+/// Maximum number of characters retained from an unparseable non-2xx error body.
+pub const MAX_ERROR_BODY_CHARS: usize = 512;
+
+fn truncate_error_body(body: &str) -> String {
+    let mut chars = body.chars();
+    let prefix: String = chars.by_ref().take(MAX_ERROR_BODY_CHARS).collect();
+    if chars.next().is_some() {
+        format!("{prefix}...")
+    } else {
+        prefix
+    }
 }
 
 impl From<reqwest::Error> for MoyasarError {
@@ -217,15 +233,13 @@ impl MoyasarError {
         if let Ok(payload) = serde_json::from_str::<ApiErrorPayload>(body) {
             return Self::from(payload);
         }
+        let message = truncate_error_body(body);
         if status >= 500 {
-            return Self::ServerError {
-                status,
-                message: body.to_owned(),
-            };
+            return Self::ServerError { status, message };
         }
         Self::Api {
             error_type: ApiErrorType::Unknown,
-            message: body.to_owned(),
+            message,
             errors: Vec::new(),
             response_code: None,
         }
@@ -371,6 +385,34 @@ mod tests {
             assert!(!formatted.contains("sk_test_"));
             assert!(!formatted.contains("4111111111111111"));
             assert!(!formatted.contains("cvc: 123"));
+        }
+    }
+
+    #[test]
+    fn truncates_oversized_unstructured_error_bodies() {
+        let oversized = "x".repeat(MAX_ERROR_BODY_CHARS + 200);
+        let server_err = MoyasarError::from_api_response(502, &oversized);
+        match server_err {
+            MoyasarError::ServerError { status, message } => {
+                assert_eq!(status, 502);
+                assert_eq!(message.len(), MAX_ERROR_BODY_CHARS + 3);
+                assert!(message.ends_with("..."));
+            }
+            other => panic!("expected ServerError, got {other:?}"),
+        }
+
+        let api_err = MoyasarError::from_api_response(400, &oversized);
+        match api_err {
+            MoyasarError::Api {
+                error_type,
+                message,
+                ..
+            } => {
+                assert_eq!(error_type, ApiErrorType::Unknown);
+                assert_eq!(message.len(), MAX_ERROR_BODY_CHARS + 3);
+                assert!(message.ends_with("..."));
+            }
+            other => panic!("expected Api, got {other:?}"),
         }
     }
 }

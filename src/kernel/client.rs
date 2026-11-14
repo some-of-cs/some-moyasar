@@ -100,7 +100,10 @@ impl<K: AuthKey> MoyasarClient<K> {
 /// or uses a disallowed scheme or host.
 pub fn validate_https_url(url: &str) -> Result<(), MoyasarError> {
     let parsed = reqwest::Url::parse(url).map_err(|_| MoyasarError::InvalidBaseUrl)?;
-    if !has_clean_authority(&parsed) || !is_permitted_scheme_and_host(&parsed) {
+    if !has_clean_authority(&parsed)
+        || !has_no_query_or_fragment(&parsed)
+        || !is_permitted_scheme_and_host(&parsed)
+    {
         return Err(MoyasarError::InvalidBaseUrl);
     }
     Ok(())
@@ -108,6 +111,10 @@ pub fn validate_https_url(url: &str) -> Result<(), MoyasarError> {
 
 fn has_clean_authority(parsed: &reqwest::Url) -> bool {
     parsed.username().is_empty() && parsed.password().is_none() && parsed.host_str().is_some()
+}
+
+fn has_no_query_or_fragment(parsed: &reqwest::Url) -> bool {
+    parsed.query().is_none() && parsed.fragment().is_none()
 }
 
 fn is_permitted_scheme_and_host(parsed: &reqwest::Url) -> bool {
@@ -260,5 +267,20 @@ mod tests {
         assert_eq!(Arc::strong_count(&client.0), 10_001);
         drop(held_clones);
         assert_eq!(Arc::strong_count(&client.0), 1);
+    }
+
+    #[test]
+    fn rejects_base_url_with_query_or_fragment() {
+        for bad_url in [
+            "https://api.moyasar.com?env=sandbox",
+            "https://api.moyasar.com#frag",
+        ] {
+            let key = SecretKey::new("sk_test_123").expect("valid key");
+            let err = MoyasarClient::builder(key)
+                .base_url(bad_url)
+                .build()
+                .expect_err("must reject base URL with query or fragment");
+            assert!(matches!(err, MoyasarError::InvalidBaseUrl));
+        }
     }
 }

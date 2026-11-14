@@ -9,7 +9,7 @@ use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{execute_with_retry, read_bounded_response_text};
 use crate::resources::webhooks_api::WebhooksService;
 use crate::resources::webhooks_api::models::{WebhookEndpoint, WebhookSecret};
 use crate::webhook_engine::event_types::WebhookEventType;
@@ -42,16 +42,42 @@ const WEBHOOKS_PATH: &str = "/v1/webhooks";
 /// ));
 /// ```
 pub fn validate_https_url(url: &str) -> Result<(), MoyasarError> {
-    let Some(rest) = url.strip_prefix("https://") else {
+    let trimmed = url.trim();
+    if !has_valid_https_prefix(trimmed) {
         return Err(MoyasarError::InvalidWebhookUrl);
-    };
-    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let valid_host = !host.is_empty()
-        && (host.contains('.') || host == "localhost" || host.starts_with("localhost:"));
-    if !valid_host || url.chars().any(char::is_whitespace) {
+    }
+    let parsed = reqwest::Url::parse(trimmed).map_err(|_| MoyasarError::InvalidWebhookUrl)?;
+    if !is_clean_webhook_url(&parsed) {
         return Err(MoyasarError::InvalidWebhookUrl);
     }
     Ok(())
+}
+
+/// Validates a webhook destination URL (`https://`, non-empty host, no credentials or fragment).
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::InvalidWebhookUrl`] if `url` is not a valid `https://` webhook URL.
+pub fn validate_webhook_url(url: &str) -> Result<(), MoyasarError> {
+    validate_https_url(url)
+}
+
+fn has_valid_https_prefix(trimmed: &str) -> bool {
+    trimmed.starts_with("https://")
+        && !trimmed.starts_with("https:///")
+        && !trimmed.chars().any(char::is_whitespace)
+}
+
+fn is_clean_webhook_url(parsed: &reqwest::Url) -> bool {
+    parsed.scheme() == "https"
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+        && parsed.fragment().is_none()
+        && is_valid_webhook_host(parsed.host_str())
+}
+
+fn is_valid_webhook_host(host: Option<&str>) -> bool {
+    host.is_some_and(|h| !h.is_empty() && (h.contains('.') || h == "localhost"))
 }
 
 /// Request payload for registering a Moyasar webhook endpoint (`POST /v1/webhooks`).
@@ -294,7 +320,7 @@ async fn dispatch_get(
 
 async fn read_response_text(response: reqwest::Response) -> Result<(u16, String), MoyasarError> {
     let status = response.status().as_u16();
-    let body = response.text().await.map_err(MoyasarError::from)?;
+    let body = read_bounded_response_text(response, "webhook").await?;
     if status >= 500 {
         return Err(MoyasarError::from_api_response(status, &body));
     }
@@ -545,5 +571,23 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn rejects_webhook_urls_with_credentials_fragments_or_empty_host() {
+        for bad_url in [
+            "https://user:pass@example.com/hook",
+            "https://user@example.com/hook",
+            "https://example.com/hook#frag",
+            "https://///",
+        ] {
+            assert!(matches!(
+                validate_webhook_url(bad_url),
+                Err(MoyasarError::InvalidWebhookUrl)
+            ));
+            let err = CreateWebhookParams::new(bad_url, WebhookSecret::new("whsec_123"))
+                .expect_err("webhook URL with userinfo, fragment, or empty host must fail");
+            assert!(matches!(err, MoyasarError::InvalidWebhookUrl));
+        }
     }
 }

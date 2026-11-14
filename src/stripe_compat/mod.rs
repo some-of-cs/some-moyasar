@@ -24,7 +24,9 @@ pub use self::in_memory_vault as customer_vault;
 pub use self::customers::{
     CustomerChargeParams, CustomerVault, CustomersService, inject_customer_metadata,
 };
-pub use self::in_memory_vault::InMemoryCustomerVault;
+pub use self::in_memory_vault::{
+    DEFAULT_MAX_CUSTOMERS, DEFAULT_MAX_TOKENS_PER_CUSTOMER, InMemoryCustomerVault,
+};
 pub use self::pro_rata::pro_rata_refund;
 pub use self::refund_strategy::{RefundRoute, select_refund_route};
 pub use self::refunds::{RefundCreateParams, RefundReceipt, RefundsService};
