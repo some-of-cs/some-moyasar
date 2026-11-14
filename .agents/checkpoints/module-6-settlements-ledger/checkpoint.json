@@ -3,75 +3,75 @@
   "title": "Module 6: Settlements & Ledger",
   "baseBranch": "main",
   "moduleBranch": "feat/module-6-settlements-ledger",
-  "updatedAt": "2026-11-14T03:55:00Z",
+  "updatedAt": "2026-11-14T04:11:00Z",
   "items": {
     "us-6.1.0": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.1.0-settlements",
-      "prNumber": null,
-      "mergedSha": null,
+      "prNumber": 107,
+      "mergedSha": "57c07e4aeb11ef2f8ea09ad1bc22eb575319606a",
       "unitCount": 5
     },
     "us-6.1.0/unit-1": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.1.0/unit-1-settlement-model",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 86,
+      "mergedSha": "c30917a609a02402e652f687cf469da815ba0b81"
     },
     "us-6.1.0/unit-2": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.1.0/unit-2-settlement-list",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 98,
+      "mergedSha": "71a1e1b00394494dd2f3ca557de8ac324c30af9b"
     },
     "us-6.1.0/unit-3": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.1.0/unit-3-settlement-retrieve",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 96,
+      "mergedSha": "7543d0e64259f2d6fa4d50ff8b67c61ea6d5ebb3"
     },
     "us-6.1.0/unit-4": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.1.0/unit-4-settlement-balance",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 85,
+      "mergedSha": "939a90c572e3a7823963c204135e17b324a55b55"
     },
     "us-6.1.0/unit-5": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.1.0/unit-5-settlement-lines",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 101,
+      "mergedSha": "16534ffd3c77f390f0e990926ea8fc5c998a842f"
     },
     "us-6.2.0": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.2.0-transfers-internal-txns",
-      "prNumber": null,
-      "mergedSha": null,
+      "prNumber": 108,
+      "mergedSha": "6e0dde6cf8644ba39dfed9b3d675ebe42f5e2f5c",
       "unitCount": 4
     },
     "us-6.2.0/unit-1": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.2.0/unit-1-transfer-models",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 88,
+      "mergedSha": "2fa2b461ce9f28c9093c735acdd3831ad2f48cfd"
     },
     "us-6.2.0/unit-2": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.2.0/unit-2-transfer-endpoints",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 91,
+      "mergedSha": "1194a68a331e543be454cd9128f2c30505877816"
     },
     "us-6.2.0/unit-3": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.2.0/unit-3-internal-txn-model",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 90,
+      "mergedSha": "a82e65c767ca3e5fea36a95305651bb6db43187d"
     },
     "us-6.2.0/unit-4": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-6.2.0/unit-4-internal-txn-endpoints",
-      "prNumber": null,
-      "mergedSha": null
+      "prNumber": 95,
+      "mergedSha": "497d3063e5ed4e8fa9554818333cb33d43d88495"
     }
   }
 }
