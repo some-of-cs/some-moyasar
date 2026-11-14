@@ -14,3 +14,9 @@ pub mod invoices;
 
 #[cfg(feature = "card-auths")]
 pub mod card_auths;
+
+#[cfg(feature = "sources")]
+pub mod sources;
+
+#[cfg(feature = "webhooks-api")]
+pub mod webhooks_api;

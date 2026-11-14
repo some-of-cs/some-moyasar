@@ -16,6 +16,11 @@ pub mod prelude;
     feature = "payment-intents",
     feature = "tokens",
     feature = "invoices",
-    feature = "card-auths"
+    feature = "card-auths",
+    feature = "sources",
+    feature = "webhooks-api"
 ))]
 pub mod resources;
+
+#[cfg(feature = "webhook-engine")]
+pub mod webhook_engine;
