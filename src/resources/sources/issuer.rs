@@ -114,6 +114,7 @@ fn validate_bin(first_digits: &str) -> Result<(), MoyasarError> {
 }
 
 /// Dispatches `POST /v1/source/issuer` with bounded retry handling for transient failures.
+#[allow(dead_code)]
 pub(crate) async fn get_issuer_request<K: AuthKey>(
     client: &MoyasarClient<K>,
     params: &BinLookupParams,
@@ -125,6 +126,7 @@ pub(crate) async fn get_issuer_request<K: AuthKey>(
     execute_with_retry(retries, || send_issuer_request(client, &url, params)).await
 }
 
+#[allow(dead_code)]
 async fn send_issuer_request<K: AuthKey>(
     client: &MoyasarClient<K>,
     url: &str,
@@ -149,6 +151,7 @@ async fn send_issuer_request<K: AuthKey>(
     Err(MoyasarError::from_api_response(status.as_u16(), &body))
 }
 
+#[allow(dead_code)]
 fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
     if err.is_timeout() {
         MoyasarError::Timeout
