@@ -73,7 +73,12 @@ impl RefundReceipt {
             .as_deref()
             .unwrap_or(&[])
             .iter()
-            .map(|split| split.get("refunded").and_then(serde_json::Value::as_bool).unwrap_or(false))
+            .map(|split| {
+                split
+                    .get("refunded")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+            })
             .collect();
         let refunded_amount = if payment.status == PaymentStatus::Voided && payment.refunded == 0 {
             payment.amount
@@ -144,7 +149,10 @@ impl<K: SecretAuthKey> RefundsService<'_, K> {
         let reversed = if should_void(&payment, params) {
             let plan = payments.reverse(&id, &payment, Utc::now()).await?;
             match plan {
-                ReversalStrategy::Void => return Ok(RefundReceipt::from_payment(&payments.retrieve(&id).await.unwrap_or(payment))),
+                ReversalStrategy::Void => {
+                    let latest = payments.retrieve(&id).await.unwrap_or(payment);
+                    return Ok(RefundReceipt::from_payment(&latest));
+                }
                 ReversalStrategy::Refund => payments.refund(id.as_str(), params.amount).await?,
             }
         } else {
