@@ -67,6 +67,14 @@ jobs:
           cargo check --no-default-features --features "core,sources-webhooks"
           cargo check --no-default-features --features sources-webhooks
 
+      - name: Check Module 8 stripe-compat, unified-gateway, test-utils & full features
+        run: |
+          cargo check --no-default-features --features stripe-compat
+          cargo check --no-default-features --features unified-gateway
+          cargo check --no-default-features --features test-utils
+          cargo check --no-default-features --features full
+          cargo check --all-features
+
       - name: Check default library target
         run: cargo check --lib
 
@@ -74,7 +82,7 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run library unit & integration tests
-        run: cargo test --lib
+        run: cargo test --all-features --lib
 
       - name: Run doc-tests (including compile_fail guards)
-        run: cargo test --doc
+        run: cargo test --all-features --doc

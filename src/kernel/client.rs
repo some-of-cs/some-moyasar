@@ -79,6 +79,17 @@ impl<K: AuthKey> MoyasarClient<K> {
     }
 }
 
+fn is_allowed_base_url(url: &str) -> bool {
+    if url.starts_with("https://") {
+        return true;
+    }
+    #[cfg(any(test, feature = "test-utils"))]
+    if url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:") {
+        return true;
+    }
+    false
+}
+
 impl<K: AuthKey> MoyasarClientBuilder<K> {
     /// Overrides the API base URL (must start with `https://`).
     pub fn base_url(mut self, url: impl Into<String>) -> Self {
@@ -100,7 +111,7 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
 
     /// Validates configuration and builds the `MoyasarClient`.
     pub fn build(self) -> Result<MoyasarClient<K>, MoyasarError> {
-        if !self.config.base_url.starts_with("https://") {
+        if !is_allowed_base_url(&self.config.base_url) {
             return Err(MoyasarError::InvalidBaseUrl);
         }
         let headers = build_default_headers(&self.key)?;
