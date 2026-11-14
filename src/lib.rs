@@ -18,6 +18,7 @@ pub mod prelude;
     feature = "invoices",
     feature = "card-auths",
     feature = "settlements-ledger",
+    feature = "payouts",
     feature = "sources",
     feature = "webhooks-api"
 ))]

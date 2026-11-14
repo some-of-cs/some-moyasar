@@ -106,7 +106,8 @@ impl ConstantTimeSecretVerifier {
 
     /// Deserializes `raw_body` into a [`WebhookEvent`], verifies `secret_token`
     /// in constant time via Double-HMAC-SHA256 + `subtle::ConstantTimeEq`, and
-    /// validates the event timestamp against `now` and `self.tolerance`.
+    /// validates the event timestamp against `now`, `self.tolerance`, and
+    /// [`super::timestamp::MAX_FUTURE_SKEW`].
     ///
     /// # Errors
     ///
@@ -129,12 +130,7 @@ impl ConstantTimeSecretVerifier {
         if !matched {
             return Err(WebhookError::SecretMismatch);
         }
-        let max_delta =
-            chrono::TimeDelta::from_std(self.tolerance).unwrap_or(chrono::TimeDelta::MAX);
-        let delta = now.signed_duration_since(event.created_at);
-        if delta > max_delta || delta < -max_delta {
-            return Err(WebhookError::TimestampOutOfRange);
-        }
+        super::timestamp::validate_timestamp_at(event.created_at, now, self.tolerance)?;
         Ok(event)
     }
 
@@ -242,6 +238,19 @@ mod tests {
         let err = verifier
             .verify_and_construct_at(&body, now)
             .expect_err("stale webhook timestamp must fail");
+        assert!(matches!(err, WebhookError::TimestampOutOfRange));
+    }
+
+    #[test]
+    fn future_skew_beyond_5m_returns_timestamp_out_of_range() {
+        let now = Utc::now();
+        let verifier =
+            ConstantTimeSecretVerifier::new("whsec_live_123", Duration::from_secs(4 * 3600));
+        let future = now + chrono::TimeDelta::seconds(5 * 60 + 1);
+        let body = sample_payload("whsec_live_123", future);
+        let err = verifier
+            .verify_and_construct_at(&body, now)
+            .expect_err("future webhook timestamp beyond 5m must fail");
         assert!(matches!(err, WebhookError::TimestampOutOfRange));
     }
 }

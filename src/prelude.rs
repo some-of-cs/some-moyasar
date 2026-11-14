@@ -73,6 +73,16 @@ pub use crate::resources::settlements::transfer_models::{Transfer, TransferId, T
 #[cfg(feature = "settlements-ledger")]
 pub use crate::resources::settlements::transfers::{ListTransferLinesParams, ListTransfersParams};
 
+#[cfg(feature = "payouts")]
+pub use crate::resources::payouts::{
+    BankDestination, BulkPayoutEntry, BulkPayoutResponse, CreateBulkPayoutParams,
+    CreatePayoutAccountParams, CreatePayoutParams, KNOWN_PURPOSES, ListPayoutAccountsParams,
+    ListPayoutsParams, Payout, PayoutAccount, PayoutAccountId, PayoutAccountProperties,
+    PayoutAccountType, PayoutAccountsService, PayoutChannel, PayoutDestination, PayoutId,
+    PayoutPurpose, PayoutStatus, PayoutsService, WalletDestination, validate_sa_iban,
+    validate_sa_mobile, validate_sequence_number,
+};
+
 #[cfg(feature = "sources")]
 pub use crate::resources::sources::apple_pay::{ApplePayMerchantSession, InitiateApplePayParams};
 #[cfg(feature = "sources")]
