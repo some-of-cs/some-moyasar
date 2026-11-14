@@ -221,7 +221,10 @@ mod tests {
 
         assert_eq!(endpoint.id, webhook_id);
         assert_eq!(endpoint.http_method, "post");
-        assert_eq!(endpoint.url, "https://merchant.example.com/webhooks/moyasar");
+        assert_eq!(
+            endpoint.url,
+            "https://merchant.example.com/webhooks/moyasar"
+        );
         assert!(!format!("{endpoint:?}").contains("whsec_test_secret_123"));
     }
 
@@ -254,7 +257,10 @@ mod tests {
             .expect("client builds");
 
         let res_200 = delete_webhook(client.http(), &server.uri(), 0, id_200).await;
-        assert!(res_200.is_ok(), "expected Ok(()) for 200 OK, got {res_200:?}");
+        assert!(
+            res_200.is_ok(),
+            "expected Ok(()) for 200 OK, got {res_200:?}"
+        );
 
         let res_204 = delete_webhook(client.http(), &server.uri(), 0, id_204).await;
         assert!(
