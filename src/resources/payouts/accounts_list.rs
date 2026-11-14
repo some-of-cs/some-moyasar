@@ -126,7 +126,7 @@ impl<'a, K: SecretAuthKey> PayoutAccountsService<'a, K> {
                 .query(params)
                 .send()
                 .await
-                .map_err(map_reqwest_error)?;
+                .map_err(MoyasarError::from)?;
             parse_list_response(response).await
         })
         .await
@@ -137,7 +137,7 @@ async fn parse_list_response(
     response: reqwest::Response,
 ) -> Result<PaginatedList<PayoutAccount>, MoyasarError> {
     let status = response.status();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
@@ -147,14 +147,6 @@ async fn parse_list_response(
             message: format!("failed to decode PaginatedList<PayoutAccount>: {err}"),
         }
     })
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
 }
 
 #[cfg(test)]

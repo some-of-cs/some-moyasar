@@ -2,7 +2,7 @@
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::kernel::types::Amount;
 use crate::resources::settlements::models::{Settlement, SettlementId};
 use crate::resources::settlements::service::SettlementsService;
@@ -112,24 +112,8 @@ async fn send_retrieve_request(
     http: &reqwest::Client,
     url: &str,
 ) -> Result<Settlement, MoyasarError> {
-    let response = http.get(url).send().await.map_err(map_reqwest_error)?;
-    let status = response.status();
-    if status.is_success() {
-        return response
-            .json::<Settlement>()
-            .await
-            .map_err(map_reqwest_error);
-    }
-    let body = response.text().await.unwrap_or_default();
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
+    let response = http.get(url).send().await.map_err(MoyasarError::from)?;
+    decode_json_response(response).await
 }
 
 #[cfg(test)]

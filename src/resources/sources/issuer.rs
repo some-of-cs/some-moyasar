@@ -146,9 +146,9 @@ async fn send_issuer_request<K: AuthKey>(
         .send()
         .await;
     payload.zeroize();
-    let response = send_res.map_err(map_reqwest_error)?;
+    let response = send_res.map_err(MoyasarError::from)?;
     let status = response.status().as_u16();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !(200..300).contains(&status) {
         return Err(MoyasarError::from_api_response(status, &body));
     }
@@ -158,14 +158,6 @@ async fn send_issuer_request<K: AuthKey>(
         errors: Vec::new(),
         response_code: None,
     })
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
 }
 
 #[cfg(test)]

@@ -178,8 +178,31 @@ impl MoyasarError {
     pub fn is_retryable(&self) -> bool {
         match self {
             Self::Network(err) => !err.is_decode() && !err.is_builder(),
-            Self::Timeout | Self::ServerError { .. } => true,
+            Self::Timeout => true,
+            Self::ServerError { status, .. } => *status >= 500,
             _ => false,
+        }
+    }
+
+    /// Constructs a client-side or API [`ApiErrorType::InvalidRequestError`] without field errors.
+    #[must_use]
+    pub fn invalid_request(message: impl Into<String>) -> Self {
+        Self::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            message: message.into(),
+            errors: Vec::new(),
+            response_code: None,
+        }
+    }
+
+    /// Constructs a non-retryable [`ApiErrorType::Unknown`] error for malformed `2xx` JSON bodies.
+    #[must_use]
+    pub fn decode_error(label: &str, err: impl core::fmt::Display) -> Self {
+        Self::Api {
+            error_type: ApiErrorType::Unknown,
+            message: format!("failed to decode {label} response: {err}"),
+            errors: Vec::new(),
+            response_code: None,
         }
     }
 

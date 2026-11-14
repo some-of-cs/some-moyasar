@@ -250,9 +250,9 @@ async fn send_bulk_payout_request<K: SecretAuthKey>(
         .json(params)
         .send()
         .await
-        .map_err(map_reqwest_error)?;
+        .map_err(MoyasarError::from)?;
     let status = response.status();
-    let text = response.text().await.map_err(map_reqwest_error)?;
+    let text = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &text));
     }
@@ -262,14 +262,6 @@ async fn send_bulk_payout_request<K: SecretAuthKey>(
         errors: Vec::new(),
         response_code: None,
     })
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
 }
 
 fn invalid_request_error(message: &str) -> MoyasarError {

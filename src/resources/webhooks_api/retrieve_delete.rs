@@ -131,9 +131,9 @@ async fn send_retrieve_request(
     http: &reqwest::Client,
     url: &str,
 ) -> Result<WebhookEndpoint, MoyasarError> {
-    let response = http.get(url).send().await.map_err(map_reqwest_error)?;
+    let response = http.get(url).send().await.map_err(MoyasarError::from)?;
     let status = response.status();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
@@ -154,21 +154,13 @@ async fn delete_webhook(
 }
 
 async fn send_delete_request(http: &reqwest::Client, url: &str) -> Result<(), MoyasarError> {
-    let response = http.delete(url).send().await.map_err(map_reqwest_error)?;
+    let response = http.delete(url).send().await.map_err(MoyasarError::from)?;
     let status = response.status();
     if status == reqwest::StatusCode::NO_CONTENT || status.is_success() {
         return Ok(());
     }
     let body = response.text().await.unwrap_or_default();
     Err(MoyasarError::from_api_response(status.as_u16(), &body))
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
 }
 
 #[cfg(test)]

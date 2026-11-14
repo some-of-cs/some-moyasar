@@ -17,19 +17,6 @@ use crate::resources::payments::{
 };
 use crate::webhook_engine::{ConstantTimeSecretVerifier, REPLAY_TOLERANCE};
 
-const CURRENCY_TABLE: [(&str, Currency); 10] = [
-    ("SAR", Currency::SAR),
-    ("USD", Currency::USD),
-    ("KWD", Currency::KWD),
-    ("BHD", Currency::BHD),
-    ("AED", Currency::AED),
-    ("QAR", Currency::QAR),
-    ("OMR", Currency::OMR),
-    ("EUR", Currency::EUR),
-    ("GBP", Currency::GBP),
-    ("JPY", Currency::JPY),
-];
-
 /// Unified payment intent response across payment gateways.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnifiedIntentResponse {
@@ -145,7 +132,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
         callback_url: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<UnifiedIntentResponse, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            let cur = parse_currency(currency)?;
+            let cur: Currency = currency.parse()?;
             let mut params = CreatePaymentIntentParams::new(amount_minor, cur, callback_url);
             if let Some(desc) = description {
                 params = params.description(desc);
@@ -170,7 +157,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
         idempotency_key: Uuid,
     ) -> Pin<Box<dyn Future<Output = Result<UnifiedChargeResponse, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            let cur = parse_currency(currency)?;
+            let cur: Currency = currency.parse()?;
             let mut source = TokenSource::new(token_id)?;
             source.three_ds = Some(false);
             let params = CreatePaymentParams::builder()
@@ -261,20 +248,6 @@ async fn refund_unified_payment(
         action: "refunded".to_owned(),
         amount_reversed_minor: refunded.refunded,
     })
-}
-
-fn parse_currency(raw: &str) -> Result<Currency, MoyasarError> {
-    let upper = raw.to_ascii_uppercase();
-    CURRENCY_TABLE
-        .iter()
-        .find(|(code, _)| *code == upper)
-        .map(|(_, cur)| *cur)
-        .ok_or_else(|| MoyasarError::Api {
-            error_type: ApiErrorType::InvalidRequestError,
-            message: format!("unsupported currency: {raw}"),
-            errors: Vec::new(),
-            response_code: None,
-        })
 }
 
 #[cfg(test)]

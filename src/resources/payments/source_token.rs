@@ -3,40 +3,16 @@
 use core::fmt;
 
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 
+use crate::kernel::auth::{serialize_opt_secret, serialize_secret};
 use crate::kernel::error::MoyasarError;
-
-fn serialize_secret<S: Serializer>(
-    secret: &SecretString,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(secret.expose_secret())
-}
-
-fn serialize_opt_secret<S: Serializer>(
-    secret: &Option<SecretString>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    match secret {
-        Some(value) => serializer.serialize_some(value.expose_secret()),
-        None => serializer.serialize_none(),
-    }
-}
-
-fn is_safe_token_suffix(suffix: &str) -> bool {
-    !suffix.is_empty()
-        && !suffix.contains("..")
-        && !suffix
-            .chars()
-            .any(|ch| ch.is_whitespace() || matches!(ch, '/' | '?' | '#'))
-}
+use crate::kernel::types::is_valid_prefixed_id;
 
 fn validate_token_id(token: &str) -> Result<(), MoyasarError> {
-    match token.strip_prefix("token_") {
-        Some(suffix) if is_safe_token_suffix(suffix) => Ok(()),
-        _ => Err(MoyasarError::InvalidTokenId),
-    }
+    is_valid_prefixed_id(token, "token_")
+        .then_some(())
+        .ok_or(MoyasarError::InvalidTokenId)
 }
 
 /// Saved card token payment source (`type: "token"`).

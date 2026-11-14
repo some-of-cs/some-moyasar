@@ -157,21 +157,21 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-8.3.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
-- [ ] **Unit 1 (`feat/us-8.3.0/unit-1-unified-trait`)**: `impl UnifiedPaymentGateway for MoyasarClient`: create_intent, charge_saved_token, refund_or_void, verify_webhook. Normalization: idempotency_key → given_id, webhook verification via ConstantTimeSecretVerifier (Files: `src/unified.rs`)  
+- [x] **Unit 1 (`feat/us-8.3.0/unit-1-unified-trait`)**: `impl UnifiedPaymentGateway for MoyasarClient`: create_intent, charge_saved_token, refund_or_void, verify_webhook. Normalization: idempotency_key → given_id, webhook verification via ConstantTimeSecretVerifier (Files: `src/unified.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-8.3.0/unit-2-test-fixtures`)**: Deterministic JSON fixtures: all 11 webhook event types (including payment_faild), STC Pay mock responses (0515555555, 0515555558, 0515555559), SADAD sandbox biller 007, ISO 8583 response codes (Files: `src/test_utils/fixtures.rs`)  
+- [x] **Unit 2 (`feat/us-8.3.0/unit-2-test-fixtures`)**: Deterministic JSON fixtures: all 11 webhook event types (including payment_faild), STC Pay mock responses (0515555555, 0515555558, 0515555559), SADAD sandbox biller 007, ISO 8583 response codes (Files: `src/test_utils/fixtures.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-8.3.0/unit-3-mock-responder`)**: `MoyasarMockServer` local HTTP mock responder and route handlers under `test-utils` feature flag, conformance unit tests (Files: `src/test_utils/mock.rs`)  
+- [x] **Unit 3 (`feat/us-8.3.0/unit-3-mock-responder`)**: `MoyasarMockServer` local HTTP mock responder and route handlers under `test-utils` feature flag, conformance unit tests (Files: `src/test_utils/mock.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -197,14 +197,14 @@ sequenceDiagram
 - **Integer Money**: `u64` minor units across all trait methods.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Idempotency Test**: `charge_saved_token` forwards `idempotency_key` into `given_id`.
-- [ ] **Webhook Test**: `verify_webhook` rejects tampered `secret_token` in constant time.
-- [ ] **Fixture Scan**: zero `sk_live_` or real PANs in `src/test_utils/fixtures.rs`.
+- [x] **Idempotency Test**: `charge_saved_token` forwards `idempotency_key` into `given_id`.
+- [x] **Webhook Test**: `verify_webhook` rejects tampered `secret_token` in constant time.
+- [x] **Fixture Scan**: zero `sk_live_` or real PANs in `src/test_utils/fixtures.rs`.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Unified adapter and test utilities verified against OWASP ASVS Level 2.
-- [ ] Idempotency and constant-time webhook verification enforced.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Unified adapter and test utilities verified against OWASP ASVS Level 2.
+- [x] Idempotency and constant-time webhook verification enforced.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
@@ -213,31 +213,31 @@ sequenceDiagram
 **Status: Ready for Implementation.**
 
 ### G0 — Build, lint & format
-- [ ] **US-8.3.0-G0:** `cargo build --all-features && cargo clippy --all-features -- -D warnings && cargo fmt --check` clean.
+- [x] **US-8.3.0-G0:** `cargo build --all-features && cargo clippy --all-features -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-8.3.0-G1:** ≥90% line / ≥85% branch on `unified` and `test_utils`.
+- [x] **US-8.3.0-G1:** ≥90% line / ≥85% branch on `unified` and `test_utils`.
 
 ### G2 — Security audit
-- [ ] **US-8.3.0-G2:** Unified adapter audit passes with zero critical/high findings.
+- [x] **US-8.3.0-G2:** Unified adapter audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-8.3.0-G3:** `test-utils` is opt-in and never compiled into default production builds.
+- [x] **US-8.3.0-G3:** `test-utils` is opt-in and never compiled into default production builds.
 
 ### G-Review — Code review
-- [ ] **US-8.3.0-G-Review:** Peer review on trait normalization and fixture completeness.
+- [x] **US-8.3.0-G-Review:** Peer review on trait normalization and fixture completeness.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-8.3.0-G-Borrow:** Trait methods accept `&str` and `&[u8]` slices without unnecessary allocations.
+- [x] **US-8.3.0-G-Borrow:** Trait methods accept `&str` and `&[u8]` slices without unnecessary allocations.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-8.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-8.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-8.3.0-G-Docs:** 100% public symbols documented; `MoyasarMockServer` and `UnifiedPaymentGateway` examples runnable.
+- [x] **US-8.3.0-G-Docs:** 100% public symbols documented; `MoyasarMockServer` and `UnifiedPaymentGateway` examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-8.3.0-G-Law:** SAMA cross-provider auditability and minor-unit precision certified.
+- [x] **US-8.3.0-G-Law:** SAMA cross-provider auditability and minor-unit precision certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-8.3.0-G4:** Full cross-provider conformance suite passes against `MoyasarClient` and `MoyasarMockServer`.
+- [x] **US-8.3.0-G4:** Full cross-provider conformance suite passes against `MoyasarClient` and `MoyasarMockServer`.
