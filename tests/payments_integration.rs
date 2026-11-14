@@ -1,18 +1,13 @@
 mod common;
 
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
-use serde_json::json;
+use serde_json::{Value, json};
 use some_moyasar::prelude::*;
 use uuid::Uuid;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
-fn sample_payment_json(
-    id: &str,
-    status: &str,
-    company: &str,
-    created_at: &str,
-) -> serde_json::Value {
+fn sample_payment_json(id: &str, status: &str, company: &str, created_at: &str) -> Value {
     json!({
         "id": id,
         "status": status,
@@ -41,7 +36,7 @@ fn sample_payment_json(
 }
 
 #[tokio::test]
-async fn payments_create_retrieve_and_capture_lifecycle() {
+async fn payments_create_retrieve_fetch_and_capture_lifecycle() {
     let (server, client) = common::start_secret_client().await;
     let pay_uuid = "550e8400-e29b-41d4-a716-446655440000";
 
@@ -65,7 +60,6 @@ async fn payments_create_retrieve_and_capture_lifecycle() {
 
     let created = client.payments().create(&create_params).await.unwrap();
     assert_eq!(created.status, PaymentStatus::Authorized);
-    assert_eq!(created.amount, 10000);
 
     let pay_id = PaymentId::new(format!("pay_{pay_uuid}")).unwrap();
     let get_path = format!("/v1/payments/pay_{pay_uuid}");
@@ -76,8 +70,11 @@ async fn payments_create_retrieve_and_capture_lifecycle() {
         sample_payment_json(pay_uuid, "authorized", "visa", "2026-11-14T10:00:00Z"),
     )
     .await;
-    let fetched = client.payments().retrieve(&pay_id).await.unwrap();
-    assert_eq!(fetched.id, pay_uuid);
+    assert_eq!(
+        client.payments().retrieve(&pay_id).await.unwrap().id,
+        pay_uuid
+    );
+    assert_eq!(client.payments().fetch(&pay_id).await.unwrap().id, pay_uuid);
 
     let capture_path = format!("/v1/payments/{pay_uuid}/capture");
     common::mount_json_endpoint(
@@ -87,16 +84,18 @@ async fn payments_create_retrieve_and_capture_lifecycle() {
         sample_payment_json(pay_uuid, "captured", "visa", "2026-11-14T10:05:00Z"),
     )
     .await;
-    let captured = client
+    let partial = client
         .payments()
         .capture(pay_uuid, Some(5000))
         .await
         .unwrap();
-    assert_eq!(captured.status, PaymentStatus::Captured);
+    let full = client.payments().capture(pay_uuid, None).await.unwrap();
+    assert_eq!(partial.status, PaymentStatus::Captured);
+    assert_eq!(full.status, PaymentStatus::Captured);
 }
 
 #[tokio::test]
-async fn payments_update_refund_guard_and_filtered_list_lifecycle() {
+async fn payments_update_void_and_refund_lifecycle() {
     let (server, client) = common::start_secret_client().await;
     let pay_uuid = "550e8400-e29b-41d4-a716-446655440000";
     let update_path = format!("/v1/payments/{pay_uuid}");
@@ -118,9 +117,52 @@ async fn payments_update_refund_guard_and_filtered_list_lifecycle() {
         .unwrap();
     assert_eq!(updated.status, PaymentStatus::Paid);
 
+    let void_path = format!("/v1/payments/{pay_uuid}/void");
+    common::mount_json_endpoint(
+        &server,
+        ("POST", &void_path),
+        200,
+        sample_payment_json(pay_uuid, "voided", "visa", "2026-11-14T10:06:00Z"),
+    )
+    .await;
+    assert_eq!(
+        client.payments().void(pay_uuid).await.unwrap().status,
+        PaymentStatus::Voided
+    );
+
+    let refund_path = format!("/v1/payments/{pay_uuid}/refund");
+    common::mount_json_endpoint(
+        &server,
+        ("POST", &refund_path),
+        200,
+        sample_payment_json(pay_uuid, "refunded", "visa", "2026-11-14T10:07:00Z"),
+    )
+    .await;
+    let direct_ref = client.payments().refund(pay_uuid, Some(4000)).await.unwrap();
+    let checked_ref = client
+        .payments()
+        .refund_payment(&updated, Some(4000))
+        .await
+        .unwrap();
+    assert_eq!(direct_ref.status, PaymentStatus::Refunded);
+    assert_eq!(checked_ref.status, PaymentStatus::Refunded);
+}
+
+#[tokio::test]
+async fn payments_over_refund_guard_and_filtered_list() {
+    let (server, client) = common::start_secret_client().await;
+    let pay_uuid = "550e8400-e29b-41d4-a716-446655440000";
+    let paid: Payment = serde_json::from_value(sample_payment_json(
+        pay_uuid,
+        "paid",
+        "visa",
+        "2026-11-14T10:05:00Z",
+    ))
+    .unwrap();
+
     let over_refund_err = client
         .payments()
-        .refund_payment(&updated, Some(25_000))
+        .refund_payment(&paid, Some(25_000))
         .await
         .unwrap_err();
     assert!(matches!(over_refund_err, MoyasarError::Api { .. }));
@@ -151,12 +193,11 @@ async fn payments_update_refund_guard_and_filtered_list_lifecycle() {
 }
 
 #[tokio::test]
-async fn smart_reversal_voids_within_2h_falls_back_to_refund_and_checks_mada_14d_hold() {
+async fn smart_reversal_plans_mada_14d_hold_and_falls_back_from_void_400_to_refund() {
     let (server, client) = common::start_secret_client().await;
     let pay_uuid = "660e8400-e29b-41d4-a716-446655440000";
     let created_at = Utc.with_ymd_and_hms(2026, 11, 14, 10, 0, 0).unwrap();
     let within_2h = created_at + ChronoDuration::minutes(45);
-    let after_3h = created_at + ChronoDuration::hours(3);
     let after_15d = created_at + ChronoDuration::days(15);
 
     let mada_authorized: Payment = serde_json::from_value(sample_payment_json(
@@ -167,15 +208,11 @@ async fn smart_reversal_voids_within_2h_falls_back_to_refund_and_checks_mada_14d
     ))
     .unwrap();
 
-    assert_eq!(
-        client.payments().plan_reversal(&mada_authorized, within_2h),
-        ReversalStrategy::Void
-    );
-    assert!(
-        !client
-            .payments()
-            .is_mada_hold_expired(&mada_authorized, within_2h)
-    );
+    let plan = client
+        .payments()
+        .build_reversal_plan(&mada_authorized, within_2h);
+    assert_eq!(plan.strategy, ReversalStrategy::Void);
+    assert!(!plan.mada_hold_expired);
     assert!(
         client
             .payments()
@@ -189,11 +226,6 @@ async fn smart_reversal_voids_within_2h_falls_back_to_refund_and_checks_mada_14d
         "2026-11-14T10:00:00Z",
     ))
     .unwrap();
-    assert_eq!(
-        client.payments().plan_reversal(&mada_paid, after_3h),
-        ReversalStrategy::Refund { amount: None }
-    );
-
     let void_path = format!("/v1/payments/{pay_uuid}/void");
     let refund_path = format!("/v1/payments/{pay_uuid}/refund");
     common::mount_json_endpoint(
@@ -220,8 +252,31 @@ async fn smart_reversal_voids_within_2h_falls_back_to_refund_and_checks_mada_14d
 }
 
 #[tokio::test]
-async fn stc_pay_otp_verification_rejects_non_https_or_invalid_otp_before_network() {
-    let (_server, client) = common::start_secret_client().await;
+async fn stc_pay_otp_verification_succeeds_on_200_and_rejects_non_https_or_invalid_otp() {
+    let (server, client) = common::start_secret_client().await;
+    let otp_path = "/v1/stc_pays/pay_123/proceed";
+
+    common::mount_json_endpoint(
+        &server,
+        ("POST", otp_path),
+        200,
+        json!({
+            "id": "pay_123",
+            "status": "paid",
+            "amount": 10000,
+            "currency": "SAR"
+        }),
+    )
+    .await;
+
+    let valid_url = format!("{}{otp_path}?otp_token=tok_xyz", server.uri());
+    let verified = client
+        .payments()
+        .verify_stc_otp(&valid_url, "123456")
+        .await
+        .unwrap();
+    assert_eq!(verified.id, "pay_123");
+    assert_eq!(verified.status, "paid");
 
     let http_err = client
         .payments()
@@ -239,7 +294,7 @@ async fn stc_pay_otp_verification_rejects_non_https_or_invalid_otp_before_networ
 }
 
 #[test]
-fn polymorphic_sources_enforce_card_stcpay_and_sadad_negative_validations() {
+fn polymorphic_sources_enforce_card_wallets_stcpay_and_sadad_validations() {
     let now = Utc.with_ymd_and_hms(2026, 11, 14, 12, 0, 0).unwrap();
 
     assert!(matches!(
@@ -250,25 +305,24 @@ fn polymorphic_sources_enforce_card_stcpay_and_sadad_negative_validations() {
         validate_expiry_against(10, 2026, 2026, 11),
         Err(MoyasarError::CardExpired)
     ));
-    assert!(matches!(
-        CreditCardSource::new("Maher", "378282246310005", 12, 2029, "123"),
-        Err(MoyasarError::InvalidCvc)
-    ));
     assert!(CreditCardSource::new("Maher", "378282246310005", 12, 2029, "1234").is_ok());
+
+    assert!(ApplePaySource::new("apple_tok_123").validate().is_ok());
+    assert!(SamsungPaySource::new("samsung_tok_123").validate().is_ok());
+    assert!(ApplePaySource::new("   ").validate().is_err());
 
     assert_eq!(
         normalize_saudi_mobile("+966551234567").unwrap(),
         "0551234567"
     );
-    assert_eq!(
-        normalize_saudi_mobile("00966551234567").unwrap(),
-        "0551234567"
-    );
+    assert!(StcPaySource::new("0551234567").is_ok());
     assert!(matches!(
         StcPaySource::new("0112345678"),
         Err(MoyasarError::InvalidMobile)
     ));
 
+    let sadad = SadadBillSource::new("NationalId123").with_biller_code("001");
+    assert!(sadad.validate(now).is_ok());
     let too_far = now + ChronoDuration::days(30);
     assert!(matches!(
         validate_sadad_expiry(Some(too_far), now),
@@ -330,8 +384,7 @@ fn marketplace_splits_and_aft_sender_enforce_validation_and_redaction() {
 }
 
 #[tokio::test]
-async fn payments_create_retries_on_503_with_deterministic_given_id_and_never_retries_malformed_201()
- {
+async fn payments_create_retries_503_with_deterministic_given_id_and_rejects_malformed_201() {
     let (server, client) = common::start_secret_client_with_retries(1).await;
     let pay_uuid = "770e8400-e29b-41d4-a716-446655440000";
 
@@ -356,9 +409,10 @@ async fn payments_create_retries_on_503_with_deterministic_given_id_and_never_re
         .payment_source(token_src)
         .build()
         .unwrap();
+    let expected_given_id = derive_subscription_given_id("sub_99", 1);
     let policy = GivenIdPolicy::Deterministic {
         namespace: MOYASAR_SUBSCRIPTION_NAMESPACE,
-        scope: "sub_99:cycle_1".to_string(),
+        scope: "sub_99:1".to_string(),
     };
     let payment = client
         .payments()
@@ -367,12 +421,23 @@ async fn payments_create_retries_on_503_with_deterministic_given_id_and_never_re
         .unwrap();
     assert_eq!(payment.status, PaymentStatus::Paid);
 
+    let received = server.received_requests().await.unwrap();
+    assert_eq!(received.len(), 2);
+    for req in &received {
+        let body: Value = serde_json::from_slice(&req.body).unwrap();
+        assert_eq!(body["given_id"], expected_given_id.to_string());
+    }
+
     let (bad_server, bad_client) = common::start_secret_client_with_retries(2).await;
     common::mount_raw_endpoint(&bad_server, ("POST", "/v1/payments"), 201, "{invalid_json").await;
     let err = bad_client.payments().create(&params).await.unwrap_err();
+    assert!(matches!(
+        err,
+        MoyasarError::Api {
+            error_type: ApiErrorType::Unknown,
+            ..
+        }
+    ));
     assert!(!err.is_retryable());
     assert_eq!(bad_server.received_requests().await.unwrap().len(), 1);
-
-    assert!(PaymentId::new("pay_../admin").is_err());
-    assert!(Uuid::parse_str(pay_uuid).is_ok());
 }

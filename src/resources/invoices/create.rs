@@ -15,6 +15,7 @@ use crate::resources::invoices::models::Invoice;
 
 const INVOICES_PATH: &str = "/v1/invoices";
 const INVOICES_BULK_PATH: &str = "/v1/invoices/bulk";
+const MAX_BULK_INVOICES: usize = 50;
 
 /// Request payload for creating a hosted e-invoice (`POST /v1/invoices`).
 ///
@@ -183,6 +184,17 @@ impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {
         &self,
         invoices: Vec<CreateInvoiceParams>,
     ) -> Result<Vec<Invoice>, MoyasarError> {
+        if invoices.is_empty() || invoices.len() > MAX_BULK_INVOICES {
+            return Err(MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                message: format!(
+                    "bulk invoice batch size must be between 1 and {MAX_BULK_INVOICES}, got {}",
+                    invoices.len()
+                ),
+                errors: Vec::new(),
+                response_code: None,
+            });
+        }
         let client = self.client();
         let payload = BulkCreateInvoicesRequest { invoices };
         post_with_base_url(

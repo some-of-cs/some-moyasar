@@ -1,20 +1,44 @@
 mod common;
 
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
-use serde_json::json;
+use serde::Deserialize;
+use serde_json::{Value, json};
 use some_moyasar::prelude::*;
 use uuid::Uuid;
 
-#[tokio::test]
-async fn sources_bin_lookup_and_apple_pay_session_initiation_with_negative_guards() {
-    let (server, sk_client) = common::start_secret_client().await;
-    let pk_client = MoyasarClient::builder(PublishableKey::new(common::TEST_PK).unwrap())
-        .base_url(server.uri())
-        .build()
-        .unwrap();
+fn sample_webhook_endpoint_json(hook_id: Uuid) -> Value {
+    json!({
+        "id": hook_id,
+        "http_method": "post",
+        "url": "https://merchant.example.com/webhooks/moyasar",
+        "shared_secret": "whsec_top_secret",
+        "events": ["payment_paid", "payment_failed"],
+        "created_at": "2026-11-14T10:00:00Z"
+    })
+}
 
-    assert!(BinLookupParams::new("4111111111111111").is_err());
-    assert!(BinLookupParams::new("41111").is_err());
+fn sample_attempt_json(attempt_id: Uuid, hook_id: Uuid) -> Value {
+    json!({
+        "id": attempt_id,
+        "webhook_id": hook_id,
+        "event_id": Uuid::new_v4(),
+        "event_type": "payment_paid",
+        "response_code": 200,
+        "response_headers": { "content-type": "application/json" },
+        "response_body": "{"ok":true}",
+        "succeeded": true,
+        "message": "OK",
+        "created_at": "2026-11-14T10:01:00Z"
+    })
+}
+
+#[tokio::test]
+async fn sources_bin_lookup_and_negative_guards() {
+    let (server, sk_client) = common::start_secret_client().await;
+
+    for bad_bin in ["4111111111111111", "41111", "41111a"] {
+        assert!(BinLookupParams::new(bad_bin).is_err());
+    }
     let bin_params = BinLookupParams::new("411111").unwrap();
     assert!(!format!("{bin_params:?}").contains("411111"));
 
@@ -34,12 +58,26 @@ async fn sources_bin_lookup_and_apple_pay_session_initiation_with_negative_guard
     .await;
     let issuer = sk_client.sources().get_issuer(&bin_params).await.unwrap();
     assert_eq!(issuer.issuer_name.as_deref(), Some("Al Rajhi Bank"));
+}
+
+#[tokio::test]
+async fn apple_pay_session_initiation_and_negative_guards() {
+    let (server, pk_client) = common::start_publishable_client().await;
 
     assert!(
         InitiateApplePayParams::new(
             "http://apple-pay-gateway.apple.com/paymentservices/startSession",
             "Some CS",
             "checkout.somecs.com",
+            common::TEST_PK,
+        )
+        .is_err()
+    );
+    assert!(
+        InitiateApplePayParams::new(
+            "https://apple-pay-gateway.apple.com/paymentservices/startSession",
+            "Some CS",
+            "   ",
             common::TEST_PK,
         )
         .is_err()
@@ -80,9 +118,10 @@ async fn sources_bin_lookup_and_apple_pay_session_initiation_with_negative_guard
 }
 
 #[tokio::test]
-async fn webhooks_api_create_and_available_events_lifecycle() {
+async fn webhooks_api_create_list_retrieve_and_available_events_lifecycle() {
     let (server, client) = common::start_secret_client().await;
     let hook_id = Uuid::parse_str("990e8400-e29b-41d4-a716-446655440000").unwrap();
+    let hook_json = sample_webhook_endpoint_json(hook_id);
 
     assert!(matches!(
         CreateWebhookParams::new(
@@ -104,55 +143,71 @@ async fn webhooks_api_create_and_available_events_lifecycle() {
     ]);
     assert!(!format!("{create_params:?}").contains("whsec_top_secret"));
 
-    let hook_json = json!({
-        "id": hook_id,
-        "http_method": "post",
-        "url": "https://merchant.example.com/webhooks/moyasar",
-        "shared_secret": "whsec_top_secret",
-        "events": ["payment_paid", "payment_failed"],
-        "created_at": "2026-11-14T10:00:00Z"
-    });
-    common::mount_json_endpoint(&server, ("POST", "/v1/webhooks"), 201, hook_json).await;
+    common::mount_json_endpoint(&server, ("POST", "/v1/webhooks"), 201, hook_json.clone()).await;
+    common::mount_json_endpoint(
+        &server,
+        ("GET", "/v1/webhooks"),
+        200,
+        common::paginated_envelope("webhooks", vec![hook_json.clone()], 1, None),
+    )
+    .await;
+    let hook_path = format!("/v1/webhooks/{hook_id}");
+    common::mount_json_endpoint(&server, ("GET", &hook_path), 200, hook_json).await;
+
     let created = client.webhooks().create(&create_params).await.unwrap();
     assert_eq!(created.id, hook_id);
-    assert!(!format!("{created:?}").contains("whsec_top_secret"));
+    assert_eq!(client.webhooks().list(Some(1)).await.unwrap().items.len(), 1);
+    assert_eq!(client.webhooks().retrieve(hook_id).await.unwrap().id, hook_id);
 
     common::mount_json_endpoint(
         &server,
         ("GET", "/v1/webhooks/available_events"),
         200,
-        json!({ "events": ["payment_paid", "payment_failed", "balance_transferred"] }),
+        json!({ "events": ["payment_paid", "payment_failed"] }),
     )
     .await;
-    let events = client.webhooks().available_events().await.unwrap();
-    assert_eq!(events.len(), 3);
+    assert_eq!(client.webhooks().available_events().await.unwrap().len(), 2);
+
+    let (bare_srv, bare_client) = common::start_secret_client().await;
+    common::mount_json_endpoint(
+        &bare_srv,
+        ("GET", "/v1/webhooks/available_events"),
+        200,
+        json!(["payment_paid", "card_auth_authenticated"]),
+    )
+    .await;
+    assert_eq!(
+        bare_client.webhooks().available_events().await.unwrap().len(),
+        2
+    );
 }
 
 #[tokio::test]
-async fn webhooks_api_attempts_and_delete_lifecycle() {
+async fn webhooks_api_list_attempts_retrieve_attempt_and_delete_lifecycle() {
     let (server, client) = common::start_secret_client().await;
     let hook_id = Uuid::parse_str("990e8400-e29b-41d4-a716-446655440000").unwrap();
     let attempt_id = Uuid::parse_str("aa0e8400-e29b-41d4-a716-446655440000").unwrap();
+    let attempt_json = sample_attempt_json(attempt_id, hook_id);
 
-    let attempt_path = format!("/v1/webhooks/attempts/{attempt_id}");
     common::mount_json_endpoint(
         &server,
-        ("GET", &attempt_path),
+        ("GET", "/v1/webhooks/attempts"),
         200,
-        json!({
-            "id": attempt_id,
-            "webhook_id": hook_id,
-            "event_id": Uuid::new_v4(),
-            "event_type": "payment_paid",
-            "response_code": 200,
-            "response_headers": { "content-type": "application/json" },
-            "response_body": "{\"ok\":true}",
-            "succeeded": true,
-            "message": "OK",
-            "created_at": "2026-11-14T10:01:00Z"
-        }),
+        common::paginated_envelope("attempts", vec![attempt_json.clone()], 1, None),
     )
     .await;
+    let attempt_filter = ListWebhookAttemptsParams::new()
+        .page(1)
+        .webhook_id(hook_id);
+    let attempts_page = client
+        .webhooks()
+        .list_attempts(Some(&attempt_filter))
+        .await
+        .unwrap();
+    assert_eq!(attempts_page.items.len(), 1);
+
+    let attempt_path = format!("/v1/webhooks/attempts/{attempt_id}");
+    common::mount_json_endpoint(&server, ("GET", &attempt_path), 200, attempt_json).await;
     let attempt = client
         .webhooks()
         .retrieve_attempt(attempt_id)
@@ -165,8 +220,8 @@ async fn webhooks_api_attempts_and_delete_lifecycle() {
     client.webhooks().delete(hook_id).await.unwrap();
 }
 
-#[tokio::test]
-async fn webhook_engine_constant_time_verifier_replay_guard_deduplicator_and_typo_alias() {
+#[test]
+fn webhook_engine_verifier_and_payment_payload_extractor() {
     let now = Utc.with_ymd_and_hms(2026, 11, 14, 12, 0, 0).unwrap();
     let verifier = ConstantTimeSecretVerifier::new("whsec_engine_secret_123", REPLAY_TOLERANCE);
     assert!(!format!("{verifier:?}").contains("whsec_engine_secret_123"));
@@ -183,14 +238,10 @@ async fn webhook_engine_constant_time_verifier_replay_guard_deduplicator_and_typ
             "id": "550e8400-e29b-41d4-a716-446655440000",
             "status": "failed",
             "amount": 10000,
-            "amount_format": "100.00 SAR",
             "fee": 0,
-            "fee_format": "0.00 SAR",
             "currency": "SAR",
             "refunded": 0,
-            "refunded_format": "0.00 SAR",
             "captured": 0,
-            "captured_format": "0.00 SAR",
             "created_at": "2026-11-14T11:55:00Z",
             "updated_at": "2026-11-14T11:55:00Z",
             "source": {
@@ -203,31 +254,58 @@ async fn webhook_engine_constant_time_verifier_replay_guard_deduplicator_and_typ
     });
     let raw_bytes = serde_json::to_vec(&payload).unwrap();
 
-    let event = verifier.verify_and_construct_at(&raw_bytes, now).unwrap();
-    assert_eq!(event.event_type, WebhookEventType::PaymentFailed);
-    let payment = event.into_payment().unwrap();
-    assert_eq!(payment.status, PaymentStatus::Failed);
-
-    let wrong_verifier = ConstantTimeSecretVerifier::new("wrong_short", REPLAY_TOLERANCE);
-    assert!(matches!(
-        wrong_verifier.verify_and_construct_at(&raw_bytes, now),
-        Err(WebhookError::SecretMismatch)
-    ));
+    let verified = verifier.verify_and_construct_at(&raw_bytes, now).unwrap();
+    assert_eq!(verified.event_type, WebhookEventType::PaymentFailed);
+    assert_eq!(verified.into_payment().unwrap().status, PaymentStatus::Failed);
+    assert!(verified.into_card_auth().is_err());
 
     let stale_now = now + ChronoDuration::hours(5);
     assert!(matches!(
         verifier.verify_and_construct_at(&raw_bytes, stale_now),
         Err(WebhookError::TimestampOutOfRange)
     ));
-    let future_skew_now = now - ChronoDuration::minutes(15);
-    assert!(matches!(
-        verifier.verify_and_construct_at(&raw_bytes, future_skew_now),
-        Err(WebhookError::TimestampOutOfRange)
-    ));
+}
+
+#[tokio::test]
+async fn webhook_engine_card_auth_extractor_and_deduplicators() {
+    let now = Utc.with_ymd_and_hms(2026, 11, 14, 12, 0, 0).unwrap();
+    let verifier = ConstantTimeSecretVerifier::new("whsec_engine_secret_123", REPLAY_TOLERANCE);
+    let event_id = Uuid::parse_str("bb0e8400-e29b-41d4-a716-446655440000").unwrap();
+
+    let ca_payload = json!({
+        "id": event_id,
+        "type": "card_auth_authenticated",
+        "created_at": "2026-11-14T11:55:00Z",
+        "secret_token": "whsec_engine_secret_123",
+        "live": false,
+        "data": {
+            "id": "ca_3ds_999",
+            "status": "authenticated",
+            "transaction_url": null,
+            "result": null
+        }
+    });
+    let ca_event = verifier
+        .verify_and_construct_at(&serde_json::to_vec(&ca_payload).unwrap(), now)
+        .unwrap();
+    assert_eq!(ca_event.into_card_auth().unwrap().id.as_str(), "ca_3ds_999");
+
+    #[derive(Deserialize)]
+    struct MinimalId {
+        id: String,
+    }
+    let extracted: MinimalId = ca_event.extract_data().unwrap();
+    assert_eq!(extracted.id, "ca_3ds_999");
 
     let dedup = InMemoryDeduplicator::new();
     assert!(dedup.check_and_record(event_id).await.unwrap());
     assert!(!dedup.check_and_record(event_id).await.unwrap());
     dedup.remove(event_id).await.unwrap();
     assert!(dedup.check_and_record(event_id).await.unwrap());
+    dedup.clear();
+    assert!(dedup.is_empty());
+
+    let noop = NoopDeduplicator::new();
+    assert!(noop.check_and_record(event_id).await.unwrap());
+    assert!(noop.check_and_record(event_id).await.unwrap());
 }

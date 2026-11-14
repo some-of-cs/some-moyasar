@@ -50,7 +50,7 @@ pub fn resolve_test_publishable_key() -> PublishableKey {
 }
 
 fn configured_base_url() -> String {
-    std::env::var("MOYASAR_BASE_URL")
+    resolve_env_secret("$MOYASAR_BASE_URL")
         .ok()
         .filter(|v| !v.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
@@ -60,25 +60,35 @@ fn configured_base_url() -> String {
 /// or the process environment targeting `https://api.moyasar.com` (or `$MOYASAR_BASE_URL`).
 pub fn try_dotenv_secret_client() -> Option<MoyasarClient<SecretKey>> {
     let key = parse_configured_key("$MOYASAR_SECRET_KEY", SecretKey::new)?;
-    MoyasarClient::builder(key)
-        .base_url(configured_base_url())
-        .build()
-        .ok()
+    Some(
+        MoyasarClient::builder(key)
+            .base_url(configured_base_url())
+            .build()
+            .expect("configured MOYASAR_BASE_URL must build valid MoyasarClient"),
+    )
 }
 
 /// Attempts to build a real `MoyasarClient<PublishableKey>` from `MOYASAR_PUBLISHABLE_KEY`
 /// in `.env` or the process environment targeting `https://api.moyasar.com`.
 pub fn try_dotenv_publishable_client() -> Option<MoyasarClient<PublishableKey>> {
-    parse_configured_key("$MOYASAR_PUBLISHABLE_KEY", PublishableKey::new)
-        .and_then(|key| MoyasarClient::new(key).ok())
+    let key = parse_configured_key("$MOYASAR_PUBLISHABLE_KEY", PublishableKey::new)?;
+    Some(
+        MoyasarClient::builder(key)
+            .base_url(configured_base_url())
+            .build()
+            .expect("configured MOYASAR_BASE_URL must build valid MoyasarClient"),
+    )
 }
 
 /// Returns `true` when a real `MOYASAR_SECRET_KEY` is present in `.env` / environment
 /// and `MOYASAR_RUN_LIVE_TESTS` is not explicitly set to `"0"` or `"false"`.
 pub fn is_live_dotenv_test_enabled() -> bool {
-    let disabled = std::env::var("MOYASAR_RUN_LIVE_TESTS")
+    let disabled = resolve_env_secret("$MOYASAR_RUN_LIVE_TESTS")
         .ok()
-        .is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false"));
+        .is_some_and(|v| {
+            let trimmed = v.trim();
+            trimmed == "0" || trimmed.eq_ignore_ascii_case("false")
+        });
     !disabled && try_dotenv_secret_client().is_some()
 }
 

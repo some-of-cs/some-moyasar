@@ -1,38 +1,52 @@
 mod common;
 
-use std::fs;
-use std::path::Path;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::json;
 use some_moyasar::prelude::*;
 
-/// RAII guard that creates a temporary `.env.integration_test` file and removes it on drop.
+static TEMP_ENV_SEQ: AtomicU64 = AtomicU64::new(1);
+
+/// RAII guard that creates a unique temporary `.env.it_*` file via `create_new(true)`
+/// and removes it on drop without ever overwriting pre-existing files.
 struct TempDotenvFile {
-    path: &'static str,
+    path: PathBuf,
 }
 
 impl TempDotenvFile {
-    fn create(path: &'static str, contents: &str) -> Self {
-        fs::write(path, contents).expect("write temp .env.integration_test");
+    fn create(contents: &str) -> Self {
+        let seq = TEMP_ENV_SEQ.fetch_add(1, Ordering::Relaxed);
+        let path = PathBuf::from(format!(".env.it_{}_{}", std::process::id(), seq));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .expect("create unique temporary .env file");
+        file.write_all(contents.as_bytes())
+            .expect("write temporary .env contents");
         Self { path }
     }
 }
 
 impl Drop for TempDotenvFile {
     fn drop(&mut self) {
-        let _ = fs::remove_file(Path::new(self.path));
+        let _ = fs::remove_file(&self.path);
     }
 }
 
 #[tokio::test]
 async fn dotenv_secret_and_publishable_keys_load_and_authenticate_requests() {
-    let dotenv_body = "MOYASAR_DOTENV_IT_SK=\"sk_test_from_dotenv_file_777\"\nMOYASAR_DOTENV_IT_PK='pk_test_from_dotenv_file_888'\n";
-    let _guard = TempDotenvFile::create(".env.integration_test", dotenv_body);
+    let dotenv_body = "MOYASAR_DOTENV_IT_SK="sk_test_from_dotenv_file_777"
+MOYASAR_DOTENV_IT_PK='pk_test_from_dotenv_file_888'
+";
+    let _guard = TempDotenvFile::create(dotenv_body);
 
-    let sk =
-        SecretKey::new("$MOYASAR_DOTENV_IT_SK").expect("resolve SK from .env.integration_test");
-    let pk = PublishableKey::new("${MOYASAR_DOTENV_IT_PK}")
-        .expect("resolve PK from .env.integration_test");
+    let sk = SecretKey::new("$MOYASAR_DOTENV_IT_SK").expect("resolve SK from temp .env file");
+    let pk =
+        PublishableKey::new("${MOYASAR_DOTENV_IT_PK}").expect("resolve PK from temp .env file");
     assert_eq!(sk.mode(), AuthMode::Test);
     assert_eq!(pk.mode(), AuthMode::Test);
     assert_eq!(sk.expose_secret(), "sk_test_from_dotenv_file_777");

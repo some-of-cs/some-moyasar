@@ -2,16 +2,12 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use serde_json::json;
+use serde_json::{Value, json};
 use some_moyasar::prelude::*;
 
-#[tokio::test]
-async fn payout_accounts_create_and_retrieve_lifecycle() {
-    let (server, client) = common::start_secret_client().await;
-    let acct_id = PayoutAccountId::new("pa_acct_001").unwrap();
-
-    let acct_json = json!({
-        "id": acct_id.as_str(),
+fn sample_payout_account_json(acct_id: &str) -> Value {
+    json!({
+        "id": acct_id,
         "account_type": "bank",
         "currency": "SAR",
         "properties": {
@@ -20,12 +16,38 @@ async fn payout_accounts_create_and_retrieve_lifecycle() {
             "bank_name": "Riyad Bank"
         },
         "created_at": "2026-11-14T10:00:00Z"
-    });
+    })
+}
+
+fn sample_payout_json(payout_id: &str) -> Value {
+    json!({
+        "id": payout_id,
+        "channel": "sarie",
+        "status": "paid",
+        "amount": 100000,
+        "message": "Success",
+        "failure_reason": null
+    })
+}
+
+#[tokio::test]
+async fn payout_accounts_create_list_retrieve_and_request_body_verification() {
+    let (server, client) = common::start_secret_client().await;
+    let acct_id = PayoutAccountId::new("pa_acct_001").unwrap();
+    let acct_json = sample_payout_account_json(acct_id.as_str());
+
     common::mount_json_endpoint(
         &server,
         ("POST", "/v1/payout_accounts"),
         201,
         acct_json.clone(),
+    )
+    .await;
+    common::mount_json_endpoint(
+        &server,
+        ("GET", "/v1/payout_accounts"),
+        200,
+        common::paginated_envelope("payout_accounts", vec![acct_json.clone()], 1, None),
     )
     .await;
     let acct_get_path = format!("/v1/payout_accounts/{}", acct_id.as_str());
@@ -46,25 +68,42 @@ async fn payout_accounts_create_and_retrieve_lifecycle() {
 
     let created_acct = client.payout_accounts().create(&acct_params).await.unwrap();
     assert_eq!(created_acct.id, acct_id);
-    let fetched_acct = client.payout_accounts().retrieve(&acct_id).await.unwrap();
-    assert_eq!(fetched_acct.currency, Currency::SAR);
+
+    let listed = client
+        .payout_accounts()
+        .list(&ListPayoutAccountsParams::new().page(1).per(10))
+        .await
+        .unwrap();
+    assert_eq!(listed.items.len(), 1);
+    assert_eq!(
+        client.payout_accounts().retrieve(&acct_id).await.unwrap().id,
+        acct_id
+    );
+
+    let received = server.received_requests().await.unwrap();
+    let create_body: Value = serde_json::from_slice(&received[0].body).unwrap();
+    assert_eq!(create_body["account_type"], "bank");
+    assert_eq!(
+        create_body["properties"]["iban"],
+        "SA4420000001234567891234"
+    );
 }
 
 #[tokio::test]
-async fn payouts_single_and_bulk_creation_lifecycle() {
+async fn payouts_create_and_bulk_request_body_verification() {
     let (server, client) = common::start_secret_client().await;
     let acct_id = PayoutAccountId::new("pa_acct_001").unwrap();
     let payout_id = PayoutId::new("po_payout_001").unwrap();
+    let payout_json = sample_payout_json(payout_id.as_str());
 
-    let payout_json = json!({
-        "id": payout_id.as_str(),
-        "channel": "sarie",
-        "status": "paid",
-        "amount": 100000,
-        "message": "Success",
-        "failure_reason": null
-    });
     common::mount_json_endpoint(&server, ("POST", "/v1/payouts"), 201, payout_json.clone()).await;
+    common::mount_json_endpoint(
+        &server,
+        ("POST", "/v1/payouts/bulk"),
+        201,
+        json!({ "payouts": [payout_json] }),
+    )
+    .await;
 
     let bank_dest = PayoutDestination::Bank(BankDestination {
         iban: "SA4420000001234567891234".to_string(),
@@ -83,17 +122,9 @@ async fn payouts_single_and_bulk_creation_lifecycle() {
         metadata: None,
     };
 
-    let created_payout = client.payouts().create(&payout_params).await.unwrap();
-    assert_eq!(created_payout.status, PayoutStatus::Paid);
-    assert_eq!(created_payout.channel, PayoutChannel::Sarie);
+    let created = client.payouts().create(&payout_params).await.unwrap();
+    assert_eq!(created.status, PayoutStatus::Paid);
 
-    common::mount_json_endpoint(
-        &server,
-        ("POST", "/v1/payouts/bulk"),
-        201,
-        json!({ "payouts": [payout_json] }),
-    )
-    .await;
     let entry = BulkPayoutEntry::new(
         100000,
         PayoutPurpose::PayrollBenefits,
@@ -105,6 +136,44 @@ async fn payouts_single_and_bulk_creation_lifecycle() {
     let bulk_params = CreateBulkPayoutParams::new(acct_id, vec![entry]);
     let bulk_res = client.payouts().create_bulk(&bulk_params).await.unwrap();
     assert_eq!(bulk_res.payouts.len(), 1);
+
+    let received = server.received_requests().await.unwrap();
+    let single_body: Value = serde_json::from_slice(&received[0].body).unwrap();
+    assert_eq!(single_body["source_id"], "pa_acct_001");
+    assert_eq!(single_body["sequence_number"], "1234567890123456");
+    assert_eq!(single_body["amount"], 100000);
+    assert_eq!(single_body["purpose"], "payment_to_merchant");
+
+    let bulk_body: Value = serde_json::from_slice(&received[1].body).unwrap();
+    assert_eq!(bulk_body["source_id"], "pa_acct_001");
+    assert_eq!(bulk_body["payouts"][0]["purpose"], "payroll_benefits");
+}
+
+#[tokio::test]
+async fn payouts_list_and_retrieve_lifecycle() {
+    let (server, client) = common::start_secret_client().await;
+    let payout_id = PayoutId::new("po_payout_001").unwrap();
+    let payout_json = sample_payout_json(payout_id.as_str());
+
+    common::mount_json_endpoint(
+        &server,
+        ("GET", "/v1/payouts"),
+        200,
+        common::paginated_envelope("payouts", vec![payout_json.clone()], 1, None),
+    )
+    .await;
+    let payout_get_path = format!("/v1/payouts/{}", payout_id.as_str());
+    common::mount_json_endpoint(&server, ("GET", &payout_get_path), 200, payout_json).await;
+
+    let listed = client
+        .payouts()
+        .list(&ListPayoutsParams::new().page(1))
+        .await
+        .unwrap();
+    assert_eq!(listed.items.len(), 1);
+
+    let retrieved = client.payouts().retrieve(&payout_id).await.unwrap();
+    assert_eq!(retrieved.id, payout_id);
 }
 
 #[test]
@@ -119,18 +188,16 @@ fn payouts_negative_validations_enforce_sa_iban_16_digit_seq_and_20_purposes() {
         serde_json::from_value(json!("unsupported_purpose"));
     assert!(bad_purpose.is_err());
 
-    assert!(matches!(
-        validate_sa_iban("US1234567890123456789012"),
-        Err(MoyasarError::InvalidIban)
-    ));
-    assert!(matches!(
-        validate_sa_iban("SA12345"),
-        Err(MoyasarError::InvalidIban)
-    ));
-    assert!(matches!(
-        validate_sa_iban("SA442000000123456789123A"),
-        Err(MoyasarError::InvalidIban)
-    ));
+    for invalid_iban in [
+        "US1234567890123456789012",
+        "SA12345",
+        "SA442000000123456789123A",
+    ] {
+        assert!(matches!(
+            validate_sa_iban(invalid_iban),
+            Err(MoyasarError::InvalidIban)
+        ));
+    }
 
     assert!(validate_sequence_number("1234567890123456").is_ok());
     assert!(validate_sequence_number("12345").is_err());

@@ -29,6 +29,8 @@ fn auth_keys_enforce_prefixes_suffix_and_redacted_debug() {
             Err(MoyasarError::InvalidKey)
         ));
     }
+    let mismatch = MoyasarError::KeyTypeMismatch;
+    assert!(!mismatch.is_retryable());
 }
 
 #[test]
@@ -55,10 +57,16 @@ fn client_builder_enforces_https_and_loopback_test_mode_rules() {
         );
     }
 
-    let remote_http = MoyasarClient::builder(test_sk)
-        .base_url("http://api.moyasar.com")
-        .build();
-    assert!(matches!(remote_http, Err(MoyasarError::InvalidBaseUrl)));
+    for invalid_url in [
+        "http://api.moyasar.com",
+        "https://api.moyasar.com?foo=bar",
+        "https://api.moyasar.com#frag",
+    ] {
+        let res = MoyasarClient::builder(test_sk.clone())
+            .base_url(invalid_url)
+            .build();
+        assert!(matches!(res, Err(MoyasarError::InvalidBaseUrl)));
+    }
 
     let live_loopback = MoyasarClient::builder(live_sk)
         .base_url("http://127.0.0.1:9999")
@@ -108,7 +116,7 @@ fn idempotency_random_and_deterministic_uuid_v5_policies_behave_consistently() {
 }
 
 #[test]
-fn metadata_enforces_30_keys_40_char_key_500_char_value_and_unset_semantics() {
+fn metadata_enforces_30_keys_40_char_key_500_char_value_unset_and_remove() {
     let mut meta = Metadata::new();
     for idx in 0..METADATA_MAX_KEYS {
         let key = format!("key_{idx}");
@@ -140,6 +148,8 @@ fn metadata_enforces_30_keys_40_char_key_500_char_value_and_unset_semantics() {
     let serialized = serde_json::to_value(&fresh).unwrap();
     assert_eq!(serialized["remove_me"], "");
     assert_eq!(format!("{fresh:?}"), "Metadata { keys_count: 1 }");
+    assert_eq!(fresh.remove("remove_me"), Some(MetadataValue::Unset));
+    assert!(fresh.is_empty());
 }
 
 #[test]
@@ -163,13 +173,35 @@ fn currency_exponents_and_minor_major_amount_conversions_are_exact() {
 }
 
 #[test]
-fn error_envelope_parses_both_array_and_map_field_errors_plus_response_codes() {
+fn error_envelope_parses_401_404_422_array_and_map_errors_plus_response_codes() {
+    let auth_err = MoyasarError::from_api_response(
+        401,
+        r#"{"type":"authentication_error","message":"Invalid API key"}"#,
+    );
+    assert!(matches!(
+        auth_err,
+        MoyasarError::Api {
+            error_type: ApiErrorType::AuthenticationError,
+            ..
+        }
+    ));
+
+    let not_found = MoyasarError::from_api_response(
+        404,
+        r#"{"type":"record_not_found","message":"Payment not found"}"#,
+    );
+    assert!(matches!(
+        not_found,
+        MoyasarError::Api {
+            error_type: ApiErrorType::RecordNotFound,
+            ..
+        }
+    ));
+
     let array_json = json!({
         "type": "invalid_request_error",
         "message": "Validation failed",
-        "errors": [
-            { "field": "source.number", "message": "is invalid" }
-        ],
+        "errors": [{ "field": "source.number", "message": "is invalid" }],
         "response_code": "51"
     });
     let env_arr: ApiErrorPayload = serde_json::from_value(array_json).unwrap();
@@ -184,14 +216,11 @@ fn error_envelope_parses_both_array_and_map_field_errors_plus_response_codes() {
             "amount": ["must be greater than or equal to 100"],
             "currency": "is not supported"
         },
-        "response_code": "99"
+        "response_code": "00"
     });
     let env_map: ApiErrorPayload = serde_json::from_value(map_json).unwrap();
     assert_eq!(env_map.errors.len(), 2);
-    assert_eq!(
-        env_map.response_code,
-        Some(ResponseCode::Unknown("99".to_string()))
-    );
+    assert_eq!(env_map.response_code, Some(ResponseCode::Approved));
 }
 
 #[tokio::test]
@@ -244,4 +273,21 @@ async fn paginator_streams_multiple_pages_and_propagates_mid_stream_errors() {
         result,
         Err(MoyasarError::ServerError { status: 502, .. })
     ));
+}
+
+#[tokio::test]
+async fn transport_exhausts_5xx_retries_and_returns_server_error_503() {
+    let (server, client) = common::start_secret_client_with_retries(1).await;
+    common::mount_raw_endpoint(&server, ("GET", "/v1/payments"), 503, "Service Unavailable").await;
+
+    let err = client
+        .payments()
+        .list(&ListParams::new().page(1))
+        .await
+        .expect_err("persistent 503 must exhaust retries");
+    assert!(matches!(
+        err,
+        MoyasarError::ServerError { status: 503, .. }
+    ));
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }
