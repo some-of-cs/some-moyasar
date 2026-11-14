@@ -74,8 +74,13 @@ async fn apple_pay_session_initiation_and_negative_guards() {
         .is_err()
     );
     assert!(
-        InitiateApplePayParams::new("https://", "Some CS", "checkout.somecs.com", common::TEST_PK)
-            .is_err()
+        InitiateApplePayParams::new(
+            "https://",
+            "Some CS",
+            "checkout.somecs.com",
+            common::TEST_PK
+        )
+        .is_err()
     );
 
     let ap_params = InitiateApplePayParams::new(
