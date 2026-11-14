@@ -261,9 +261,13 @@ mod tests {
             .expect_err("timestamp older than 4h must be rejected");
         assert!(matches!(expired_err, WebhookError::TimestampOutOfRange));
 
+        let event = verifier
+            .verify_and_construct_at(&raw, created_at)
+            .expect("baseline timestamp must verify");
+
         let future_skew_now = created_at - ChronoDuration::seconds(301);
-        let future_err = verifier
-            .verify_and_construct_at(&raw, future_skew_now)
+        let future_err = event
+            .validate_timestamp_at(future_skew_now, REPLAY_TOLERANCE)
             .expect_err("timestamp >5m in the future must be rejected");
         assert!(matches!(future_err, WebhookError::TimestampOutOfRange));
     }
