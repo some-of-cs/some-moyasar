@@ -74,8 +74,10 @@ impl From<String> for SettlementId {
 
 /// Classification of the recipient receiving a Moyasar settlement payout.
 ///
-/// Unrecognized future recipient types returned by the API deserialize into
-/// [`SettlementRecipientType::Unknown`] for forward compatibility.
+/// Both `"entity"` and `"merchant"` wire strings deserialize into
+/// [`SettlementRecipientType::Entity`]. Unrecognized future recipient types
+/// returned by the API deserialize into [`SettlementRecipientType::Unknown`]
+/// for forward compatibility.
 ///
 /// # Examples
 ///
@@ -86,13 +88,17 @@ impl From<String> for SettlementId {
 /// assert_eq!(entity, SettlementRecipientType::Entity);
 /// assert_eq!(entity.as_str(), "entity");
 ///
+/// let merchant: SettlementRecipientType = serde_json::from_str(r#""merchant""#).unwrap();
+/// assert_eq!(merchant, SettlementRecipientType::Entity);
+///
 /// let future: SettlementRecipientType = serde_json::from_str(r#""partner_bank""#).unwrap();
 /// assert_eq!(future, SettlementRecipientType::Unknown);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SettlementRecipientType {
-    /// Standard merchant entity settlement.
+    /// Standard merchant entity settlement (also accepts `"merchant"` alias on wire).
+    #[serde(alias = "merchant")]
     Entity,
     /// Marketplace or platform fee settlement.
     Platform,
@@ -174,7 +180,7 @@ pub struct Settlement {
     /// Optional invoicing ISO 4217 currency when billed in a separate currency.
     #[serde(default)]
     pub invoicing_currency: Option<Currency>,
-    /// Net settlement amount in minor units of [`Self::currency`].
+    /// Gross settlement amount in minor units of [`Self::currency`].
     pub amount: Amount,
     /// Total processing fee deducted in minor units of [`Self::currency`].
     pub fee: Amount,
@@ -312,9 +318,12 @@ mod tests {
         assert!(settlement.csv_list_url.is_none());
         assert!(settlement.pdf_list_url.is_none());
 
+        let merchant: SettlementRecipientType = serde_json::from_str(r#""merchant""#).unwrap();
         let platform: SettlementRecipientType = serde_json::from_str(r#""platform""#).unwrap();
         let beneficiary: SettlementRecipientType =
             serde_json::from_str(r#""beneficiary""#).unwrap();
+        assert_eq!(merchant, SettlementRecipientType::Entity);
+        assert_eq!(merchant.as_str(), "entity");
         assert_eq!(platform, SettlementRecipientType::Platform);
         assert_eq!(beneficiary, SettlementRecipientType::Beneficiary);
     }

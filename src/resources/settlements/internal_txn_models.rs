@@ -51,10 +51,11 @@ impl From<&str> for InternalTransactionId {
 ///
 /// ```rust
 /// use some_moyasar::resources::settlements::internal_txn_models::InternalTransaction;
+/// use some_moyasar::resources::settlements::models::SettlementRecipientType;
 ///
 /// let payload = r#"{
 ///     "id": "itxn_01J9XYZ",
-///     "recipient_type": "merchant",
+///     "recipient_type": "entity",
 ///     "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
 ///     "amount": 15000,
 ///     "currency": "SAR",
@@ -67,6 +68,7 @@ impl From<&str> for InternalTransactionId {
 ///
 /// let txn: InternalTransaction = serde_json::from_str(payload).unwrap();
 /// assert_eq!(txn.id.as_str(), "itxn_01J9XYZ");
+/// assert_eq!(txn.recipient_type, SettlementRecipientType::Entity);
 /// assert!(!txn.is_settled());
 /// ```
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,7 +144,7 @@ mod tests {
     fn tc_6_2_0_04_unsettled_internal_transaction_has_none_fields() {
         let payload = json!({
             "id": "itxn_unsettled_04",
-            "recipient_type": "merchant",
+            "recipient_type": "entity",
             "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
             "amount": 25000,
             "currency": "SAR",
@@ -155,6 +157,7 @@ mod tests {
         let txn: InternalTransaction =
             serde_json::from_value(payload).expect("valid unsettled internal transaction");
         assert_eq!(txn.id.as_str(), "itxn_unsettled_04");
+        assert_eq!(txn.recipient_type, SettlementRecipientType::Entity);
         assert_eq!(txn.amount, Amount::from_minor(25000));
         assert_eq!(txn.currency, Currency::SAR);
         assert!(txn.transfer_id.is_none());
@@ -167,7 +170,7 @@ mod tests {
     fn tc_6_2_0_05_settled_internal_transaction_has_some_fields() {
         let payload = json!({
             "id": "itxn_settled_05",
-            "recipient_type": "merchant",
+            "recipient_type": "entity",
             "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
             "amount": 50000,
             "currency": "SAR",
@@ -180,16 +183,23 @@ mod tests {
 
         let txn: InternalTransaction =
             serde_json::from_value(payload).expect("valid settled internal transaction");
+        assert_eq!(txn.recipient_type, SettlementRecipientType::Entity);
         assert_eq!(txn.transfer_id.as_deref(), Some("tr_01J9ABC"));
         assert!(txn.settled_at.is_some());
         assert!(txn.is_settled());
+
+        let round_trip: InternalTransaction = serde_json::from_str(
+            &serde_json::to_string(&txn).expect("serializes settled internal transaction"),
+        )
+        .expect("round-trips settled internal transaction");
+        assert_eq!(round_trip, txn);
     }
 
     #[test]
     fn debug_redacts_metadata_when_present() {
         let payload = json!({
             "id": "itxn_debug_01",
-            "recipient_type": "merchant",
+            "recipient_type": "entity",
             "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
             "amount": 1000,
             "currency": "SAR",
@@ -200,9 +210,51 @@ mod tests {
 
         let txn: InternalTransaction =
             serde_json::from_value(payload).expect("valid internal transaction");
+        assert_eq!(txn.recipient_type, SettlementRecipientType::Entity);
         let dbg = format!("{txn:?}");
         assert!(!dbg.contains("secret_key"));
         assert!(!dbg.contains("sensitive_value_123"));
         assert!(dbg.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn recipient_type_merchant_alias_unknown_fallback_and_transfer_id_formats() {
+        let merchant_payload = json!({
+            "id": "itxn_merchant_alias",
+            "recipient_type": "merchant",
+            "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
+            "amount": 30000,
+            "currency": "SAR",
+            "transfer_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "settled_at": "2026-11-13T14:00:00Z",
+            "created_at": "2026-11-13T10:00:00Z",
+            "updated_at": "2026-11-13T14:00:00Z"
+        });
+
+        let merchant_txn: InternalTransaction =
+            serde_json::from_value(merchant_payload).expect("merchant alias deserializes");
+        assert_eq!(merchant_txn.recipient_type, SettlementRecipientType::Entity);
+        assert_eq!(
+            merchant_txn.transfer_id.as_deref(),
+            Some("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+        );
+        assert!(merchant_txn.is_settled());
+
+        let unknown_payload = json!({
+            "id": "itxn_unknown_recipient",
+            "recipient_type": "sub_account_future",
+            "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
+            "amount": 12000,
+            "currency": "SAR",
+            "transfer_id": "tr_01J9XYZ",
+            "settled_at": "2026-11-13T15:00:00Z",
+            "created_at": "2026-11-13T10:00:00Z",
+            "updated_at": "2026-11-13T15:00:00Z"
+        });
+
+        let unknown_txn: InternalTransaction =
+            serde_json::from_value(unknown_payload).expect("unknown recipient_type deserializes");
+        assert_eq!(unknown_txn.recipient_type, SettlementRecipientType::Unknown);
+        assert_eq!(unknown_txn.transfer_id.as_deref(), Some("tr_01J9XYZ"));
     }
 }
