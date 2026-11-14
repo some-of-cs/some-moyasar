@@ -40,7 +40,10 @@ const KNOWN_WEBHOOK_EVENTS: &[(&str, WebhookEventType)] = &[
     ("payment_verified", WebhookEventType::PaymentVerified),
     ("payment_abandoned", WebhookEventType::PaymentAbandoned),
     ("payment_expired", WebhookEventType::PaymentExpired),
-    ("card_auth_authenticated", WebhookEventType::CardAuthAuthenticated),
+    (
+        "card_auth_authenticated",
+        WebhookEventType::CardAuthAuthenticated,
+    ),
     ("card_auth_failed", WebhookEventType::CardAuthFailed),
 ];
 
