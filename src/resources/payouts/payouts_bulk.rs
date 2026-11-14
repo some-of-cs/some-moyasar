@@ -39,11 +39,7 @@ pub struct BulkPayoutEntry {
 impl BulkPayoutEntry {
     /// Creates a new [`BulkPayoutEntry`] with required `amount`, `purpose`, and `destination`.
     #[must_use]
-    pub const fn new(
-        amount: u64,
-        purpose: PayoutPurpose,
-        destination: PayoutDestination,
-    ) -> Self {
+    pub const fn new(amount: u64, purpose: PayoutPurpose, destination: PayoutDestination) -> Self {
         Self {
             sequence_number: None,
             amount,
@@ -79,11 +75,16 @@ impl BulkPayoutEntry {
     ///
     /// # Errors
     ///
-    /// Returns [`MoyasarError::Api`] with [`ApiErrorType::InvalidRequestError`] if `amount == 0`,
-    /// `sequence_number` is not a valid 16-digit string, or `destination` fails validation.
+    /// Returns [`MoyasarError::Api`] with [`ApiErrorType::InvalidRequestError`] if `amount == 0`
+    /// or `destination` has an invalid field, [`MoyasarError::InvalidPayoutAmount`] if
+    /// `sequence_number` is not a valid 16-digit ASCII numeric string, or
+    /// [`MoyasarError::InvalidIban`] / [`MoyasarError::InvalidMobile`] if `destination` fails
+    /// validation.
     pub fn validate(&self) -> Result<(), MoyasarError> {
         if self.amount == 0 {
-            return Err(invalid_request_error("payout amount must be greater than zero"));
+            return Err(invalid_request_error(
+                "payout amount must be greater than zero",
+            ));
         }
         if let Some(seq) = self.sequence_number.as_deref() {
             validate_sequence_number(seq)?;
@@ -98,7 +99,9 @@ impl BulkPayoutEntry {
 ///
 /// ```no_run
 /// use some_moyasar::prelude::{MoyasarClient, SecretKey};
-/// use some_moyasar::resources::payouts::destinations::PayoutDestination;
+/// use some_moyasar::resources::payouts::destinations::{
+///     PayoutDestination, WalletDestination,
+/// };
 /// use some_moyasar::resources::payouts::models::PayoutAccountId;
 /// use some_moyasar::resources::payouts::payouts_bulk::{BulkPayoutEntry, CreateBulkPayoutParams};
 /// use some_moyasar::resources::payouts::purpose::PayoutPurpose;
@@ -110,9 +113,9 @@ impl BulkPayoutEntry {
 /// let entry = BulkPayoutEntry::new(
 ///     25_000,
 ///     PayoutPurpose::PaymentToMerchant,
-///     PayoutDestination::Wallet {
+///     PayoutDestination::Wallet(WalletDestination {
 ///         mobile: "+966501234567".to_owned(),
-///     },
+///     }),
 /// )
 /// .sequence_number("2026110500000001");
 ///
@@ -142,8 +145,9 @@ impl CreateBulkPayoutParams {
     /// # Errors
     ///
     /// Returns [`MoyasarError::Api`] with [`ApiErrorType::InvalidRequestError`] if `payouts` is
-    /// empty or any entry has `amount == 0`, an invalid `sequence_number`, or an invalid
-    /// `destination`.
+    /// empty or any entry has `amount == 0`, [`MoyasarError::InvalidPayoutAmount`] if any entry
+    /// has an invalid `sequence_number`, or destination validation errors if any `destination` is
+    /// invalid.
     pub fn validate(&self) -> Result<(), MoyasarError> {
         if self.payouts.is_empty() {
             return Err(invalid_request_error(
@@ -180,7 +184,9 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
     ///
     /// ```no_run
     /// use some_moyasar::prelude::{MoyasarClient, SecretKey};
-    /// use some_moyasar::resources::payouts::destinations::PayoutDestination;
+    /// use some_moyasar::resources::payouts::destinations::{
+    ///     PayoutDestination, WalletDestination,
+    /// };
     /// use some_moyasar::resources::payouts::models::PayoutAccountId;
     /// use some_moyasar::resources::payouts::payouts_bulk::{BulkPayoutEntry, CreateBulkPayoutParams};
     /// use some_moyasar::resources::payouts::purpose::PayoutPurpose;
@@ -192,9 +198,9 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
     ///     vec![BulkPayoutEntry::new(
     ///         10_000,
     ///         PayoutPurpose::PayrollBenefits,
-    ///         PayoutDestination::Wallet {
+    ///         PayoutDestination::Wallet(WalletDestination {
     ///             mobile: "+966501234567".to_owned(),
-    ///         },
+    ///         }),
     ///     )],
     /// );
     /// let batch = client.payouts().create_bulk(&params).await?;
@@ -251,8 +257,10 @@ async fn send_bulk_payout_request<K: SecretAuthKey>(
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &text));
     }
-    serde_json::from_str::<BulkPayoutResponse>(&text)
-        .map_err(|_| MoyasarError::from_api_response(status.as_u16(), &text))
+    serde_json::from_str::<BulkPayoutResponse>(&text).map_err(|err| MoyasarError::ServerError {
+        status: status.as_u16(),
+        message: format!("failed to decode BulkPayoutResponse: {err}"),
+    })
 }
 
 fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
@@ -276,25 +284,26 @@ fn invalid_request_error(message: &str) -> MoyasarError {
 mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
+    use crate::resources::payouts::destinations::{BankDestination, WalletDestination};
     use crate::resources::payouts::payout_model::{PayoutChannel, PayoutStatus};
     use serde_json::json;
     use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn sample_bank_destination() -> PayoutDestination {
-        PayoutDestination::Bank {
+        PayoutDestination::Bank(BankDestination {
             iban: "SA0380000000608010167519".to_owned(),
             name: "Acme Courier LLC".to_owned(),
             mobile: "+966501234567".to_owned(),
             country: "SA".to_owned(),
             city: "Riyadh".to_owned(),
-        }
+        })
     }
 
     fn sample_wallet_destination() -> PayoutDestination {
-        PayoutDestination::Wallet {
+        PayoutDestination::Wallet(WalletDestination {
             mobile: "+966509876543".to_owned(),
-        }
+        })
     }
 
     fn sample_payout_json(id: &str, amount: u64, channel: &str, status: &str) -> serde_json::Value {

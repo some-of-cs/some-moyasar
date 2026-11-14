@@ -82,7 +82,10 @@ pub const KNOWN_PURPOSES: &[(&str, PayoutPurpose)] = &[
     ("credit_card_loan", PayoutPurpose::CreditCardLoan),
     ("gift_or_reward", PayoutPurpose::GiftOrReward),
     ("personal", PayoutPurpose::Personal),
-    ("investment_transaction", PayoutPurpose::InvestmentTransaction),
+    (
+        "investment_transaction",
+        PayoutPurpose::InvestmentTransaction,
+    ),
     ("family_assistance", PayoutPurpose::FamilyAssistance),
     ("donation", PayoutPurpose::Donation),
     ("payroll_benefits", PayoutPurpose::PayrollBenefits),
