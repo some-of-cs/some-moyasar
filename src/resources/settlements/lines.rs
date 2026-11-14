@@ -141,7 +141,7 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
     /// # async fn run() {
     /// let key = PublishableKey::new("pk_test_YOUR_KEY").unwrap();
     /// let client = MoyasarClient::new(key).unwrap();
-    /// let id = SettlementId::new("stl_01J9XYZ").unwrap();
+    /// let id = SettlementId::new("stl_01J9XYZ");
     /// let _ = client
     ///     .settlements()
     ///     .list_lines(&id, &ListSettlementLinesParams::default())
