@@ -82,9 +82,15 @@ mod tests {
         let start = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
         let end = start + Duration::days(30);
         assert_eq!(pro_rata_refund(10_000, start, end, end).unwrap(), 0);
-        assert_eq!(pro_rata_refund(10_000, start, end, start - Duration::days(1)).unwrap(), 10_000);
+        assert_eq!(
+            pro_rata_refund(10_000, start, end, start - Duration::days(1)).unwrap(),
+            10_000
+        );
         let large = u64::MAX / 2;
-        assert_eq!(pro_rata_refund(large, start, end, start + Duration::days(15)).unwrap(), large.div_ceil(2));
+        assert_eq!(
+            pro_rata_refund(large, start, end, start + Duration::days(15)).unwrap(),
+            large.div_ceil(2)
+        );
         assert!(pro_rata_refund(10_000, end, start, start).is_err());
     }
 }
