@@ -216,7 +216,7 @@ async fn smart_reversal_plans_mada_14d_hold_and_falls_back_from_void_400_to_refu
         .payments()
         .build_reversal_plan(&mada_authorized, within_2h);
     assert_eq!(plan.strategy, ReversalStrategy::Void);
-    assert!(!plan.mada_hold_expired);
+    assert!(!plan.mada_hold_likely_expired);
     assert!(
         client
             .payments()
@@ -325,7 +325,7 @@ fn polymorphic_sources_enforce_card_wallets_stcpay_and_sadad_validations() {
         Err(MoyasarError::InvalidMobile)
     ));
 
-    let sadad = SadadBillSource::new("NationalId123").with_biller_code("001");
+    let sadad = SadadBillSource::new().with_biller_code("001");
     assert!(sadad.validate(now).is_ok());
     let too_far = now + ChronoDuration::days(30);
     assert!(matches!(

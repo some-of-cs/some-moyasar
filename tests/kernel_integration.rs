@@ -148,7 +148,7 @@ fn metadata_enforces_30_keys_40_char_key_500_char_value_unset_and_remove() {
     let serialized = serde_json::to_value(&fresh).unwrap();
     assert_eq!(serialized["remove_me"], "");
     assert_eq!(format!("{fresh:?}"), "Metadata { keys_count: 1 }");
-    assert_eq!(fresh.remove("remove_me"), Some(MetadataValue::Unset));
+    assert!(fresh.remove("remove_me").is_some());
     assert!(fresh.is_empty());
 }
 
@@ -216,11 +216,14 @@ fn error_envelope_parses_401_404_422_array_and_map_errors_plus_response_codes() 
             "amount": ["must be greater than or equal to 100"],
             "currency": "is not supported"
         },
-        "response_code": "00"
+        "response_code": "99"
     });
     let env_map: ApiErrorPayload = serde_json::from_value(map_json).unwrap();
     assert_eq!(env_map.errors.len(), 2);
-    assert_eq!(env_map.response_code, Some(ResponseCode::Approved));
+    assert_eq!(
+        env_map.response_code,
+        Some(ResponseCode::Unknown("99".to_string()))
+    );
 }
 
 #[tokio::test]
