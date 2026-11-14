@@ -112,27 +112,19 @@ mod tests {
     fn tc_8_2_0_05_computes_bounds_across_all_intervals_and_leap_years() {
         let start = Utc.with_ymd_and_hms(2024, 1, 31, 12, 0, 0).unwrap();
         let (_, day_end) = next_period_bounds(start, PlanInterval::Day);
-        assert_eq!(
-            day_end,
-            Utc.with_ymd_and_hms(2024, 2, 1, 12, 0, 0).unwrap()
-        );
+        let expected_day = Utc.with_ymd_and_hms(2024, 2, 1, 12, 0, 0).unwrap();
+        assert_eq!(day_end, expected_day);
 
         let (_, week_end) = next_period_bounds(start, PlanInterval::Week);
-        assert_eq!(
-            week_end,
-            Utc.with_ymd_and_hms(2024, 2, 7, 12, 0, 0).unwrap()
-        );
+        let expected_week = Utc.with_ymd_and_hms(2024, 2, 7, 12, 0, 0).unwrap();
+        assert_eq!(week_end, expected_week);
 
         let (_, month_end) = next_period_bounds(start, PlanInterval::Month);
-        assert_eq!(
-            month_end,
-            Utc.with_ymd_and_hms(2024, 2, 29, 12, 0, 0).unwrap()
-        );
+        let expected_month = Utc.with_ymd_and_hms(2024, 2, 29, 12, 0, 0).unwrap();
+        assert_eq!(month_end, expected_month);
 
         let (_, year_end) = next_period_bounds(start, PlanInterval::Year);
-        assert_eq!(
-            year_end,
-            Utc.with_ymd_and_hms(2025, 1, 31, 12, 0, 0).unwrap()
-        );
+        let expected_year = Utc.with_ymd_and_hms(2025, 1, 31, 12, 0, 0).unwrap();
+        assert_eq!(year_end, expected_year);
     }
 }
