@@ -17,18 +17,19 @@ use crate::stripe_compat::customers::CustomerVault;
 /// # Examples
 ///
 /// ```
-/// # tokio_test::block_on(async {
 /// use some_moyasar::resources::tokens::TokenId;
 /// use some_moyasar::stripe_compat::customers::CustomerVault;
 /// use some_moyasar::stripe_compat::in_memory_vault::InMemoryCustomerVault;
 ///
-/// let vault = InMemoryCustomerVault::new();
-/// let token = TokenId::new("token_abc123").unwrap();
-/// vault.associate("cus_101", token.clone()).await.unwrap();
-/// assert_eq!(vault.resolve_tokens("cus_101").await.unwrap(), vec![token.clone()]);
-/// vault.deactivate(&token).await.unwrap();
-/// assert!(vault.resolve_tokens("cus_101").await.unwrap().is_empty());
-/// # });
+/// let rt = tokio::runtime::Runtime::new().unwrap();
+/// rt.block_on(async {
+///     let vault = InMemoryCustomerVault::new();
+///     let token = TokenId::new("token_abc123").unwrap();
+///     vault.associate("cus_101", token.clone()).await.unwrap();
+///     assert_eq!(vault.resolve_tokens("cus_101").await.unwrap(), vec![token.clone()]);
+///     vault.deactivate(&token).await.unwrap();
+///     assert!(vault.resolve_tokens("cus_101").await.unwrap().is_empty());
+/// });
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryCustomerVault {
