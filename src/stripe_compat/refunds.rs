@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::MoyasarError;
-use crate::resources::payments::{Payment, PaymentId, PaymentStatus, ReversalStrategy};
+use crate::resources::payments::{Payment, PaymentId, PaymentStatus, can_void_payment};
 
 /// Parameters for creating a virtual Stripe-style refund receipt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,7 +87,7 @@ impl RefundReceipt {
         };
         Self {
             payment_id: payment.id.clone(),
-            status: payment.status,
+            status: payment.status.clone(),
             refunded_amount,
             refunded_format: payment.refunded_format.clone(),
             refunded_at: payment.refunded_at,
@@ -147,14 +147,7 @@ impl<K: SecretAuthKey> RefundsService<'_, K> {
         let payments = self.client.payments();
         let payment = payments.retrieve(&id).await?;
         let reversed = if should_void(&payment, params) {
-            let plan = payments.reverse(&id, &payment, Utc::now()).await?;
-            match plan {
-                ReversalStrategy::Void => {
-                    let latest = payments.retrieve(&id).await.unwrap_or(payment);
-                    return Ok(RefundReceipt::from_payment(&latest));
-                }
-                ReversalStrategy::Refund => payments.refund(id.as_str(), params.amount).await?,
-            }
+            payments.void(id.as_str()).await?
         } else {
             payments.refund(id.as_str(), params.amount).await?
         };
@@ -164,7 +157,7 @@ impl<K: SecretAuthKey> RefundsService<'_, K> {
 
 fn should_void(payment: &Payment, params: &RefundCreateParams) -> bool {
     let is_partial = params.amount.is_some_and(|amt| amt < payment.amount);
-    params.prefer_void_if_unsettled && !is_partial
+    params.prefer_void_if_unsettled && !is_partial && can_void_payment(payment, Utc::now())
 }
 
 #[cfg(test)]
