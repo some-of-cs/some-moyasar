@@ -150,7 +150,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
             if let Some(desc) = description {
                 params = params.description(desc);
             }
-            let intent = self.payment_intents().create(&params).await?;
+            let intent = self.payment_intents().create(params).await?;
             let client_secret = intent.client_secret().map(str::to_owned);
             Ok(UnifiedIntentResponse {
                 id: intent.id.as_str().to_owned(),
@@ -240,7 +240,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
             event_type: event.event_type.as_str().to_owned(),
             created_at: event.created_at,
             live: event.live,
-            data: event.data,
+            data: event.data.clone(),
         })
     }
 }
