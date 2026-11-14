@@ -202,7 +202,6 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
     }
 }
 
-
 fn is_allowed_stc_otp_url(url: &str, mode: AuthMode) -> bool {
     url.starts_with("https://")
         || (mode == AuthMode::Test

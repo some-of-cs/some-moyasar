@@ -285,9 +285,6 @@ async fn transport_exhausts_5xx_retries_and_returns_server_error_503() {
         .list(&ListParams::new().page(1))
         .await
         .expect_err("persistent 503 must exhaust retries");
-    assert!(matches!(
-        err,
-        MoyasarError::ServerError { status: 503, .. }
-    ));
+    assert!(matches!(err, MoyasarError::ServerError { status: 503, .. }));
     assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }

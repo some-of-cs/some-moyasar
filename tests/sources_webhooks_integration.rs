@@ -156,8 +156,14 @@ async fn webhooks_api_create_list_retrieve_and_available_events_lifecycle() {
 
     let created = client.webhooks().create(&create_params).await.unwrap();
     assert_eq!(created.id, hook_id);
-    assert_eq!(client.webhooks().list(Some(1)).await.unwrap().items.len(), 1);
-    assert_eq!(client.webhooks().retrieve(hook_id).await.unwrap().id, hook_id);
+    assert_eq!(
+        client.webhooks().list(Some(1)).await.unwrap().items.len(),
+        1
+    );
+    assert_eq!(
+        client.webhooks().retrieve(hook_id).await.unwrap().id,
+        hook_id
+    );
 
     common::mount_json_endpoint(
         &server,
@@ -177,7 +183,12 @@ async fn webhooks_api_create_list_retrieve_and_available_events_lifecycle() {
     )
     .await;
     assert_eq!(
-        bare_client.webhooks().available_events().await.unwrap().len(),
+        bare_client
+            .webhooks()
+            .available_events()
+            .await
+            .unwrap()
+            .len(),
         2
     );
 }
@@ -196,9 +207,7 @@ async fn webhooks_api_list_attempts_retrieve_attempt_and_delete_lifecycle() {
         common::paginated_envelope("attempts", vec![attempt_json.clone()], 1, None),
     )
     .await;
-    let attempt_filter = ListWebhookAttemptsParams::new()
-        .page(1)
-        .webhook_id(hook_id);
+    let attempt_filter = ListWebhookAttemptsParams::new().page(1).webhook_id(hook_id);
     let attempts_page = client
         .webhooks()
         .list_attempts(Some(&attempt_filter))
@@ -256,7 +265,10 @@ fn webhook_engine_verifier_and_payment_payload_extractor() {
 
     let verified = verifier.verify_and_construct_at(&raw_bytes, now).unwrap();
     assert_eq!(verified.event_type, WebhookEventType::PaymentFailed);
-    assert_eq!(verified.into_payment().unwrap().status, PaymentStatus::Failed);
+    assert_eq!(
+        verified.into_payment().unwrap().status,
+        PaymentStatus::Failed
+    );
     assert!(verified.into_card_auth().is_err());
 
     let stale_now = now + ChronoDuration::hours(5);

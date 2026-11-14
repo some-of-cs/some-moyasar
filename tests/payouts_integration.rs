@@ -76,7 +76,12 @@ async fn payout_accounts_create_list_retrieve_and_request_body_verification() {
         .unwrap();
     assert_eq!(listed.items.len(), 1);
     assert_eq!(
-        client.payout_accounts().retrieve(&acct_id).await.unwrap().id,
+        client
+            .payout_accounts()
+            .retrieve(&acct_id)
+            .await
+            .unwrap()
+            .id,
         acct_id
     );
 

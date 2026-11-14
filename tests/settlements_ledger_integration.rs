@@ -88,10 +88,20 @@ async fn settlements_lines_and_merchant_balance_nested_and_flat_envelopes() {
     let nested_json = json!({
         "balances": [{ "currency": "SAR", "available": 500000, "pending": 120000, "reserved": 0 }]
     });
-    common::mount_json_endpoint(&server, ("GET", "/v1/settlements/balance"), 200, nested_json)
-        .await;
+    common::mount_json_endpoint(
+        &server,
+        ("GET", "/v1/settlements/balance"),
+        200,
+        nested_json,
+    )
+    .await;
     assert_eq!(
-        client.settlements().fetch_balance().await.unwrap().available,
+        client
+            .settlements()
+            .fetch_balance()
+            .await
+            .unwrap()
+            .available,
         Amount::from_minor(500000)
     );
 
@@ -99,8 +109,13 @@ async fn settlements_lines_and_merchant_balance_nested_and_flat_envelopes() {
     let flat_json = json!({
         "currency": "SAR", "available": 320000, "pending": 10000, "reserved": 5000
     });
-    common::mount_json_endpoint(&flat_srv, ("GET", "/v1/settlements/balance"), 200, flat_json)
-        .await;
+    common::mount_json_endpoint(
+        &flat_srv,
+        ("GET", "/v1/settlements/balance"),
+        200,
+        flat_json,
+    )
+    .await;
     assert_eq!(
         flat_client
             .settlements()

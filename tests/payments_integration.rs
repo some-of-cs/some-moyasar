@@ -138,7 +138,11 @@ async fn payments_update_void_and_refund_lifecycle() {
         sample_payment_json(pay_uuid, "refunded", "visa", "2026-11-14T10:07:00Z"),
     )
     .await;
-    let direct_ref = client.payments().refund(pay_uuid, Some(4000)).await.unwrap();
+    let direct_ref = client
+        .payments()
+        .refund(pay_uuid, Some(4000))
+        .await
+        .unwrap();
     let checked_ref = client
         .payments()
         .refund_payment(&updated, Some(4000))

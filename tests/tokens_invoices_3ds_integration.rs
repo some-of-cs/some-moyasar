@@ -137,7 +137,13 @@ async fn invoices_retrieve_list_update_and_cancel_lifecycle() {
         .page(1)
         .status(InvoiceStatus::Created);
     assert_eq!(
-        client.invoices().list(&list_params).await.unwrap().items.len(),
+        client
+            .invoices()
+            .list(&list_params)
+            .await
+            .unwrap()
+            .items
+            .len(),
         1
     );
 
@@ -149,7 +155,10 @@ async fn invoices_retrieve_list_update_and_cancel_lifecycle() {
         .update(inv_id, &update_params)
         .await
         .unwrap();
-    assert_eq!(updated.description.as_deref(), Some("Updated Retainer Plan"));
+    assert_eq!(
+        updated.description.as_deref(),
+        Some("Updated Retainer Plan")
+    );
 
     let cancel_path = format!("/v1/invoices/{inv_id}/cancel");
     let canceled_json = sample_invoice_json(inv_id, "canceled", "Updated Retainer Plan");
