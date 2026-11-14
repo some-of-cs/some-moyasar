@@ -87,13 +87,25 @@ mod tests {
     async fn tc_8_1_0_03_associate_resolve_and_deactivate_roundtrip() {
         let vault = InMemoryCustomerVault::new();
         let token = TokenId::new("token_abc").expect("valid token");
-        vault.associate("cus_101", token.clone()).await.expect("associate");
-        vault.associate("cus_101", token.clone()).await.expect("idempotent");
+        vault
+            .associate("cus_101", token.clone())
+            .await
+            .expect("associate");
+        vault
+            .associate("cus_101", token.clone())
+            .await
+            .expect("idempotent");
 
         let resolved = vault.resolve_tokens("cus_101").await.expect("resolve");
         assert_eq!(resolved, vec![token.clone()]);
 
         vault.deactivate(&token).await.expect("deactivate");
-        assert!(vault.resolve_tokens("cus_101").await.expect("resolve").is_empty());
+        assert!(
+            vault
+                .resolve_tokens("cus_101")
+                .await
+                .expect("resolve")
+                .is_empty()
+        );
     }
 }
