@@ -13,7 +13,7 @@ use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::types::Currency;
 use crate::resources::payment_intents::CreatePaymentIntentParams;
 use crate::resources::payments::{
-    CreatePaymentParams, PaymentId, PaymentSourceRequest, TokenSource, can_void_payment,
+    CreatePaymentParams, Payment, PaymentId, PaymentSourceRequest, TokenSource, can_void_payment,
 };
 use crate::webhook_engine::{ConstantTimeSecretVerifier, REPLAY_TOLERANCE};
 
@@ -197,23 +197,11 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
     {
         Box::pin(async move {
             let id = PaymentId::new(transaction_id)?;
-            let payments = self.payments();
-            let payment = payments.retrieve(&id).await?;
-            let is_full = amount_minor.is_none_or(|amt| amt == payment.amount);
-            if is_full && can_void_payment(&payment, Utc::now()) {
-                let voided = payments.void(id.as_str()).await?;
-                return Ok(UnifiedReversalResponse {
-                    transaction_id: voided.id,
-                    action: "voided".to_owned(),
-                    amount_reversed_minor: voided.amount,
-                });
+            let payment = self.payments().retrieve(&id).await?;
+            if should_void_unified(&payment, amount_minor) {
+                return void_unified_payment(self, &id).await;
             }
-            let refunded = payments.refund(id.as_str(), amount_minor).await?;
-            Ok(UnifiedReversalResponse {
-                transaction_id: refunded.id,
-                action: "refunded".to_owned(),
-                amount_reversed_minor: refunded.refunded,
-            })
+            refund_unified_payment(self, &id, amount_minor).await
         })
     }
 
@@ -243,6 +231,36 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
             data: event.data.clone(),
         })
     }
+}
+
+fn should_void_unified(payment: &Payment, amount_minor: Option<u64>) -> bool {
+    let is_full = amount_minor.is_none_or(|amt| amt == payment.amount);
+    is_full && can_void_payment(payment, Utc::now())
+}
+
+async fn void_unified_payment(
+    client: &MoyasarClient<SecretKey>,
+    id: &PaymentId,
+) -> Result<UnifiedReversalResponse, MoyasarError> {
+    let voided = client.payments().void(id.as_str()).await?;
+    Ok(UnifiedReversalResponse {
+        transaction_id: voided.id,
+        action: "voided".to_owned(),
+        amount_reversed_minor: voided.amount,
+    })
+}
+
+async fn refund_unified_payment(
+    client: &MoyasarClient<SecretKey>,
+    id: &PaymentId,
+    amount_minor: Option<u64>,
+) -> Result<UnifiedReversalResponse, MoyasarError> {
+    let refunded = client.payments().refund(id.as_str(), amount_minor).await?;
+    Ok(UnifiedReversalResponse {
+        transaction_id: refunded.id,
+        action: "refunded".to_owned(),
+        amount_reversed_minor: refunded.refunded,
+    })
 }
 
 fn parse_currency(raw: &str) -> Result<Currency, MoyasarError> {

@@ -1,10 +1,10 @@
 //! Subscription cycle refund and void-fallback orchestration.
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
-use crate::resources::payments::{PaymentId, can_void_payment};
+use crate::resources::payments::{Payment, PaymentId, can_void_payment};
 use crate::stripe_compat::pro_rata::pro_rata_refund;
 use crate::stripe_compat::subscriptions_billing::SubscriptionsService;
 use crate::stripe_compat::subscriptions_model::{
@@ -25,50 +25,72 @@ impl<K: SecretAuthKey> SubscriptionsService<'_, K> {
         params: &SubscriptionCycleRefundParams,
     ) -> Result<SubscriptionCycleRefundResult, MoyasarError> {
         let id = PaymentId::new(&params.cycle_payment_id)?;
-        let payments = self.client().payments();
-        let payment = payments.retrieve(&id).await?;
-        let now = Utc::now();
+        let payment = self.client().payments().retrieve(&id).await?;
 
         match params.strategy {
-            RefundStrategy::Full if can_void_payment(&payment, now) => {
-                let voided = payments.void(id.as_str()).await?;
-                Ok(SubscriptionCycleRefundResult {
-                    payment_id: voided.id,
-                    action: ReversalAction::Voided,
-                    amount_reversed: voided.amount,
-                })
-            }
-            RefundStrategy::Full => {
-                let refunded = payments.refund(id.as_str(), None).await?;
-                Ok(SubscriptionCycleRefundResult {
-                    payment_id: refunded.id,
-                    action: ReversalAction::Refunded,
-                    amount_reversed: refunded.refunded,
-                })
-            }
+            RefundStrategy::Full => self.void_or_refund_full(&id, &payment).await,
             RefundStrategy::Partial { amount_halalas } => {
-                let refunded = payments.refund(id.as_str(), Some(amount_halalas)).await?;
-                Ok(SubscriptionCycleRefundResult {
-                    payment_id: refunded.id,
-                    action: ReversalAction::Refunded,
-                    amount_reversed: refunded.refunded,
-                })
+                self.refund_partial(&id, amount_halalas).await
             }
             RefundStrategy::ProRata { canceled_at } => {
-                let amount = pro_rata_refund(
-                    payment.amount,
-                    params.period_start,
-                    params.period_end,
-                    canceled_at,
-                )?;
-                let refunded = payments.refund(id.as_str(), Some(amount)).await?;
-                Ok(SubscriptionCycleRefundResult {
-                    payment_id: refunded.id,
-                    action: ReversalAction::Refunded,
-                    amount_reversed: refunded.refunded,
-                })
+                self.refund_pro_rata(&id, &payment, params, canceled_at).await
             }
         }
+    }
+
+    async fn void_or_refund_full(
+        &self,
+        id: &PaymentId,
+        payment: &Payment,
+    ) -> Result<SubscriptionCycleRefundResult, MoyasarError> {
+        let payments = self.client().payments();
+        if can_void_payment(payment, Utc::now()) {
+            let voided = payments.void(id.as_str()).await?;
+            return Ok(SubscriptionCycleRefundResult {
+                payment_id: voided.id,
+                action: ReversalAction::Voided,
+                amount_reversed: voided.amount,
+            });
+        }
+        let refunded = payments.refund(id.as_str(), None).await?;
+        Ok(SubscriptionCycleRefundResult {
+            payment_id: refunded.id,
+            action: ReversalAction::Refunded,
+            amount_reversed: refunded.refunded,
+        })
+    }
+
+    async fn refund_partial(
+        &self,
+        id: &PaymentId,
+        amount_halalas: u64,
+    ) -> Result<SubscriptionCycleRefundResult, MoyasarError> {
+        let refunded = self
+            .client()
+            .payments()
+            .refund(id.as_str(), Some(amount_halalas))
+            .await?;
+        Ok(SubscriptionCycleRefundResult {
+            payment_id: refunded.id,
+            action: ReversalAction::Refunded,
+            amount_reversed: refunded.refunded,
+        })
+    }
+
+    async fn refund_pro_rata(
+        &self,
+        id: &PaymentId,
+        payment: &Payment,
+        params: &SubscriptionCycleRefundParams,
+        canceled_at: DateTime<Utc>,
+    ) -> Result<SubscriptionCycleRefundResult, MoyasarError> {
+        let amount = pro_rata_refund(
+            payment.amount,
+            params.period_start,
+            params.period_end,
+            canceled_at,
+        )?;
+        self.refund_partial(id, amount).await
     }
 }
 
