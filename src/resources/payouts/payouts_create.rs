@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::kernel::auth::SecretAuthKey;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
 use crate::kernel::transport::execute_with_retry;
 use crate::resources::payouts::destinations::PayoutDestination;
@@ -163,9 +163,11 @@ async fn parse_payout_response(response: reqwest::Response) -> Result<Payout, Mo
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
-    serde_json::from_str::<Payout>(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
+    serde_json::from_str::<Payout>(&body).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::Unknown,
         message: format!("failed to decode Payout response: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })
 }
 
@@ -336,5 +338,38 @@ mod tests {
             .expect_err("invalid sequence_number must be rejected");
 
         assert!(matches!(err, MoyasarError::InvalidPayoutAmount));
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_2xx_response_when_body_fails_to_decode() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/v1/payouts"))
+            .respond_with(ResponseTemplate::new(201).set_body_string("{not_valid_json"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let key = SecretKey::new("sk_test_payout_bad_201").expect("valid secret key");
+        let client = MoyasarClient::new(key).expect("client builds");
+        let params = sample_params(50_000, Some("2026111400000001"));
+
+        let err = client
+            .payouts()
+            .create_at(&server.uri(), &params)
+            .await
+            .expect_err("malformed 201 body must return decode error");
+
+        assert!(!err.is_retryable());
+        assert!(matches!(
+            err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::Unknown,
+                ..
+            }
+        ));
+        let msg = err.to_string();
+        assert!(msg.contains("failed to decode Payout response:"));
     }
 }
