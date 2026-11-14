@@ -1,0 +1,12 @@
+{
+  "moduleId": "module-7-sources-webhooks",
+  "title": "Module 7: Sources, Webhooks API & Constant-Time Webhook Verification Engine",
+  "baseBranch": "main",
+  "moduleBranch": "feat/module-7-sources-webhooks",
+  "status": "In Progress",
+  "items": {
+    "us-7.1.0": { "status": "In Progress", "branch": "feat/us-7.1.0-sources-applepay", "unitCount": 3 },
+    "us-7.2.0": { "status": "In Progress", "branch": "feat/us-7.2.0-webhooks-api", "unitCount": 5 },
+    "us-7.3.0": { "status": "In Progress", "branch": "feat/us-7.3.0-webhook-engine", "unitCount": 5 }
+  }
+}
