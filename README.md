@@ -51,18 +51,21 @@ Building high-concurrency Rust backend systems for Saudi Arabia and GCC commerce
 
 | Feature Flag | Default | Dependencies Added | Included Modules, Services & Capabilities |
 | :--- | :---: | :--- | :--- |
-| `default` | **Yes** | `reqwest`, `serde`, `uuid`, `secrecy`, `thiserror` | `core`, `payments`, `payment-intents`, `webhook-engine`, `rustls-tls` ([API Intro](https://docs.moyasar.com/api/api-introduction)) |
-| `core` | **Yes** | `serde`, `serde_json`, `uuid`, `secrecy`, `chrono` | `MoyasarClient`, [Basic Auth](https://docs.moyasar.com/api/authentication) builder, [`given_id` idempotency](https://docs.moyasar.com/api/idempotency), [Metadata](https://docs.moyasar.com/api/metadata) validator, `MoyasarError` |
-| `payments` | **Yes** | `core` | `client.payments()` — [Create](https://docs.moyasar.com/api/payments/01-create-payment), Fetch, [List](https://docs.moyasar.com/api/payments/03-list-payments), Update, [Refund](https://docs.moyasar.com/api/payments/05-refund-payment), Capture, Void; splits & [AFT](https://docs.moyasar.com/guides/account-funding-transactions/introduction) |
-| `payment-intents` | **Yes** | `core`, `payments` | `client.payment_intents()` — Create, [Fulfill](https://docs.moyasar.com/api/payment_intents/02-fulfill-payment-intent), Fetch, [Cancel](https://docs.moyasar.com/api/payment_intents/04-cancel-payment-intent), and [1-hour expiry](https://docs.moyasar.com/guides/payment-intents/intent-lifecycle) helpers |
-| `webhook-engine` | **Yes** | `hmac`, `sha2`, `subtle` | `ConstantTimeSecretVerifier` — Zero-leak constant-time `secret_token` verification & `payment_faild` alias ([Webhook Docs](https://docs.moyasar.com/api/other/webhooks/webhook-reference)) |
-| `tokens` | No | `core` | `client.tokens()` — [Create](https://docs.moyasar.com/api/other/tokens/create-token), [Fetch](https://docs.moyasar.com/api/other/tokens/fetch-token), Delete (`204 No Content`) card tokens ([Token Status](https://docs.moyasar.com/api/other/tokens/token-status-reference)) |
-| `invoices` | No | `core`, `payments` | `client.invoices()` — [Create](https://docs.moyasar.com/api/invoices/01-create-invoice), Bulk Create, List, [Fetch](https://docs.moyasar.com/api/invoices/04-show-invoice), [Update](https://docs.moyasar.com/api/invoices/05-update-invoice), [Cancel (`PUT`)](https://docs.moyasar.com/api/invoices/06-cancel-invoice) |
-| `card-auth` | No | `core` | `client.card_auths()` — Standalone [3D Secure](https://docs.moyasar.com/category/3d-secure) (`POST /v1/card_auths`, [Fetch Card Auth](https://docs.moyasar.com/api/card_auths/02-fetch-card-auth)) |
-| `payouts` | No | `core` | `client.payout_accounts()` & `client.payouts()` — Bank/Wallet accounts, single & bulk payouts across `internal`, `ips`, and `sarie` ([List Payouts](https://docs.moyasar.com/api/payouts/05-list-payouts)) |
-| `settlements` | No | `core` | `client.settlements()`, `client.transfers()`, `client.internal_transactions()` — [Settlements](https://docs.moyasar.com/api/settlements/01-list-settlements), [Transfers](https://docs.moyasar.com/api/other/transfers/list-transfers), and [Internal Transactions](https://docs.moyasar.com/api/internal_transactions/02-list-internal-transactions) |
-| `sources` | No | `core` | `client.sources()` & `client.apple_pay()` — Pre-charge [BIN/IIN Issuer Lookup](https://docs.moyasar.com/api/sources/01-get-issuer) and [Apple Pay Session](https://docs.moyasar.com/api/other/apple-pay/request-apple-pay-session) |
-| `webhooks-api` | No | `core`, `webhook-engine` | `client.webhooks()` — CRUD management for `/v1/webhooks`, `available_events`, and delivery attempts ([Webhook Reference](https://docs.moyasar.com/api/other/webhooks/webhook-reference)) |
+| `default` | **Yes** | `reqwest`, `serde`, `uuid`, `secrecy`, `thiserror`, `zeroize` | `core`, `env-keys`, `payments`, `payment-intents`, `tokens-invoices-3ds`, `settlements-ledger`, `payouts`, `sources-webhooks` ([API Intro](https://docs.moyasar.com/api/api-introduction)) |
+| `core` | **Yes** | `serde`, `serde_json`, `uuid`, `secrecy`, `chrono`, `zeroize` | `MoyasarClient`, [Basic Auth](https://docs.moyasar.com/api/authentication) builder, [`given_id` idempotency](https://docs.moyasar.com/api/idempotency), [Metadata](https://docs.moyasar.com/api/metadata) validator, `MoyasarError`, `Paginator` |
+| `env-keys` | **Yes** | `core` | `$ENV_VAR` / `${ENV_VAR}` and `.env*` secret and publishable key resolution with memory zeroization |
+| `payments` | **Yes** | `core` | `client.payments()` — [Create](https://docs.moyasar.com/api/payments/01-create-payment), Fetch, [List](https://docs.moyasar.com/api/payments/03-list-payments), Update, [Refund](https://docs.moyasar.com/api/payments/05-refund-payment), Capture, Void, `reverse()`; splits & [AFT](https://docs.moyasar.com/guides/account-funding-transactions/introduction) |
+| `payment-intents` | **Yes** | `core` | `client.payment_intents()` — Create, [Fulfill](https://docs.moyasar.com/api/payment_intents/02-fulfill-payment-intent), Fetch, [Cancel](https://docs.moyasar.com/api/payment_intents/04-cancel-payment-intent), and [1-hour expiry](https://docs.moyasar.com/guides/payment-intents/intent-lifecycle) helpers |
+| `tokens` | **Yes** (via `tokens-invoices-3ds`) | `core` | `client.tokens()` — [Create](https://docs.moyasar.com/api/other/tokens/create-token), [Fetch](https://docs.moyasar.com/api/other/tokens/fetch-token), Delete (`204 No Content`) card tokens ([Token Status](https://docs.moyasar.com/api/other/tokens/token-status-reference)) |
+| `invoices` | **Yes** (via `tokens-invoices-3ds`) | `core` | `client.invoices()` — [Create](https://docs.moyasar.com/api/invoices/01-create-invoice), Bulk Create, List, [Fetch](https://docs.moyasar.com/api/invoices/04-show-invoice), [Update](https://docs.moyasar.com/api/invoices/05-update-invoice), [Cancel (`PUT`)](https://docs.moyasar.com/api/invoices/06-cancel-invoice) |
+| `card-auths` (alias `card-auth`) | **Yes** (via `tokens-invoices-3ds`) | `core` | `client.card_auths()` — Standalone [3D Secure](https://docs.moyasar.com/category/3d-secure) (`POST /v1/card_auths`, [Fetch Card Auth](https://docs.moyasar.com/api/card_auths/02-fetch-card-auth), MPI extraction) |
+| `tokens-invoices-3ds` | **Yes** | `tokens`, `invoices`, `card-auths` | Umbrella feature enabling all Module 4 tokenization, e-invoicing, and standalone 3DS services |
+| `payouts` | **Yes** | `core` | `client.payout_accounts()` & `client.payouts()` — Bank/Wallet accounts, single & bulk payouts across `internal`, `ips`, and `sarie` ([List Payouts](https://docs.moyasar.com/api/payouts/05-list-payouts)) |
+| `settlements-ledger` (alias `settlements`) | **Yes** | `core` | `client.settlements()`, `client.transfers()`, `client.internal_transactions()` — [Settlements](https://docs.moyasar.com/api/settlements/01-list-settlements), [Transfers](https://docs.moyasar.com/api/other/transfers/list-transfers), and [Internal Transactions](https://docs.moyasar.com/api/internal_transactions/02-list-internal-transactions) |
+| `sources` | **Yes** (via `sources-webhooks`) | `core` | `client.sources()` & `client.apple_pay()` — Pre-charge [BIN/IIN Issuer Lookup](https://docs.moyasar.com/api/sources/01-get-issuer) and [Apple Pay Session](https://docs.moyasar.com/api/other/apple-pay/request-apple-pay-session) |
+| `webhooks-api` | **Yes** (via `sources-webhooks`) | `core`, `webhook-engine` | `client.webhooks()` — CRUD management for `/v1/webhooks`, `available_events`, and delivery attempts ([Webhook Reference](https://docs.moyasar.com/api/other/webhooks/webhook-reference)) |
+| `webhook-engine` | **Yes** (via `sources-webhooks`) | `core`, `hmac`, `sha2`, `subtle` | `ConstantTimeSecretVerifier` — Zero-leak constant-time `secret_token` verification & `payment_faild` alias ([Webhook Docs](https://docs.moyasar.com/api/other/webhooks/webhook-reference)) |
+| `sources-webhooks` | **Yes** | `sources`, `webhooks-api`, `webhook-engine` | Umbrella feature enabling all Module 7 source lookup, Apple Pay session, webhooks CRUD, and constant-time verification engine |
 | `stripe-compat` | No | `payments`, `tokens`, `invoices` | `client.refunds()`, `client.customers()`, `client.subscriptions()` — Virtual refund service, token vault, and pro-rata subscription refunds ([Tokenized Cards](https://docs.moyasar.com/guides/tokenization/tokenized-cards)) |
 | `some-payment-trait` | No | `some-payment-core` | Implements `PaymentCapability`, `PayoutCapability`, and `WebhookCapability` traits for [`some-payment`](https://github.com/some-of-cs/some-payment) |
 | `full` | No | All of the above | Enables every Moyasar API resource, webhook engine, auto-pagination stream, and [`some-payment`](https://github.com/some-of-cs/some-payment) adapter |
@@ -113,42 +116,39 @@ async fn main() -> Result<(), MoyasarError> {
     metadata.insert("tenant_id", "vendor_alpha")?;
 
     // Create a payment with saved token and marketplace splits
+    let mut token_source = TokenSource::new("token_qbmmXzo97AESrZLS6KpWvof6uK2hAKcQGfEcKg")?;
+    token_source.three_ds = Some(false);
+    token_source.manual = Some(false);
+
     let create_params = CreatePaymentParams::builder()
         .given_id(Uuid::new_v4()) // Idempotency key & resulting Payment ID
         .amount(15000)            // 150.00 SAR in halalas (smallest currency unit)
         .currency(Currency::SAR)
         .description("Annual Pro Plan + Vendor Split")
         .callback_url("https://merchant.example/payments/callback")
-        .source(PaymentSourceRequest::Token(TokenSource {
-            token: "token_qbmmXzo97AESrZLS6KpWvof6uK2hAKcQGfEcKg".into(),
-            three_ds: Some(false),
-            manual: Some(false),
-            cvc: None,
-        }))
-        .splits(vec![
-            PaymentSplitRequest {
-                amount: 13500,
-                recipient_type: SplitRecipientType::Beneficiary,
-                recipient_id: Uuid::parse_str("3fa85f64-5717-4562-b3fc-2c963f66afa6").unwrap(),
-                reference: Some("SPLIT-VENDOR-9941".into()),
-                description: Some("85% Vendor Revenue Share".into()),
-                fee_source: Some(false),
-                refundable: Some(true),
-            },
-            PaymentSplitRequest {
-                amount: 1500,
-                recipient_type: SplitRecipientType::Platform,
-                recipient_id: Uuid::parse_str("ae50a35c-df42-4eff-ba26-f8bc28d2af81").unwrap(),
-                reference: Some("SPLIT-PLATFORM-FEE".into()),
-                description: Some("15% Platform Commission".into()),
-                fee_source: Some(true), // Deduct Moyasar processing fees from platform share
-                refundable: Some(true),
-            },
+        .payment_source(token_source)
+        .payment_splits(vec![
+            PaymentSplitRequest::new(
+                13500,
+                SplitRecipientType::Beneficiary,
+                Uuid::parse_str("3fa85f64-5717-4562-b3fc-2c963f66afa6").unwrap(),
+            )
+            .with_reference("SPLIT-VENDOR-9941")
+            .with_description("85% Vendor Revenue Share")
+            .with_fee_source(false),
+            PaymentSplitRequest::new(
+                1500,
+                SplitRecipientType::Platform,
+                Uuid::parse_str("ae50a35c-df42-4eff-ba26-f8bc28d2af81").unwrap(),
+            )
+            .with_reference("SPLIT-PLATFORM-FEE")
+            .with_description("15% Platform Commission")
+            .with_fee_source(true), // Deduct Moyasar processing fees from platform share
         ])
         .metadata(metadata)
-        .build();
+        .build()?;
 
-    let payment = client.payments().create(create_params).await?;
+    let payment = client.payments().create(&create_params).await?;
     println!("Payment {} status: {:?} ({})", payment.id, payment.status, payment.amount_format);
     Ok(())
 }
@@ -162,18 +162,19 @@ Per [Moyasar's Payment Intents Guide](https://docs.moyasar.com/guides/payment-in
 use some_moyasar::prelude::*;
 
 async fn manage_payment_intent(client: &MoyasarClient) -> Result<(), MoyasarError> {
-    let intent = client.payment_intents().create(CreatePaymentIntentParams {
-        amount: 25000, // 250.00 SAR
-        currency: Currency::SAR,
-        description: Some("Checkout Session #882".into()),
-        callback_url: "https://merchant.example/return".into(),
-    }).await?;
+    let params = CreatePaymentIntentParams::new(
+        25000, // 250.00 SAR
+        Currency::SAR,
+        "https://merchant.example/return",
+    )
+    .description("Checkout Session #882");
 
-    let fetched = client.payment_intents().retrieve(intent.id).await?;
+    let intent = client.payment_intents().create(params).await?;
+    let fetched = client.payment_intents().retrieve(&intent.id).await?;
 
     if fetched.is_usable() {
         // Safe to cancel because status == Created AND Utc::now() < fetched.expires_at
-        let canceled = client.payment_intents().cancel(fetched.id).await?;
+        let canceled = client.payment_intents().cancel(&fetched.id).await?;
         assert_eq!(canceled.status, PaymentIntentStatus::Canceled);
     }
     Ok(())
@@ -186,28 +187,27 @@ Disburse funds to Saudi bank IBANs or mobile wallets via [`/v1/payouts/bulk`](ht
 
 ```rust,no_run
 use some_moyasar::prelude::*;
-use uuid::Uuid;
 
-async fn disburse_vendor_payouts(client: &MoyasarClient, source_account_id: Uuid) -> Result<(), MoyasarError> {
-    let bulk_response = client.payouts().create_bulk(CreateBulkPayoutParams {
-        source_id: source_account_id,
-        payouts: vec![
-            BulkPayoutEntry {
-                sequence_number: Some("2026110500000001".into()),
-                amount: 125000, // 1,250.00 SAR
-                purpose: PayoutPurpose::PaymentToMerchant,
-                destination: PayoutDestination::Bank {
-                    iban: "SA8430400108057386290038".into(),
-                    name: "Al-Noor Trading Est".into(),
-                    mobile: "+966501234567".into(),
-                    country: "SA".into(),
-                    city: "Riyadh".into(),
-                },
-                comment: Some("Weekly Marketplace Settlement".into()),
-                metadata: None,
-            },
-        ],
-    }).await?;
+async fn disburse_vendor_payouts(
+    client: &MoyasarClient,
+    source_account_id: PayoutAccountId,
+) -> Result<(), MoyasarError> {
+    let entry = BulkPayoutEntry::new(
+        125000, // 1,250.00 SAR
+        PayoutPurpose::PaymentToMerchant,
+        PayoutDestination::Bank(BankDestination {
+            iban: "SA8430400108057386290038".into(),
+            name: "Al-Noor Trading Est".into(),
+            mobile: "+966501234567".into(),
+            country: "SA".into(),
+            city: "Riyadh".into(),
+        }),
+    )
+    .with_sequence_number("2026110500000001")
+    .with_comment("Weekly Marketplace Settlement");
+
+    let params = CreateBulkPayoutParams::new(source_account_id, vec![entry]);
+    let bulk_response = client.payouts().create_bulk(&params).await?;
 
     for payout in bulk_response.payouts {
         println!("Payout {} via {:?}: {:?}", payout.id, payout.channel, payout.status);
@@ -255,10 +255,10 @@ fn verify_moyasar_webhook(raw_body: &[u8], shared_secret: &str) {
 | **Tokens** | `client.tokens()` | `POST /v1/tokens`, `GET /v1/tokens/:id`, `DELETE /v1/tokens/:id` (`204 No Content`) | [Tokenization](https://docs.moyasar.com/category/tokenization) |
 | **Invoices** | `client.invoices()` | `POST /v1/invoices`, `POST /v1/invoices/bulk`, `GET /v1/invoices`, `GET /v1/invoices/:id`, `PUT /v1/invoices/:id`, `PUT /v1/invoices/:id/cancel` | [Invoices API](https://docs.moyasar.com/category/invoices) |
 | **Standalone 3DS** | `client.card_auths()` | `POST /v1/card_auths`, `GET /v1/card_auths/:id` (ECI, CAVV, DS Transaction ID) | [3D Secure](https://docs.moyasar.com/category/3d-secure) |
-| **Payouts & Accounts** | `client.payouts()`, `client.payout_accounts()` | `POST /v1/payout_accounts`, `GET /v1/payout_accounts`, `POST /v1/payouts`, `POST /v1/payouts/bulk`, `GET /v1/payouts` | [List Payouts](https://docs.moyasar.com/api/payouts/05-list-payouts) |
-| **Settlements & Ledger** | `client.settlements()`, `client.transfers()`, `client.internal_transactions()` | `GET /v1/settlements`, `GET /v1/settlements/:id/lines`, `GET /v1/settlements/balance`, `GET /v1/transfers`, `GET /v1/internal_transactions` | [List Settlements](https://docs.moyasar.com/api/settlements/01-list-settlements) |
-| **Sources & Apple Pay** | `client.sources()`, `client.apple_pay()` | `POST /v1/source/issuer` (BIN/IIN lookup), `GET/POST /v1/applepay/initiate` | [Retrieve Issuer](https://docs.moyasar.com/api/sources/01-get-issuer) |
-| **Webhooks API** | `client.webhooks()` | `POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/available_events`, `GET /v1/webhooks/attempts` | [Webhook Reference](https://docs.moyasar.com/api/other/webhooks/webhook-reference) |
+| **Payouts & Accounts** | `client.payouts()`, `client.payout_accounts()` | `POST /v1/payout_accounts`, `GET /v1/payout_accounts`, `GET /v1/payout_accounts/:id`, `POST /v1/payouts`, `POST /v1/payouts/bulk`, `GET /v1/payouts`, `GET /v1/payouts/:id` | [List Payouts](https://docs.moyasar.com/api/payouts/05-list-payouts) |
+| **Settlements & Ledger** | `client.settlements()`, `client.transfers()`, `client.internal_transactions()` | `GET /v1/settlements`, `GET /v1/settlements/:id`, `GET /v1/settlements/:id/lines`, `GET /v1/settlements/balance`, `GET /v1/transfers`, `GET /v1/transfers/:id`, `GET /v1/transfers/:id/lines`, `GET /v1/internal_transactions` | [List Settlements](https://docs.moyasar.com/api/settlements/01-list-settlements) |
+| **Sources & Apple Pay** | `client.sources()`, `client.apple_pay()` | `POST /v1/source/issuer` (BIN/IIN lookup), `POST /v1/applepay/initiate` | [Retrieve Issuer](https://docs.moyasar.com/api/sources/01-get-issuer) |
+| **Webhooks API** | `client.webhooks()` | `POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/:id`, `DELETE /v1/webhooks/:id`, `GET /v1/webhooks/available_events`, `GET /v1/webhooks/attempts`, `GET /v1/webhooks/attempts/:id` | [Webhook Reference](https://docs.moyasar.com/api/other/webhooks/webhook-reference) |
 
 ---
 

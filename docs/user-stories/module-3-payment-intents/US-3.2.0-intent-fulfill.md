@@ -195,23 +195,23 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-3.2.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
-- [ ] **Unit 1 (`feat/us-3.2.0/unit-1-fulfill-params`)**: `FulfillIntentParams` (`client_secret` redacted in `Debug`, `source`, `metadata`, `save_card`, `manual`, `3ds`) (Files: `src/resources/payment_intents/fulfill_params.rs`)  
+- [x] **Unit 1 (`feat/us-3.2.0/unit-1-fulfill-params`)**: `FulfillIntentParams` (`client_secret` redacted in `Debug`, `source`, `metadata`, `save_card`, `manual`, `3ds`) (Files: `src/resources/payment_intents/fulfill_params.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-3.2.0/unit-2-fulfill-endpoint`)**: `client.payment_intents().fulfill(id, params)` (`PublishableKey` compatible), returning `Payment` (Files: `src/resources/payment_intents/fulfill.rs`)  
+- [x] **Unit 2 (`feat/us-3.2.0/unit-2-fulfill-endpoint`)**: `client.payment_intents().fulfill(id, params)` (`PublishableKey` compatible), returning `Payment` (Files: `src/resources/payment_intents/fulfill.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-3.2.0/unit-3-fulfill-lifecycle`)**: `FulfillmentOutcome` enum (`Paid`, `Authorized`, `RequiresAction`, `Failed`) derived from returned `Payment` (`fulfilled ≠ paid`) (Files: `src/resources/payment_intents/lifecycle.rs`)  
+- [x] **Unit 3 (`feat/us-3.2.0/unit-3-fulfill-lifecycle`)**: `FulfillmentOutcome` enum (`Paid`, `Authorized`, `RequiresAction`, `Failed`) derived from returned `Payment` (`fulfilled ≠ paid`) (Files: `src/resources/payment_intents/lifecycle.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-3.2.0/unit-4-fulfill-guard`)**: Pre-fulfillment `is_usable()` and `client_secret` format guard, locked-param schema assertions, and fulfillment unit tests (Files: `src/resources/payment_intents/fulfill_guard.rs`)  
+- [x] **Unit 4 (`feat/us-3.2.0/unit-4-fulfill-guard`)**: Pre-fulfillment `is_usable()` and `client_secret` format guard, locked-param schema assertions, and fulfillment unit tests (Files: `src/resources/payment_intents/fulfill_guard.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -240,49 +240,49 @@ sequenceDiagram
 - **No Override Path**: locked parameters cannot be transmitted by the SDK.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Override Test**: amount override has no effect.
-- [ ] **Sk-Absence Test**: no secret key referenced in fulfill path.
-- [ ] **Wrong-Secret Test**: typed 4xx, no charge.
-- [ ] **Replay Test**: re-fulfill rejected.
+- [x] **Override Test**: amount override has no effect.
+- [x] **Sk-Absence Test**: no secret key referenced in fulfill path.
+- [x] **Wrong-Secret Test**: typed 4xx, no charge.
+- [x] **Replay Test**: re-fulfill rejected.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Browser flow verified against OWASP ASVS Level 2.
-- [ ] Zero secret keys in client paths.
-- [ ] Parameter locking confirmed.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Browser flow verified against OWASP ASVS Level 2.
+- [x] Zero secret keys in client paths.
+- [x] Parameter locking confirmed.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-3.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-3.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-3.2.0-G1:** ≥90% line / ≥85% branch on the fulfillment module.
+- [x] **US-3.2.0-G1:** ≥90% line / ≥85% branch on the fulfillment module.
 
 ### G2 — Security audit
-- [ ] **US-3.2.0-G2:** Browser-boundary audit passes with zero critical/high findings.
+- [x] **US-3.2.0-G2:** Browser-boundary audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-3.2.0-G3:** Fulfillment reuses `PaymentSourceRequest`; zero duplication.
+- [x] **US-3.2.0-G3:** Fulfillment reuses `PaymentSourceRequest`; zero duplication.
 
 ### G-Review — Code review
-- [ ] **US-3.2.0-G-Review:** Peer review on secret handling and locked params.
+- [x] **US-3.2.0-G-Review:** Peer review on secret handling and locked params.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-3.2.0-G-Borrow:** Source moved into params; no payload duplication.
+- [x] **US-3.2.0-G-Borrow:** Source moved into params; no payload duplication.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-3.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-3.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-3.2.0-G-Docs:** Browser-flow example runnable; fulfilled≠paid documented.
+- [x] **US-3.2.0-G-Docs:** Browser-flow example runnable; fulfilled≠paid documented.
 
 ### G-Law — Law validation
-- [ ] **US-3.2.0-G-Law:** PCI-DSS client-boundary scoping certified.
+- [x] **US-3.2.0-G-Law:** PCI-DSS client-boundary scoping certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-3.2.0-G4:** Fulfillment succeeds and override attempts are provably ignored.
+- [x] **US-3.2.0-G4:** Fulfillment succeeds and override attempts are provably ignored.

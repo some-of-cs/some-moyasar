@@ -228,25 +228,25 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-1.2.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
-- [ ] **Unit 1 (`feat/us-1.2.0/unit-1-given-id-policy`)**: `GivenIdPolicy` enum (Random/Deterministic), UUIDv4 generation, `given_id` injection into JSON bodies (Files: `src/kernel/idempotency.rs`)  
+- [x] **Unit 1 (`feat/us-1.2.0/unit-1-given-id-policy`)**: `GivenIdPolicy` enum (Random/Deterministic), UUIDv4 generation, `given_id` injection into JSON bodies (Files: `src/kernel/idempotency.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-1.2.0/unit-2-uuidv5-hashing`)**: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")` deterministic derivation for subscription billing, roundtrip tests (Files: `src/kernel/idempotency_v5.rs`)  
+- [x] **Unit 2 (`feat/us-1.2.0/unit-2-uuidv5-hashing`)**: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")` deterministic derivation for subscription billing, roundtrip tests (Files: `src/kernel/idempotency_v5.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-1.2.0/unit-3-metadata`)**: `Metadata` map: `insert`/`remove`/`get`, validation on key count/length/value, empty-string key unset, unit tests for boundary conditions (Files: `src/kernel/metadata.rs`)  
+- [x] **Unit 3 (`feat/us-1.2.0/unit-3-metadata`)**: `Metadata` map: `insert`/`remove`/`get`, validation on key count/length/value, empty-string key unset, unit tests for boundary conditions (Files: `src/kernel/metadata.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-1.2.0/unit-4-pagination-types`)**: `PaginatedList<T>`, `Meta` struct (current_page, next_page, prev_page, total_pages, total_count), `Deserialize` (Files: `src/kernel/pagination.rs`)  
+- [x] **Unit 4 (`feat/us-1.2.0/unit-4-pagination-types`)**: `PaginatedList<T>`, `Meta` struct (current_page, next_page, prev_page, total_pages, total_count), `Deserialize` (Files: `src/kernel/pagination.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-1.2.0/unit-5-pagination-stream`)**: `Paginator<T>::into_stream()` with `futures::Stream`, auto-page following next_page, unit tests covering 1-page and multi-page responses (Files: `src/kernel/paginator_stream.rs`)  
+- [x] **Unit 5 (`feat/us-1.2.0/unit-5-pagination-stream`)**: `Paginator<T>::into_stream()` with `futures::Stream`, auto-page following next_page, unit tests covering 1-page and multi-page responses (Files: `src/kernel/paginator_stream.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -275,49 +275,49 @@ sequenceDiagram
 - **Metadata Sanitization**: length and count enforced before serialization.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Retry Safety**: integration test proves no double charge after a simulated timeout.
-- [ ] **Collision Test**: same `given_id` + different payload yields a typed 400 error.
-- [ ] **Boundary Tests**: metadata limits enforced at insert, not deferred.
-- [ ] **No Header Idempotency**: assertion that no `Idempotency-Key` header is ever emitted.
+- [x] **Retry Safety**: integration test proves no double charge after a simulated timeout.
+- [x] **Collision Test**: same `given_id` + different payload yields a typed 400 error.
+- [x] **Boundary Tests**: metadata limits enforced at insert, not deferred.
+- [x] **No Header Idempotency**: assertion that no `Idempotency-Key` header is ever emitted.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Retry envelope verified against OWASP ASVS Level 2.
-- [ ] Idempotency collision handling surfaces a typed, non-retryable error.
-- [ ] Metadata constraints enforced pre-serialization.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Retry envelope verified against OWASP ASVS Level 2.
+- [x] Idempotency collision handling surfaces a typed, non-retryable error.
+- [x] Metadata constraints enforced pre-serialization.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-1.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-1.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-1.2.0-G1:** ≥90% line / ≥85% branch on idempotency, metadata, pagination modules.
+- [x] **US-1.2.0-G1:** ≥90% line / ≥85% branch on idempotency, metadata, pagination modules.
 
 ### G2 — Security audit
-- [ ] **US-1.2.0-G2:** Retry-replay audit passes with zero critical/high findings.
+- [x] **US-1.2.0-G2:** Retry-replay audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-1.2.0-G3:** Idempotency/metadata/pagination remain kernel-only; zero resource coupling.
+- [x] **US-1.2.0-G3:** Idempotency/metadata/pagination remain kernel-only; zero resource coupling.
 
 ### G-Review — Code review
-- [ ] **US-1.2.0-G-Review:** Peer review on determinism and retry envelope.
+- [x] **US-1.2.0-G-Review:** Peer review on determinism and retry envelope.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-1.2.0-G-Borrow:** No needless `String` clones in metadata insertion paths.
+- [x] **US-1.2.0-G-Borrow:** No needless `String` clones in metadata insertion paths.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-1.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-1.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-1.2.0-G-Docs:** 100% public symbols documented; subscription UUIDv5 example is runnable.
+- [x] **US-1.2.0-G-Docs:** 100% public symbols documented; subscription UUIDv5 example is runnable.
 
 ### G-Law — Law validation
-- [ ] **US-1.2.0-G-Law:** SAMA audit-trail correlation via `given_id → Payment.id` certified.
+- [x] **US-1.2.0-G-Law:** SAMA audit-trail correlation via `given_id → Payment.id` certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-1.2.0-G4:** Retry-after-timeout returns the identical Payment with a single charge.
+- [x] **US-1.2.0-G4:** Retry-after-timeout returns the identical Payment with a single charge.

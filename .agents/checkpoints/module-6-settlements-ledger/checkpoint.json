@@ -3,7 +3,7 @@
   "title": "Module 6: Settlements & Ledger",
   "baseBranch": "main",
   "moduleBranch": "feat/module-6-settlements-ledger",
-  "updatedAt": "2026-11-14T04:11:00Z",
+  "updatedAt": "2026-11-14T05:00:00Z",
   "items": {
     "us-6.1.0": {
       "status": "Merged",
@@ -73,5 +73,7 @@
       "prNumber": 95,
       "mergedSha": "497d3063e5ed4e8fa9554818333cb33d43d88495"
     }
-  }
+  },
+  "status": "Merged",
+  "prNumber": 114
 }

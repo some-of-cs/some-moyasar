@@ -204,25 +204,25 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-7.2.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
-- [ ] **Unit 1 (`feat/us-7.2.0/unit-1-webhook-model`)**: `WebhookEndpoint` struct (id, http_method, url, shared_secret, events), `WebhookAttempt` struct (id, event_id, status_code, response_body, created_at) (Files: `src/resources/webhooks_api/models.rs`)  
+- [x] **Unit 1 (`feat/us-7.2.0/unit-1-webhook-model`)**: `WebhookEndpoint` struct (id, http_method, url, shared_secret, events), `WebhookAttempt` struct (id, event_id, status_code, response_body, created_at) (Files: `src/resources/webhooks_api/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-7.2.0/unit-2-webhook-create-list`)**: `CreateWebhookParams` (with `validate_https_url`), `client.webhooks().create()` (`POST /v1/webhooks` with `http_method`, `url`, `shared_secret`, `events`), `.list()`, unit tests (Files: `src/resources/webhooks_api/crud.rs`)  
+- [x] **Unit 2 (`feat/us-7.2.0/unit-2-webhook-create-list`)**: `CreateWebhookParams` (with `validate_https_url`), `client.webhooks().create()` (`POST /v1/webhooks` with `http_method`, `url`, `shared_secret`, `events`), `.list()`, unit tests (Files: `src/resources/webhooks_api/crud.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-7.2.0/unit-3-available-events`)**: `client.webhooks().available_events()` (`GET /v1/webhooks/available_events`), re-exporting `WebhookEventType` (all 11 variants) from `webhook_engine` (Files: `src/resources/webhooks_api/events.rs`)  
+- [x] **Unit 3 (`feat/us-7.2.0/unit-3-available-events`)**: `client.webhooks().available_events()` (`GET /v1/webhooks/available_events`), re-exporting `WebhookEventType` (all 11 variants) from `webhook_engine` (Files: `src/resources/webhooks_api/events.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-7.2.0/unit-4-delivery-attempts`)**: `ListWebhookAttemptsParams`, `client.webhooks().list_attempts(params)`, `client.webhooks().retrieve_attempt(id)`, delivery attempt diagnostics (Files: `src/resources/webhooks_api/attempts.rs`)  
+- [x] **Unit 4 (`feat/us-7.2.0/unit-4-delivery-attempts`)**: `ListWebhookAttemptsParams`, `client.webhooks().list_attempts(params)`, `client.webhooks().retrieve_attempt(id)`, delivery attempt diagnostics (Files: `src/resources/webhooks_api/attempts.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-7.2.0/unit-5-webhook-retrieve-delete`)**: `client.webhooks().retrieve(id)` (`GET /v1/webhooks/:id`) and `client.webhooks().delete(id)` (`DELETE /v1/webhooks/:id`), unit tests (Files: `src/resources/webhooks_api/retrieve_delete.rs`)  
+- [x] **Unit 5 (`feat/us-7.2.0/unit-5-webhook-retrieve-delete`)**: `client.webhooks().retrieve(id)` (`GET /v1/webhooks/:id`) and `client.webhooks().delete(id)` (`DELETE /v1/webhooks/:id`), unit tests (Files: `src/resources/webhooks_api/retrieve_delete.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -248,48 +248,48 @@ sequenceDiagram
 - **Redacted Debug**: `WebhookSecret` never prints secret material.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Secret Test**: `format!("{:?}", secret)` prints `"[REDACTED]"`.
-- [ ] **HTTPS Test**: `http://` rejected with zero network calls.
-- [ ] **Delete Test**: `retrieve(id)` after `delete(id)` returns 404.
+- [x] **Secret Test**: `format!("{:?}", secret)` prints `"[REDACTED]"`.
+- [x] **HTTPS Test**: `http://` rejected with zero network calls.
+- [x] **Delete Test**: `retrieve(id)` after `delete(id)` returns 404.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Webhook management verified against OWASP ASVS Level 2.
-- [ ] HTTPS-only enforced.
-- [ ] Zero secret leakage in `Debug` output.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Webhook management verified against OWASP ASVS Level 2.
+- [x] HTTPS-only enforced.
+- [x] Zero secret leakage in `Debug` output.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-7.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-7.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-7.2.0-G1:** ≥90% line / ≥85% branch on `webhooks_api`.
+- [x] **US-7.2.0-G1:** ≥90% line / ≥85% branch on `webhooks_api`.
 
 ### G2 — Security audit
-- [ ] **US-7.2.0-G2:** Secret-handling audit passes with zero critical/high findings.
+- [x] **US-7.2.0-G2:** Secret-handling audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-7.2.0-G3:** `webhooks-api` re-uses `WebhookEventType` from `webhook-engine` without duplicate definitions.
+- [x] **US-7.2.0-G3:** `webhooks-api` re-uses `WebhookEventType` from `webhook-engine` without duplicate definitions.
 
 ### G-Review — Code review
-- [ ] **US-7.2.0-G-Review:** Peer review on all 7 endpoints and `WebhookSecret` redaction.
+- [x] **US-7.2.0-G-Review:** Peer review on all 7 endpoints and `WebhookSecret` redaction.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-7.2.0-G-Borrow:** `WebhookSecret::expose()` returns `&str` with zero allocation.
+- [x] **US-7.2.0-G-Borrow:** `WebhookSecret::expose()` returns `&str` with zero allocation.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-7.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-7.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-7.2.0-G-Docs:** 100% public symbols documented; CRUD and attempts examples runnable.
+- [x] **US-7.2.0-G-Docs:** 100% public symbols documented; CRUD and attempts examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-7.2.0-G-Law:** SAMA confidentiality of shared authentication material certified.
+- [x] **US-7.2.0-G-Law:** SAMA confidentiality of shared authentication material certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-7.2.0-G4:** All 7 `/v1/webhooks` endpoints verified against the mock server.
+- [x] **US-7.2.0-G4:** All 7 `/v1/webhooks` endpoints verified against the mock server.

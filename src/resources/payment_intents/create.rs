@@ -185,9 +185,11 @@ async fn parse_intent_response(resp: reqwest::Response) -> Result<PaymentIntent,
     let status = resp.status().as_u16();
     let text = resp.text().await?;
     if (200..300).contains(&status) {
-        serde_json::from_str(&text).map_err(|e| MoyasarError::ServerError {
-            status,
-            message: e.to_string(),
+        serde_json::from_str(&text).map_err(|e| MoyasarError::Api {
+            error_type: ApiErrorType::Unknown,
+            message: format!("failed to decode PaymentIntent response: {e}"),
+            errors: Vec::new(),
+            response_code: None,
         })
     } else {
         Err(MoyasarError::from_api_response(status, &text))

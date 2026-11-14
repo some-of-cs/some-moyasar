@@ -9,7 +9,7 @@ use zeroize::Zeroize;
 
 use crate::kernel::auth::AuthKey;
 use crate::kernel::client::MoyasarClient;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
 use crate::kernel::transport::send_with_retry;
 use crate::resources::tokens::TokensService;
@@ -186,9 +186,11 @@ async fn dispatch_post(
     url: &str,
     params: &CreateTokenParams,
 ) -> Result<(u16, String), MoyasarError> {
-    let mut body_bytes = serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
-        status: 500,
+    let mut body_bytes = serde_json::to_vec(params).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::InvalidRequestError,
         message: format!("failed to serialize token request: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })?;
     let send_res = http
         .post(url)
@@ -218,9 +220,11 @@ fn parse_token_response(status: u16, body: &str) -> Result<Token, MoyasarError> 
     if !(200..300).contains(&status) {
         return Err(MoyasarError::from_api_response(status, body));
     }
-    serde_json::from_str::<Token>(body).map_err(|err| MoyasarError::ServerError {
-        status,
+    serde_json::from_str::<Token>(body).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::Unknown,
         message: format!("failed to decode token response: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })
 }
 
@@ -228,7 +232,6 @@ fn parse_token_response(status: u16, body: &str) -> Result<Token, MoyasarError> 
 mod tests {
     use super::*;
     use crate::kernel::auth::{PublishableKey, SecretKey};
-    use crate::kernel::error::ApiErrorType;
     use crate::kernel::transport::{API_VERSION, MOYASAR_VERSION_HEADER};
     use crate::resources::tokens::models::{TokenId, TokenStatus};
     use std::sync::atomic::{AtomicU32, Ordering};

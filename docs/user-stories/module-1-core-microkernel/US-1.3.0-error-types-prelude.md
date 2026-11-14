@@ -221,21 +221,21 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-1.3.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
-- [ ] **Unit 1 (`feat/us-1.3.0/unit-1-error-enum`)**: `MoyasarError` enum, `ApiErrorType`, `thiserror` derive, `From<reqwest::Error>`, `Deserialize` for error payloads (Files: `src/kernel/error.rs`)  
+- [x] **Unit 1 (`feat/us-1.3.0/unit-1-error-enum`)**: `MoyasarError` enum, `ApiErrorType`, `thiserror` derive, `From<reqwest::Error>`, `Deserialize` for error payloads (Files: `src/kernel/error.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-1.3.0/unit-2-field-errors`)**: `FieldError` dual map/array deserializer, `ResponseCode` ISO 8583 lookup table with custom `Unknown(String)` deserializer, `Display` impl (Files: `src/kernel/response_code.rs`)  
+- [x] **Unit 2 (`feat/us-1.3.0/unit-2-field-errors`)**: `FieldError` dual map/array deserializer, `ResponseCode` ISO 8583 lookup table with custom `Unknown(String)` deserializer, `Display` impl (Files: `src/kernel/response_code.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-1.3.0/unit-3-currency-prelude`)**: `Amount` newtype, `Currency` enum (SAR, USD, KWD, JPY, …), `RecipientType` enum, `prelude` module exporting all core types (Files: `src/kernel/types.rs` + `src/prelude.rs`)  
+- [x] **Unit 3 (`feat/us-1.3.0/unit-3-currency-prelude`)**: `Amount` newtype, `Currency` enum (SAR, USD, KWD, JPY, …), `RecipientType` enum, `prelude` module exporting all core types (Files: `src/kernel/types.rs` + `src/prelude.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -264,49 +264,49 @@ sequenceDiagram
 - **Exponent Table**: single source of truth for currency minor units.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Redaction Test**: `format!("{err}")` contains no `sk_`, no 16-digit PAN, no CVC.
-- [ ] **No-Panic Audit**: `cargo clippy` denies `unwrap`/`expect` in library paths.
-- [ ] **Exponent Test**: full currency table verified.
-- [ ] **Status Matrix**: all documented HTTP statuses mapped.
+- [x] **Redaction Test**: `format!("{err}")` contains no `sk_`, no 16-digit PAN, no CVC.
+- [x] **No-Panic Audit**: `cargo clippy` denies `unwrap`/`expect` in library paths.
+- [x] **Exponent Test**: full currency table verified.
+- [x] **Status Matrix**: all documented HTTP statuses mapped.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Error surface verified against OWASP ASVS Level 2.
-- [ ] Zero sensitive data in error strings or telemetry.
-- [ ] Currency exponent correctness certified.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Error surface verified against OWASP ASVS Level 2.
+- [x] Zero sensitive data in error strings or telemetry.
+- [x] Currency exponent correctness certified.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-1.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-1.3.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-1.3.0-G1:** ≥90% line / ≥85% branch on error and currency modules.
+- [x] **US-1.3.0-G1:** ≥90% line / ≥85% branch on error and currency modules.
 
 ### G2 — Security audit
-- [ ] **US-1.3.0-G2:** Error-redaction audit passes with zero critical/high findings.
+- [x] **US-1.3.0-G2:** Error-redaction audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-1.3.0-G3:** Error types remain kernel-only; zero resource coupling.
+- [x] **US-1.3.0-G3:** Error types remain kernel-only; zero resource coupling.
 
 ### G-Review — Code review
-- [ ] **US-1.3.0-G-Review:** Peer review on exhaustiveness and redaction.
+- [x] **US-1.3.0-G-Review:** Peer review on exhaustiveness and redaction.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-1.3.0-G-Borrow:** `Amount` is `Copy`; no boxing or needless allocation.
+- [x] **US-1.3.0-G-Borrow:** `Amount` is `Copy`; no boxing or needless allocation.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-1.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-1.3.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-1.3.0-G-Docs:** 100% public symbols documented; error-matching example runnable.
+- [x] **US-1.3.0-G-Docs:** 100% public symbols documented; error-matching example runnable.
 
 ### G-Law — Law validation
-- [ ] **US-1.3.0-G-Law:** PCI-DSS 4.0 Requirement 3.3 sensitive-data hygiene certified.
+- [x] **US-1.3.0-G-Law:** PCI-DSS 4.0 Requirement 3.3 sensitive-data hygiene certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-1.3.0-G4:** Full HTTP status matrix maps correctly against the mock server.
+- [x] **US-1.3.0-G4:** Full HTTP status matrix maps correctly against the mock server.

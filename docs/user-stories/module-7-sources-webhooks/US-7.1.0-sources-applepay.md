@@ -175,21 +175,21 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-7.1.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..3`)
-- [ ] **Unit 1 (`feat/us-7.1.0/unit-1-issuer-lookup`)**: `IssuerMetadata`: issuer_name, issuer_country, issuer_card_type (debit/credit/charge_card/unspecified), issuer_card_category, first_digits, last_digits. `client.sources().get_issuer(params)` (Files: `src/resources/sources/issuer.rs`)  
+- [x] **Unit 1 (`feat/us-7.1.0/unit-1-issuer-lookup`)**: `IssuerMetadata`: issuer_name, issuer_country, issuer_card_type (debit/credit/charge_card/unspecified), issuer_card_category, first_digits, last_digits. `client.sources().get_issuer(params)` (Files: `src/resources/sources/issuer.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-7.1.0/unit-2-applepay-session`)**: `ApplePayMerchantSession`: epochTimestamp, expiresAt, merchantSessionIdentifier, nonce, merchantIdentifier, domainName, displayName, signature, operationalAnalyticsIdentifier. `client.apple_pay().initiate_session(params)` (Files: `src/resources/sources/apple_pay.rs`)  
+- [x] **Unit 2 (`feat/us-7.1.0/unit-2-applepay-session`)**: `ApplePayMerchantSession`: epochTimestamp, expiresAt, merchantSessionIdentifier, nonce, merchantIdentifier, domainName, displayName, signature, operationalAnalyticsIdentifier. `client.apple_pay().initiate_session(params)` (Files: `src/resources/sources/apple_pay.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-7.1.0/unit-3-sources-service`)**: `SourcesService` (`client.sources()`) and `ApplePayService` (`client.apple_pay()`) facades, publishable-key enforcement guard, unit tests (Files: `src/resources/sources/service.rs`)  
+- [x] **Unit 3 (`feat/us-7.1.0/unit-3-sources-service`)**: `SourcesService` (`client.sources()`) and `ApplePayService` (`client.apple_pay()`) facades, publishable-key enforcement guard, unit tests (Files: `src/resources/sources/service.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 3` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -215,47 +215,47 @@ sequenceDiagram
 - **PAN Minimization**: only 6–8 BIN digits needed for issuer identification.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Key Guard Test**: `sk_` rejected on `initiate_session` with zero network calls.
-- [ ] **PAN Redaction Test**: lookup request struct never prints full PAN in `Debug`.
-- [ ] **Validation URL Test**: `http://` `validation_url` rejected pre-transport.
+- [x] **Key Guard Test**: `sk_` rejected on `initiate_session` with zero network calls.
+- [x] **PAN Redaction Test**: lookup request struct never prints full PAN in `Debug`.
+- [x] **Validation URL Test**: `http://` `validation_url` rejected pre-transport.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Wallet and BIN lookup flows verified against OWASP ASVS Level 2.
-- [ ] Zero secret-key exposure to frontend.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Wallet and BIN lookup flows verified against OWASP ASVS Level 2.
+- [x] Zero secret-key exposure to frontend.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-7.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-7.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-7.1.0-G1:** ≥90% line / ≥85% branch on the `sources` module.
+- [x] **US-7.1.0-G1:** ≥90% line / ≥85% branch on the `sources` module.
 
 ### G2 — Security audit
-- [ ] **US-7.1.0-G2:** Wallet/key audit passes with zero critical/high findings.
+- [x] **US-7.1.0-G2:** Wallet/key audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-7.1.0-G3:** `sources` module depends only on `core`.
+- [x] **US-7.1.0-G3:** `sources` module depends only on `core`.
 
 ### G-Review — Code review
-- [ ] **US-7.1.0-G-Review:** Peer review on key-type guard and camelCase session deserialization.
+- [x] **US-7.1.0-G-Review:** Peer review on key-type guard and camelCase session deserialization.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-7.1.0-G-Borrow:** Lookup and session params passed by reference.
+- [x] **US-7.1.0-G-Borrow:** Lookup and session params passed by reference.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-7.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-7.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-7.1.0-G-Docs:** 100% public symbols documented; BIN lookup and Apple Pay examples runnable.
+- [x] **US-7.1.0-G-Docs:** 100% public symbols documented; BIN lookup and Apple Pay examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-7.1.0-G-Law:** PCI-DSS SAQ A-EP wallet and BIN scoping certified.
+- [x] **US-7.1.0-G-Law:** PCI-DSS SAQ A-EP wallet and BIN scoping certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-7.1.0-G4:** BIN lookup (`POST /v1/source/issuer`) and Apple Pay session initiation (`POST /v1/applepay/initiate`) verified against mock server.
+- [x] **US-7.1.0-G4:** BIN lookup (`POST /v1/source/issuer`) and Apple Pay session initiation (`POST /v1/applepay/initiate`) verified against mock server.

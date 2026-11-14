@@ -6,8 +6,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::kernel::error::MoyasarError;
 use crate::kernel::types::{Amount, Currency};
-use crate::resources::settlements::models::SettlementRecipientType;
+use crate::resources::settlements::models::{SettlementRecipientType, validate_path_segment_id};
 
 /// Strongly-typed identifier for a Moyasar aggregation transfer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -28,6 +29,11 @@ impl TransferId {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Validates that this transfer identifier is a non-empty, URL-safe path segment.
+    pub fn validate(&self) -> Result<(), MoyasarError> {
+        validate_path_segment_id(&self.0, "transfer id")
     }
 }
 

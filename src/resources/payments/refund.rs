@@ -12,7 +12,7 @@ use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::transport::execute_with_retry;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
-use crate::resources::payments::update::validate_payment_id;
+use crate::resources::payments::update::{parse_payment_response, validate_payment_id};
 
 /// Internal request body for partial refunds (`POST /v1/payments/:id/refund`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -122,15 +122,6 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
         validate_refund_amount(payment, amount)?;
         self.refund(&payment.id, amount).await
     }
-}
-
-async fn parse_payment_response(response: reqwest::Response) -> Result<Payment, MoyasarError> {
-    let status = response.status();
-    if status.is_success() {
-        return Ok(response.json::<Payment>().await?);
-    }
-    let body = response.text().await.unwrap_or_default();
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
 }
 
 #[cfg(test)]

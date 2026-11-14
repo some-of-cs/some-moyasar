@@ -190,23 +190,23 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-6.2.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
-- [ ] **Unit 1 (`feat/us-6.2.0/unit-1-transfer-models`)**: `Transfer` struct, `TransferLine` struct, `TransferId` newtype (Files: `src/resources/settlements/transfer_models.rs`)  
+- [x] **Unit 1 (`feat/us-6.2.0/unit-1-transfer-models`)**: `Transfer` struct, `TransferLine` struct, `TransferId` newtype (Files: `src/resources/settlements/transfer_models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-6.2.0/unit-2-transfer-endpoints`)**: `client.transfers().list()`, `client.transfers().retrieve(id)`, `client.transfers().list_lines(id, params)` (Files: `src/resources/settlements/transfers.rs`)  
+- [x] **Unit 2 (`feat/us-6.2.0/unit-2-transfer-endpoints`)**: `client.transfers().list()`, `client.transfers().retrieve(id)`, `client.transfers().list_lines(id, params)` (Files: `src/resources/settlements/transfers.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-6.2.0/unit-3-internal-txn-model`)**: `InternalTransaction` struct (recipient_type, recipient_id, amount, transfer_id, settled_at, metadata), `InternalTransactionId` newtype (Files: `src/resources/settlements/internal_txn_models.rs`)  
+- [x] **Unit 3 (`feat/us-6.2.0/unit-3-internal-txn-model`)**: `InternalTransaction` struct (recipient_type, recipient_id, amount, transfer_id, settled_at, metadata), `InternalTransactionId` newtype (Files: `src/resources/settlements/internal_txn_models.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-6.2.0/unit-4-internal-txn-endpoints`)**: `ListInternalTransactionsParams`, `client.internal_transactions().list(params)` with id/currency/created_at/updated_at/settled_at filters, unit tests (Files: `src/resources/settlements/internal_transactions.rs`)  
+- [x] **Unit 4 (`feat/us-6.2.0/unit-4-internal-txn-endpoints`)**: `ListInternalTransactionsParams`, `client.internal_transactions().list(params)` with id/currency/created_at/updated_at/settled_at filters, unit tests (Files: `src/resources/settlements/internal_transactions.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -234,49 +234,49 @@ sequenceDiagram
 - **Pagination**: bounded page size.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Linkage Test**: unsettled txn has `None` linkage.
-- [ ] **Tenant Test**: foreign id yields typed error.
-- [ ] **Filter Test**: malformed timestamps rejected.
-- [ ] **Pagination Test**: list requires a page parameter.
+- [x] **Linkage Test**: unsettled txn has `None` linkage.
+- [x] **Tenant Test**: foreign id yields typed error.
+- [x] **Filter Test**: malformed timestamps rejected.
+- [x] **Pagination Test**: list requires a page parameter.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Ledger access verified against OWASP ASVS Level 2.
-- [ ] Linkage semantics certified.
-- [ ] Zero metadata leakage in logs.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Ledger access verified against OWASP ASVS Level 2.
+- [x] Linkage semantics certified.
+- [x] Zero metadata leakage in logs.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-6.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-6.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-6.2.0-G1:** ≥90% line / ≥85% branch on the ledger module.
+- [x] **US-6.2.0-G1:** ≥90% line / ≥85% branch on the ledger module.
 
 ### G2 — Security audit
-- [ ] **US-6.2.0-G2:** Ledger-access audit passes with zero critical/high findings.
+- [x] **US-6.2.0-G2:** Ledger-access audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-6.2.0-G3:** Read-only services; zero mutation surface.
+- [x] **US-6.2.0-G3:** Read-only services; zero mutation surface.
 
 ### G-Review — Code review
-- [ ] **US-6.2.0-G-Review:** Peer review on linkage semantics and filters.
+- [x] **US-6.2.0-G-Review:** Peer review on linkage semantics and filters.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-6.2.0-G-Borrow:** Newtype ids avoid needless cloning.
+- [x] **US-6.2.0-G-Borrow:** Newtype ids avoid needless cloning.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-6.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-6.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-6.2.0-G-Docs:** 100% public symbols documented; trace example runnable.
+- [x] **US-6.2.0-G-Docs:** 100% public symbols documented; trace example runnable.
 
 ### G-Law — Law validation
-- [ ] **US-6.2.0-G-Law:** SAMA funds-flow traceability certified.
+- [x] **US-6.2.0-G-Law:** SAMA funds-flow traceability certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-6.2.0-G4:** Transfers and internal transactions verified against the mock server.
+- [x] **US-6.2.0-G4:** Transfers and internal transactions verified against the mock server.

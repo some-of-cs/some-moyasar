@@ -1,0 +1,84 @@
+{
+  "moduleId": "module-1-core-microkernel",
+  "title": "Module 1: Core Microkernel & Transport Layer (US-1.1.0..US-1.3.0)",
+  "baseBranch": "main",
+  "moduleBranch": "feat/module-1-core-microkernel",
+  "status": "Merged",
+  "prNumber": 15,
+  "updatedAt": "2026-11-14T05:00:00Z",
+  "items": {
+    "us-1.1.0": {
+      "status": "Merged",
+      "branch": "feat/us-1.1.0-http-client-auth",
+      "prNumber": 13,
+      "unitCount": 3
+    },
+    "us-1.1.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-1.1.0/unit-1-key-types",
+      "prNumber": 1
+    },
+    "us-1.1.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-1.1.0/unit-2-http-client",
+      "prNumber": 2
+    },
+    "us-1.1.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-1.1.0/unit-3-auth-encoding",
+      "prNumber": 4
+    },
+    "us-1.2.0": {
+      "status": "Merged",
+      "branch": "feat/us-1.2.0-idempotency-metadata-pagination",
+      "prNumber": 14,
+      "unitCount": 5
+    },
+    "us-1.2.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-1.2.0/unit-1-given-id-policy",
+      "prNumber": 6
+    },
+    "us-1.2.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-1.2.0/unit-2-uuidv5-hashing",
+      "prNumber": 8
+    },
+    "us-1.2.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-1.2.0/unit-3-metadata",
+      "prNumber": 9
+    },
+    "us-1.2.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-1.2.0/unit-4-pagination-types",
+      "prNumber": 7
+    },
+    "us-1.2.0/unit-5": {
+      "status": "Merged",
+      "branch": "feat/us-1.2.0/unit-5-pagination-stream",
+      "prNumber": 11
+    },
+    "us-1.3.0": {
+      "status": "Merged",
+      "branch": "feat/us-1.3.0-error-types-prelude",
+      "prNumber": 12,
+      "unitCount": 3
+    },
+    "us-1.3.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-1.3.0/unit-1-error-enum",
+      "prNumber": 3
+    },
+    "us-1.3.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-1.3.0/unit-2-field-errors",
+      "prNumber": 5
+    },
+    "us-1.3.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-1.3.0/unit-3-currency-prelude",
+      "prNumber": 10
+    }
+  }
+}

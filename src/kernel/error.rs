@@ -92,7 +92,7 @@ pub enum MoyasarError {
     },
     /// Underlying HTTP transport error.
     #[error("network error: {0}")]
-    Network(#[from] reqwest::Error),
+    Network(#[source] reqwest::Error),
     /// Request exceeded the configured timeout.
     #[error("request timed out")]
     Timeout,
@@ -163,13 +163,24 @@ pub enum MoyasarError {
     InvalidWebhookUrl,
 }
 
+impl From<reqwest::Error> for MoyasarError {
+    fn from(err: reqwest::Error) -> Self {
+        if err.is_timeout() {
+            Self::Timeout
+        } else {
+            Self::Network(err)
+        }
+    }
+}
+
 impl MoyasarError {
     /// Returns `true` only for transient network, timeout, or 5xx server failures.
     pub fn is_retryable(&self) -> bool {
-        matches!(
-            self,
-            Self::Network(_) | Self::Timeout | Self::ServerError { .. }
-        )
+        match self {
+            Self::Network(err) => !err.is_decode() && !err.is_builder(),
+            Self::Timeout | Self::ServerError { .. } => true,
+            _ => false,
+        }
     }
 
     /// Parses an HTTP status code and response body into a structured [`MoyasarError`].

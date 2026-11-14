@@ -198,6 +198,7 @@ impl<'a, K: SecretAuthKey> TransfersService<'a, K> {
     /// (such as [`RecordNotFound`](crate::kernel::error::ApiErrorType::RecordNotFound) for an
     /// unknown transfer ID).
     pub async fn retrieve(&self, id: &TransferId) -> Result<Transfer, MoyasarError> {
+        id.validate()?;
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{TRANSFERS_PATH}/{id}");
         send_get(
@@ -221,6 +222,7 @@ impl<'a, K: SecretAuthKey> TransfersService<'a, K> {
         id: &TransferId,
         params: &ListTransferLinesParams,
     ) -> Result<PaginatedList<TransferLine>, MoyasarError> {
+        id.validate()?;
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{TRANSFERS_PATH}/{id}/lines");
         let query = params.to_query_pairs();

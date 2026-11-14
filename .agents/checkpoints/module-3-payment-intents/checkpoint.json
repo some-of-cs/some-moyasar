@@ -2,7 +2,7 @@
   "moduleId": "module-3-payment-intents",
   "title": "Module 3: Payment Intents",
   "baseCommit": "9587b33bec1357439eb260544772a202c175c068",
-  "updatedAt": "2026-11-13T11:07:00Z",
+  "updatedAt": "2026-11-14T05:00:00Z",
   "items": {
     "us-3.1.0": {
       "status": "Merged",
@@ -56,5 +56,9 @@
       "branch": "feat/us-3.2.0/unit-4-fulfill-guard",
       "prNumber": 26
     }
-  }
+  },
+  "baseBranch": "main",
+  "moduleBranch": "feat/module-3-payment-intents",
+  "status": "Merged",
+  "prNumber": 51
 }

@@ -8,7 +8,7 @@ use serde::Serialize;
 use zeroize::Zeroize;
 
 use crate::kernel::auth::AuthKey;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::transport::send_with_retry;
 use crate::kernel::types::{Amount, Currency};
 use crate::resources::card_auths::CardAuthsService;
@@ -208,11 +208,12 @@ impl<'a, K: AuthKey> CardAuthsService<'a, K> {
         url: &str,
         payload: &CreateCardAuthPayload<'_>,
     ) -> Result<CardAuthentication, MoyasarError> {
-        let mut body_bytes =
-            serde_json::to_vec(payload).map_err(|err| MoyasarError::ServerError {
-                status: 500,
-                message: format!("failed to serialize card_auth request: {err}"),
-            })?;
+        let mut body_bytes = serde_json::to_vec(payload).map_err(|err| MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            message: format!("failed to serialize card_auth request: {err}"),
+            errors: Vec::new(),
+            response_code: None,
+        })?;
         let send_res = self
             .client()
             .http()
@@ -224,14 +225,16 @@ impl<'a, K: AuthKey> CardAuthsService<'a, K> {
         body_bytes.zeroize();
         let response = send_res.map_err(map_reqwest_error)?;
         let status = response.status();
-        if status.is_success() {
-            return response
-                .json::<CardAuthentication>()
-                .await
-                .map_err(MoyasarError::Network);
+        let body = response.text().await.map_err(map_reqwest_error)?;
+        if !status.is_success() {
+            return Err(MoyasarError::from_api_response(status.as_u16(), &body));
         }
-        let body = response.text().await.unwrap_or_default();
-        Err(MoyasarError::from_api_response(status.as_u16(), &body))
+        serde_json::from_str::<CardAuthentication>(&body).map_err(|err| MoyasarError::Api {
+            error_type: ApiErrorType::Unknown,
+            message: format!("failed to decode CardAuthentication response: {err}"),
+            errors: Vec::new(),
+            response_code: None,
+        })
     }
 }
 
@@ -248,7 +251,6 @@ mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
     use crate::kernel::client::MoyasarClient;
-    use crate::kernel::error::ApiErrorType;
     use crate::resources::card_auths::models::CardAuthStatus;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

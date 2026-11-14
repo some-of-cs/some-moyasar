@@ -211,25 +211,25 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-2.1.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
-- [ ] **Unit 1 (`feat/us-2.1.0/unit-1-payment-model`)**: `Payment` struct (all fields: id, amount, amount_format, fee, fee_format, status, source, metadata, splits, timestamps, callback_url, invoice_id, ip) (Files: `src/resources/payments/models.rs`)  
+- [x] **Unit 1 (`feat/us-2.1.0/unit-1-payment-model`)**: `Payment` struct (all fields: id, amount, amount_format, fee, fee_format, status, source, metadata, splits, timestamps, callback_url, invoice_id, ip) (Files: `src/resources/payments/models.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-2.1.0/unit-2-create-params`)**: `CreatePaymentParams::builder()` (amount, currency, description, callback_url, given_id, source, metadata, splits, sender), `Serialize` (Files: `src/resources/payments/params.rs`)  
+- [x] **Unit 2 (`feat/us-2.1.0/unit-2-create-params`)**: `CreatePaymentParams::builder()` (amount, currency, description, callback_url, given_id, source, metadata, splits, sender), `Serialize` (Files: `src/resources/payments/params.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-2.1.0/unit-3-create-endpoint`)**: `client.payments().create(params)`, `given_id` injection, response deserialization, wire tests with mock (Files: `src/resources/payments/create.rs`)  
+- [x] **Unit 3 (`feat/us-2.1.0/unit-3-create-endpoint`)**: `client.payments().create(params)`, `given_id` injection, response deserialization, wire tests with mock (Files: `src/resources/payments/create.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-2.1.0/unit-4-retrieve-endpoint`)**: `client.payments().retrieve(id)` / `.fetch(id)`, `PaymentId` newtype, 404 → record_not_found (Files: `src/resources/payments/retrieve.rs`)  
+- [x] **Unit 4 (`feat/us-2.1.0/unit-4-retrieve-endpoint`)**: `client.payments().retrieve(id)` / `.fetch(id)`, `PaymentId` newtype, 404 → record_not_found (Files: `src/resources/payments/retrieve.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-2.1.0/unit-5-list-endpoint`)**: `client.payments().list(ListParams)`, query param serialization (page, id, status, created[gt/lt], metadata[key]), return `PaginatedList<Payment>` (Files: `src/resources/payments/list.rs`)  
+- [x] **Unit 5 (`feat/us-2.1.0/unit-5-list-endpoint`)**: `client.payments().list(ListParams)`, query param serialization (page, id, status, created[gt/lt], metadata[key]), return `PaginatedList<Payment>` (Files: `src/resources/payments/list.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -258,49 +258,49 @@ sequenceDiagram
 - **Query Encoding**: all filter values percent-encoded before transmission.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Key-Type Test**: `trybuild` proves `pk_` cannot call `retrieve()`/`list()`.
-- [ ] **PII Log Test**: `format!("{:?}", payment)` does not print metadata values.
-- [ ] **Query Encoding Test**: special characters in metadata keys are escaped.
-- [ ] **Idempotency Test**: create always emits `given_id`.
+- [x] **Key-Type Test**: `trybuild` proves `pk_` cannot call `retrieve()`/`list()`.
+- [x] **PII Log Test**: `format!("{:?}", payment)` does not print metadata values.
+- [x] **Query Encoding Test**: special characters in metadata keys are escaped.
+- [x] **Idempotency Test**: create always emits `given_id`.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Trust boundaries verified against OWASP ASVS Level 2.
-- [ ] Key-type isolation verified for all three endpoints.
-- [ ] Zero PII in default `Debug` output.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Trust boundaries verified against OWASP ASVS Level 2.
+- [x] Key-type isolation verified for all three endpoints.
+- [x] Zero PII in default `Debug` output.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
 ## 6. Validation Gates & Acceptance Sign-Off
 
-**Status: Ready for Implementation.**
+**Status: Implemented & Verified (Merged to `main`).**
 
 ### G0 — Build, lint & format
-- [ ] **US-2.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-2.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-2.1.0-G1:** ≥90% line / ≥85% branch on the payments CRUD module.
+- [x] **US-2.1.0-G1:** ≥90% line / ≥85% branch on the payments CRUD module.
 
 ### G2 — Security audit
-- [ ] **US-2.1.0-G2:** Zero critical/high findings on key-type and PII handling.
+- [x] **US-2.1.0-G2:** Zero critical/high findings on key-type and PII handling.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-2.1.0-G3:** Resource module depends only on the kernel; zero cross-resource coupling.
+- [x] **US-2.1.0-G3:** Resource module depends only on the kernel; zero cross-resource coupling.
 
 ### G-Review — Code review
-- [ ] **US-2.1.0-G-Review:** Peer review by `code-reviewer`.
+- [x] **US-2.1.0-G-Review:** Peer review by `code-reviewer`.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-2.1.0-G-Borrow:** `PaymentsService` borrows the client; zero deep clones.
+- [x] **US-2.1.0-G-Borrow:** `PaymentsService` borrows the client; zero deep clones.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-2.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-2.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-2.1.0-G-Docs:** 100% public symbols documented; create→retrieve example runnable.
+- [x] **US-2.1.0-G-Docs:** 100% public symbols documented; create→retrieve example runnable.
 
 ### G-Law — Law validation
-- [ ] **US-2.1.0-G-Law:** PCI-DSS 4.0 data-minimization and SAMA transaction-record retention certified.
+- [x] **US-2.1.0-G-Law:** PCI-DSS 4.0 data-minimization and SAMA transaction-record retention certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-2.1.0-G4:** Create → retrieve → list round-trip succeeds against the mock server.
+- [x] **US-2.1.0-G4:** Create → retrieve → list round-trip succeeds against the mock server.

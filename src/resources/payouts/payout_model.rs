@@ -6,6 +6,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::resources::payouts::models::has_unsafe_path_chars;
 
 /// Strongly-typed identifier for a Moyasar payout disbursement.
 ///
@@ -31,14 +32,22 @@ use crate::kernel::error::{ApiErrorType, MoyasarError};
 pub struct PayoutId(String);
 
 impl PayoutId {
-    /// Creates a new [`PayoutId`], returning an error if `id` is empty or
-    /// contains only whitespace.
+    /// Creates a new [`PayoutId`], returning an error if `id` is empty,
+    /// contains whitespace, or contains URL path/query delimiters.
     pub fn new(id: impl Into<String>) -> Result<Self, MoyasarError> {
         let id = id.into();
         if id.trim().is_empty() {
             return Err(MoyasarError::Api {
                 error_type: ApiErrorType::InvalidRequestError,
                 message: "payout id must not be empty".into(),
+                errors: vec![],
+                response_code: None,
+            });
+        }
+        if has_unsafe_path_chars(&id) {
+            return Err(MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                message: "payout id must not contain whitespace or URL delimiters".into(),
                 errors: vec![],
                 response_code: None,
             });

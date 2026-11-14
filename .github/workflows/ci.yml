@@ -45,6 +45,7 @@ jobs:
           cargo check --no-default-features --features tokens
           cargo check --no-default-features --features invoices
           cargo check --no-default-features --features card-auths
+          cargo check --no-default-features --features card-auth
           cargo check --no-default-features --features tokens-invoices-3ds
 
       - name: Check Module 5 payouts feature

@@ -21,4 +21,12 @@ pub mod transfer_models;
 /// Transfer creation, listing, and retrieval endpoints.
 pub mod transfers;
 
+pub use balance::MerchantBalance;
+pub use internal_transactions::ListInternalTransactionsParams;
+pub use internal_txn_models::{InternalTransaction, InternalTransactionId};
+pub use lines::{ListSettlementLinesParams, SettlementLine};
+pub use list::ListSettlementsParams;
+pub use models::{Settlement, SettlementId, SettlementRecipientType};
 pub use service::{InternalTransactionsService, SettlementsService, TransfersService};
+pub use transfer_models::{Transfer, TransferId, TransferLine};
+pub use transfers::{ListTransferLinesParams, ListTransfersParams};

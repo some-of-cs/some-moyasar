@@ -103,6 +103,7 @@ async fn retrieve_settlement(
     max_network_retries: u32,
     id: &SettlementId,
 ) -> Result<Settlement, MoyasarError> {
+    id.validate()?;
     let url = format!("{}{SETTLEMENTS_PATH}/{id}", base_url.trim_end_matches('/'));
     execute_with_retry(max_network_retries, || send_retrieve_request(http, &url)).await
 }
