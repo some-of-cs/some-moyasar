@@ -1,0 +1,21 @@
+{
+  "moduleId": "module-5-payouts",
+  "title": "Module 5: Payouts & Payout Accounts",
+  "baseBranch": "main",
+  "moduleBranch": "feat/module-5-payouts",
+  "updatedAt": "2026-11-14T04:28:00Z",
+  "items": {
+    "us-5.1.0": { "status": "Merged", "branch": "feat/us-5.1.0-payout-accounts", "prNumber": 123 },
+    "us-5.1.0/unit-1": { "status": "Merged", "branch": "feat/us-5.1.0/unit-1-payout-account-model", "prNumber": 111 },
+    "us-5.1.0/unit-2": { "status": "Merged", "branch": "feat/us-5.1.0/unit-2-payout-account-create", "prNumber": 122 },
+    "us-5.1.0/unit-3": { "status": "Merged", "branch": "feat/us-5.1.0/unit-3-payout-account-list", "prNumber": 116 },
+    "us-5.1.0/unit-4": { "status": "Merged", "branch": "feat/us-5.1.0/unit-4-payout-account-retrieve", "prNumber": 115 },
+    "us-5.2.0": { "status": "Merged", "branch": "feat/us-5.2.0-payout-disbursements", "prNumber": 124 },
+    "us-5.2.0/unit-1": { "status": "Merged", "branch": "feat/us-5.2.0/unit-1-payout-model", "prNumber": 110 },
+    "us-5.2.0/unit-2": { "status": "Merged", "branch": "feat/us-5.2.0/unit-2-purpose-codes", "prNumber": 112 },
+    "us-5.2.0/unit-3": { "status": "Merged", "branch": "feat/us-5.2.0/unit-3-destinations", "prNumber": 118 },
+    "us-5.2.0/unit-4": { "status": "Merged", "branch": "feat/us-5.2.0/unit-4-single-payout", "prNumber": 117 },
+    "us-5.2.0/unit-5": { "status": "Merged", "branch": "feat/us-5.2.0/unit-5-bulk-payout", "prNumber": 119 },
+    "us-5.2.0/unit-6": { "status": "Merged", "branch": "feat/us-5.2.0/unit-6-payout-list-retrieve", "prNumber": 120 }
+  }
+}
