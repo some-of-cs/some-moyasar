@@ -5,7 +5,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::send_get_json;
+use crate::kernel::transport::send_get_json as send_get;
 use crate::resources::settlements::service::TransfersService;
 use crate::resources::settlements::transfer_models::{Transfer, TransferId, TransferLine};
 
@@ -178,7 +178,7 @@ impl<'a, K: SecretAuthKey> TransfersService<'a, K> {
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{TRANSFERS_PATH}");
         let query = params.to_query_pairs();
-        send_get_json(
+        send_get(
             self.client().http(),
             &url,
             self.client().config().max_network_retries,
@@ -200,7 +200,7 @@ impl<'a, K: SecretAuthKey> TransfersService<'a, K> {
         id.validate()?;
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{TRANSFERS_PATH}/{id}");
-        send_get_json(
+        send_get(
             self.client().http(),
             &url,
             self.client().config().max_network_retries,
@@ -225,7 +225,7 @@ impl<'a, K: SecretAuthKey> TransfersService<'a, K> {
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{TRANSFERS_PATH}/{id}/lines");
         let query = params.to_query_pairs();
-        send_get_json(
+        send_get(
             self.client().http(),
             &url,
             self.client().config().max_network_retries,

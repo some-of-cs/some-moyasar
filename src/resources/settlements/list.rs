@@ -5,7 +5,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::send_get_json;
+use crate::kernel::transport::send_get_json as send_get;
 use crate::resources::settlements::models::{Settlement, SettlementId};
 use crate::resources::settlements::service::SettlementsService;
 
@@ -156,7 +156,7 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{SETTLEMENTS_PATH}");
         let query = params.to_query_pairs();
-        send_get_json(
+        send_get(
             self.client().http(),
             &url,
             self.client().config().max_network_retries,

@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::send_get_json;
+use crate::kernel::transport::send_get_json as send_get;
 use crate::resources::invoices::InvoicesService;
 use crate::resources::invoices::models::{Invoice, InvoiceStatus};
 
@@ -199,7 +199,7 @@ impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {
     pub async fn retrieve(&self, id: Uuid) -> Result<Invoice, MoyasarError> {
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{INVOICES_PATH}/{id}");
-        send_get_json(
+        send_get(
             self.client().http(),
             &url,
             self.client().config().max_network_retries,
@@ -255,7 +255,7 @@ impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{INVOICES_PATH}");
         let query = params.to_query_pairs();
-        send_get_json(
+        send_get(
             self.client().http(),
             &url,
             self.client().config().max_network_retries,
