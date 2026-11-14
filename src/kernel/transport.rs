@@ -5,7 +5,6 @@ use std::future::Future;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use http::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
 use zeroize::Zeroize;
 
@@ -133,16 +132,12 @@ pub async fn decode_json_response<T: DeserializeOwned>(
 
 /// Dispatches an idempotent `GET` request with query parameters through [`execute_with_retry`]
 /// and decodes the JSON response via [`decode_json_response`].
-pub async fn send_get_json<T, Q>(
+pub async fn send_get_json<T: DeserializeOwned>(
     http: &reqwest::Client,
     url: &str,
     max_retries: u32,
-    query: &Q,
-) -> Result<T, MoyasarError>
-where
-    T: DeserializeOwned,
-    Q: Serialize + Sync + ?Sized,
-{
+    query: &[(String, String)],
+) -> Result<T, MoyasarError> {
     execute_with_retry(max_retries, || async {
         let response = http
             .get(url)

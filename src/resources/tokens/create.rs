@@ -3,7 +3,7 @@
 use core::fmt;
 
 use http::header::CONTENT_TYPE;
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::SecretString;
 use serde::Serialize;
 use zeroize::Zeroize;
 
