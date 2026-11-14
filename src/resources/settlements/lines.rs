@@ -116,10 +116,7 @@ fn build_lines_url(
     if pairs.is_empty() {
         return format!("{base}/v1/settlements/{}/lines", id.as_str());
     }
-    let query: Vec<String> = pairs
-        .into_iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect();
+    let query: Vec<String> = pairs.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
     format!(
         "{base}/v1/settlements/{}/lines?{}",
         id.as_str(),
