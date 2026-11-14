@@ -232,7 +232,7 @@ mod tests {
                 let p = evt.into_payment().expect("valid Payment");
                 if matches!(*name, "payment_authorized" | "payment_voided") {
                     assert_eq!(p.captured, 0);
-                    assert_eq!(p.captured_format.as_deref(), Some("0.00 SAR"));
+                    assert_eq!(p.captured_format, "0.00 SAR");
                 }
             }
         }
