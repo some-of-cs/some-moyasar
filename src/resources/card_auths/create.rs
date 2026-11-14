@@ -238,7 +238,6 @@ impl<'a, K: AuthKey> CardAuthsService<'a, K> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

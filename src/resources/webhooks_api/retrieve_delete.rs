@@ -163,7 +163,6 @@ async fn send_delete_request(http: &reqwest::Client, url: &str) -> Result<(), Mo
     Err(MoyasarError::from_api_response(status.as_u16(), &body))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

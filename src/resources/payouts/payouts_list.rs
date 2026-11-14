@@ -173,7 +173,6 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
     }
 }
 
-
 async fn decode_response<T: DeserializeOwned>(
     response: reqwest::Response,
 ) -> Result<T, MoyasarError> {

@@ -173,7 +173,6 @@ async fn parse_attempt_response(
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

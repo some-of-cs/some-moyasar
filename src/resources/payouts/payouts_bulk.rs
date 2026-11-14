@@ -264,7 +264,6 @@ async fn send_bulk_payout_request<K: SecretAuthKey>(
     })
 }
 
-
 fn invalid_request_error(message: &str) -> MoyasarError {
     MoyasarError::Api {
         error_type: ApiErrorType::InvalidRequestError,

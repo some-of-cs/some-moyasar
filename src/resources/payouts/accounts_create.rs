@@ -251,7 +251,6 @@ async fn send_create_request<K: SecretAuthKey>(
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

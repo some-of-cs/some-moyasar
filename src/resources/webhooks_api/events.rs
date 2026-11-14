@@ -97,7 +97,6 @@ async fn parse_available_events_response(
         })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -201,7 +201,6 @@ async fn dispatch_post(
     Ok((status, body))
 }
 
-
 fn parse_token_response(status: u16, body: &str) -> Result<Token, MoyasarError> {
     if !(200..300).contains(&status) {
         return Err(MoyasarError::from_api_response(status, body));

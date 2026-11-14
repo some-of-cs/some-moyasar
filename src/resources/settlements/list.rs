@@ -166,7 +166,6 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -301,7 +301,6 @@ async fn read_response_text(response: reqwest::Response) -> Result<(u16, String)
     Ok((status, body))
 }
 
-
 fn decode_response<T: DeserializeOwned>(status: u16, body: &str) -> Result<T, MoyasarError> {
     if !(200..300).contains(&status) {
         return Err(MoyasarError::from_api_response(status, body));

@@ -118,7 +118,6 @@ impl<'a, K: SecretAuthKey> PayoutAccountsService<'a, K> {
     }
 }
 
-
 async fn parse_retrieve_response(
     response: reqwest::Response,
 ) -> Result<PayoutAccount, MoyasarError> {

@@ -309,7 +309,6 @@ async fn send_retrieve_once(
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

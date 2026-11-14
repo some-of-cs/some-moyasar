@@ -160,7 +160,6 @@ async fn send_issuer_request<K: AuthKey>(
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

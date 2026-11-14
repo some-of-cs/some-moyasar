@@ -265,7 +265,6 @@ impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

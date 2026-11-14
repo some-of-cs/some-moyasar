@@ -156,7 +156,6 @@ async fn send_update_request(
     .await
 }
 
-
 fn deserialize_invoice(body: &str) -> Result<Invoice, MoyasarError> {
     serde_json::from_str::<Invoice>(body).map_err(|err| MoyasarError::Api {
         error_type: ApiErrorType::Unknown,

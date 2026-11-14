@@ -187,7 +187,6 @@ async fn send_cancel_once(http: &reqwest::Client, url: &str) -> Result<Invoice, 
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

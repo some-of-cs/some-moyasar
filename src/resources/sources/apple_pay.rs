@@ -188,7 +188,6 @@ async fn dispatch_post(
     Ok((status, body))
 }
 
-
 fn parse_session_response(
     status: u16,
     body: &str,

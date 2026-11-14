@@ -171,7 +171,6 @@ async fn parse_payout_response(response: reqwest::Response) -> Result<Payout, Mo
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

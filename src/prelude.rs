@@ -66,8 +66,8 @@ pub use crate::resources::settlements::{
     InternalTransaction, InternalTransactionId, InternalTransactionsService,
     ListInternalTransactionsParams, ListSettlementLinesParams, ListSettlementsParams,
     ListTransferLinesParams, ListTransfersParams, MerchantBalance, Settlement, SettlementId,
-    SettlementLine, SettlementRecipientType, SettlementsService, Transfer, TransferId, TransferLine,
-    TransfersService,
+    SettlementLine, SettlementRecipientType, SettlementsService, Transfer, TransferId,
+    TransferLine, TransfersService,
 };
 
 #[cfg(feature = "payouts")]
@@ -104,8 +104,8 @@ pub use crate::stripe_compat::{
     CustomerChargeParams, CustomerVault, CustomersService, InMemoryCustomerVault, PlanInterval,
     RefundCreateParams, RefundReceipt, RefundRoute, RefundStrategy, RefundsService, ReversalAction,
     Subscription, SubscriptionCycle, SubscriptionCycleId, SubscriptionCycleRefundParams,
-    SubscriptionCycleRefundResult, SubscriptionPlan, SubscriptionsService, inject_customer_metadata,
-    next_period_bounds, pro_rata_refund, select_refund_route,
+    SubscriptionCycleRefundResult, SubscriptionPlan, SubscriptionsService,
+    inject_customer_metadata, next_period_bounds, pro_rata_refund, select_refund_route,
 };
 
 #[cfg(feature = "unified-gateway")]

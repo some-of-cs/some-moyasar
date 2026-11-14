@@ -235,7 +235,6 @@ impl<'a, K: SecretAuthKey> TransfersService<'a, K> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
