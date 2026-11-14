@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use secrecy::{ExposeSecret, SecretString};
 
-use crate::kernel::auth::{AuthKey, SecretKey};
+use crate::kernel::auth::{AuthKey, AuthMode, SecretKey};
 use crate::kernel::error::MoyasarError;
 use crate::kernel::transport::build_default_headers;
 
@@ -78,6 +78,21 @@ impl<K: AuthKey> MoyasarClient<K> {
         &self.0.config
     }
 
+    /// Returns the configured base URL (without trailing slash).
+    pub fn base_url(&self) -> &str {
+        &self.0.config.base_url
+    }
+
+    /// Returns the configured per-request timeout.
+    pub fn timeout(&self) -> Duration {
+        self.0.config.timeout
+    }
+
+    /// Returns the configured maximum automatic retry count.
+    pub fn max_network_retries(&self) -> u32 {
+        self.0.config.max_network_retries
+    }
+
     /// Returns a reference to the client's authentication key.
     pub fn key(&self) -> &K {
         &self.0.key
@@ -92,17 +107,22 @@ impl<K: AuthKey> MoyasarClient<K> {
 
 /// Validates that `url` is a well-formed `https://` base URL without embedded credentials.
 ///
-/// Under `test` or `test-utils`, `http://127.0.0.1` and `http://localhost` are also permitted.
+/// Loopback `http://127.0.0.1`, `http://localhost`, and `http://[::1]` URLs are also
+/// permitted in test mode.
 ///
 /// # Errors
 ///
 /// Returns [`MoyasarError::InvalidBaseUrl`] if `url` fails to parse, contains userinfo,
 /// or uses a disallowed scheme or host.
 pub fn validate_https_url(url: &str) -> Result<(), MoyasarError> {
+    validate_base_url_for_mode(url, AuthMode::Test)
+}
+
+fn validate_base_url_for_mode(url: &str, mode: AuthMode) -> Result<(), MoyasarError> {
     let parsed = reqwest::Url::parse(url).map_err(|_| MoyasarError::InvalidBaseUrl)?;
     if !has_clean_authority(&parsed)
         || !has_no_query_or_fragment(&parsed)
-        || !is_permitted_scheme_and_host(&parsed)
+        || !is_permitted_scheme_and_host(&parsed, mode)
     {
         return Err(MoyasarError::InvalidBaseUrl);
     }
@@ -117,19 +137,17 @@ fn has_no_query_or_fragment(parsed: &reqwest::Url) -> bool {
     parsed.query().is_none() && parsed.fragment().is_none()
 }
 
-fn is_permitted_scheme_and_host(parsed: &reqwest::Url) -> bool {
+fn is_permitted_scheme_and_host(parsed: &reqwest::Url, mode: AuthMode) -> bool {
     if parsed.scheme() == "https" {
         return true;
     }
-    #[cfg(any(test, feature = "test-utils"))]
-    if parsed.scheme() == "http" {
-        return matches!(parsed.host_str(), Some("127.0.0.1" | "localhost"));
-    }
-    false
+    mode == AuthMode::Test
+        && parsed.scheme() == "http"
+        && matches!(parsed.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
 }
 
 impl<K: AuthKey> MoyasarClientBuilder<K> {
-    /// Overrides the API base URL (must use `https://` without userinfo).
+    /// Overrides the API base URL (must use `https://` without userinfo, or loopback `http://` in `AuthMode::Test`).
     #[must_use]
     pub fn base_url(mut self, url: impl Into<String>) -> Self {
         self.config.base_url = url.into();
@@ -158,8 +176,10 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
     }
 
     /// Validates configuration and builds the `MoyasarClient`.
-    pub fn build(self) -> Result<MoyasarClient<K>, MoyasarError> {
-        validate_https_url(&self.config.base_url)?;
+    pub fn build(mut self) -> Result<MoyasarClient<K>, MoyasarError> {
+        let trimmed_url = self.config.base_url.trim().trim_end_matches('/').to_owned();
+        validate_base_url_for_mode(&trimmed_url, self.key.mode())?;
+        self.config.base_url = trimmed_url;
         if self
             .config
             .webhook_secret
@@ -172,6 +192,7 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
         let http = reqwest::Client::builder()
             .timeout(self.config.timeout)
             .default_headers(headers)
+            .https_only(self.key.mode() == AuthMode::Live)
             .build()?;
 
         Ok(MoyasarClient(Arc::new(ClientInner {
@@ -212,6 +233,31 @@ mod tests {
                 .expect_err("must reject invalid or userinfo base URL");
             assert!(matches!(err, MoyasarError::InvalidBaseUrl));
         }
+    }
+
+    #[test]
+    fn rejects_base_url_with_query_or_fragment() {
+        for url in [
+            "https://api.moyasar.com?foo=bar",
+            "https://api.moyasar.com#frag",
+        ] {
+            let key = SecretKey::new("sk_test_query_url").expect("valid key");
+            let result = MoyasarClient::builder(key).base_url(url).build();
+            assert!(
+                matches!(result, Err(MoyasarError::InvalidBaseUrl)),
+                "expected InvalidBaseUrl for {url:?}, got {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_loopback_http_when_key_is_live_mode() {
+        let live_key = SecretKey::new("sk_live_123").expect("valid live key");
+        let err = MoyasarClient::builder(live_key)
+            .base_url("http://127.0.0.1:8080")
+            .build()
+            .expect_err("live key must reject loopback http");
+        assert!(matches!(err, MoyasarError::InvalidBaseUrl));
     }
 
     #[test]
@@ -267,20 +313,5 @@ mod tests {
         assert_eq!(Arc::strong_count(&client.0), 10_001);
         drop(held_clones);
         assert_eq!(Arc::strong_count(&client.0), 1);
-    }
-
-    #[test]
-    fn rejects_base_url_with_query_or_fragment() {
-        for bad_url in [
-            "https://api.moyasar.com?env=sandbox",
-            "https://api.moyasar.com#frag",
-        ] {
-            let key = SecretKey::new("sk_test_123").expect("valid key");
-            let err = MoyasarClient::builder(key)
-                .base_url(bad_url)
-                .build()
-                .expect_err("must reject base URL with query or fragment");
-            assert!(matches!(err, MoyasarError::InvalidBaseUrl));
-        }
     }
 }

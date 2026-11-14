@@ -4,7 +4,7 @@ use core::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::kernel::auth::SecretAuthKey;
+use crate::kernel::auth::{AuthMode, SecretAuthKey};
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::transport::execute_with_retry;
 use crate::resources::payments::service::PaymentsService;
@@ -155,7 +155,7 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
         transaction_url: &str,
         otp: &str,
     ) -> Result<StcPayOtpPayment, MoyasarError> {
-        if !transaction_url.starts_with("https://") {
+        if !is_allowed_stc_otp_url(transaction_url, self.client().key().mode()) {
             return Err(MoyasarError::InvalidBaseUrl);
         }
         self.verify_stc_otp_inner(transaction_url, otp).await
@@ -200,6 +200,14 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
         })
         .await
     }
+}
+
+fn is_allowed_stc_otp_url(url: &str, mode: AuthMode) -> bool {
+    url.starts_with("https://")
+        || (mode == AuthMode::Test
+            && (url.starts_with("http://127.0.0.1")
+                || url.starts_with("http://localhost")
+                || url.starts_with("http://[::1]")))
 }
 
 #[cfg(test)]
