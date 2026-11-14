@@ -18,6 +18,11 @@ pub mod prelude;
     feature = "invoices",
     feature = "card-auths",
     feature = "settlements-ledger",
-    feature = "payouts"
+    feature = "payouts",
+    feature = "sources",
+    feature = "webhooks-api"
 ))]
 pub mod resources;
+
+#[cfg(feature = "webhook-engine")]
+pub mod webhook_engine;

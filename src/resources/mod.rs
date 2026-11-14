@@ -20,3 +20,9 @@ pub mod settlements;
 
 #[cfg(feature = "payouts")]
 pub mod payouts;
+
+#[cfg(feature = "sources")]
+pub mod sources;
+
+#[cfg(feature = "webhooks-api")]
+pub mod webhooks_api;

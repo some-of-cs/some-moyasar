@@ -53,6 +53,14 @@ jobs:
           cargo check --no-default-features --features settlements-ledger
           cargo check --no-default-features --features settlements
 
+      - name: Check Module 7 sources, webhooks-api & webhook-engine features
+        run: |
+          cargo check --no-default-features --features "core,webhook-engine"
+          cargo check --no-default-features --features "core,sources"
+          cargo check --no-default-features --features "core,webhooks-api"
+          cargo check --no-default-features --features "core,sources-webhooks"
+          cargo check --no-default-features --features sources-webhooks
+
       - name: Check default library target
         run: cargo check --lib
 

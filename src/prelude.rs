@@ -82,3 +82,34 @@ pub use crate::resources::payouts::{
     PayoutPurpose, PayoutStatus, PayoutsService, WalletDestination, validate_sa_iban,
     validate_sa_mobile, validate_sequence_number,
 };
+
+#[cfg(feature = "sources")]
+pub use crate::resources::sources::apple_pay::{ApplePayMerchantSession, InitiateApplePayParams};
+#[cfg(feature = "sources")]
+pub use crate::resources::sources::issuer::{
+    BinLookupParams, IssuerCardType as SourceIssuerCardType, IssuerMetadata,
+};
+#[cfg(feature = "sources")]
+pub use crate::resources::sources::service::{ApplePayService, SourcesService};
+
+#[cfg(feature = "webhooks-api")]
+pub use crate::resources::webhooks_api::WebhooksService;
+#[cfg(feature = "webhooks-api")]
+pub use crate::resources::webhooks_api::attempts::ListWebhookAttemptsParams;
+#[cfg(feature = "webhooks-api")]
+pub use crate::resources::webhooks_api::crud::{CreateWebhookParams, validate_https_url};
+#[cfg(feature = "webhooks-api")]
+pub use crate::resources::webhooks_api::models::{WebhookAttempt, WebhookEndpoint, WebhookSecret};
+
+#[cfg(feature = "webhook-engine")]
+pub use crate::webhook_engine::deduplication::{
+    InMemoryDeduplicator, NoopDeduplicator, WebhookDeduplicator,
+};
+#[cfg(feature = "webhook-engine")]
+pub use crate::webhook_engine::event_types::{WebhookError, WebhookEvent, WebhookEventType};
+#[cfg(feature = "webhook-engine")]
+pub use crate::webhook_engine::timestamp::{
+    MAX_FUTURE_SKEW, REPLAY_TOLERANCE, validate_timestamp_at,
+};
+#[cfg(feature = "webhook-engine")]
+pub use crate::webhook_engine::verifier::{ConstantTimeSecretVerifier, DOMAIN_SEPARATION_KEY};

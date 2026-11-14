@@ -7,7 +7,7 @@ description = "Idiomatic, microkernel-architected Rust SDK for the Moyasar Payme
 repository = "https://github.com/some-of-cs/some-moyasar"
 
 [features]
-default = ["core", "env-keys", "payments", "payment-intents", "tokens-invoices-3ds", "settlements-ledger", "payouts"]
+default = ["core", "env-keys", "payments", "payment-intents", "tokens-invoices-3ds", "settlements-ledger", "payouts", "sources-webhooks"]
 core = []
 env-keys = []
 payments = ["core"]
@@ -19,16 +19,23 @@ tokens-invoices-3ds = ["tokens", "invoices", "card-auths"]
 settlements-ledger = ["core"]
 settlements = ["settlements-ledger"]
 payouts = ["core"]
+sources = ["core"]
+webhooks-api = ["core", "webhook-engine"]
+webhook-engine = ["core", "dep:hmac", "dep:sha2", "dep:subtle"]
+sources-webhooks = ["sources", "webhooks-api", "webhook-engine"]
 
 [dependencies]
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
+hmac = { version = "0.12", optional = true }
 http = "1.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = { version = "0.10", optional = true }
+subtle = { version = "2.6", optional = true }
 thiserror = "2.0"
 uuid = { version = "1.11", features = ["v4", "v5", "serde"] }
 zeroize = { version = "1.8", features = ["derive"] }
