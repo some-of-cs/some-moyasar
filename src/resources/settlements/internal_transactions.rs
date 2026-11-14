@@ -235,7 +235,11 @@ mod tests {
 
     #[test]
     fn encodes_created_and_updated_timestamp_ranges_and_empty_default() {
-        assert!(ListInternalTransactionsParams::new().to_query_pairs().is_empty());
+        assert!(
+            ListInternalTransactionsParams::new()
+                .to_query_pairs()
+                .is_empty()
+        );
 
         let t1 = Utc.with_ymd_and_hms(2026, 11, 1, 10, 0, 0).unwrap();
         let t2 = Utc.with_ymd_and_hms(2026, 11, 2, 10, 0, 0).unwrap();
