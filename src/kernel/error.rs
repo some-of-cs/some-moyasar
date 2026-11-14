@@ -297,7 +297,6 @@ mod tests {
             }
             other => panic!("expected MoyasarError::Api, got {other:?}"),
         }
-
     }
 
     #[test]

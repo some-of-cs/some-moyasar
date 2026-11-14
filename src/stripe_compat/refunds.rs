@@ -9,7 +9,9 @@ use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::types::Currency;
-use crate::resources::payments::{Payment, is_void_fallback_eligible, PaymentId, PaymentStatus, validate_refund_amount};
+use crate::resources::payments::{
+    Payment, PaymentId, PaymentStatus, is_void_fallback_eligible, validate_refund_amount,
+};
 use crate::stripe_compat::refund_strategy::{RefundRoute, select_refund_route};
 
 /// Parameters for creating a virtual Stripe-style refund receipt.
@@ -173,7 +175,10 @@ impl<K: SecretAuthKey> RefundsService<'_, K> {
             Utc::now(),
         );
         let reversed = match route {
-            RefundRoute::Void => self.void_with_refund_fallback(&payment, params.amount).await?,
+            RefundRoute::Void => {
+                self.void_with_refund_fallback(&payment, params.amount)
+                    .await?
+            }
             RefundRoute::Refund { amount } => payments.refund_payment(&payment, amount).await?,
         };
         Ok(RefundReceipt::from_payment(&reversed))
@@ -237,8 +242,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path(format!("/v1/payments/{id}")))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(mock_payment_json(id, "paid", 0, &recent)),
+                ResponseTemplate::new(200).set_body_json(mock_payment_json(id, "paid", 0, &recent)),
             )
             .mount(server)
             .await;
@@ -283,19 +287,23 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/v1/payments/pay_ref_1/refund"))
             .and(body_json(json!({"amount": 5000})))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(mock_payment_json("pay_ref_1", "refunded", 5000, &recent)),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_payment_json(
+                "pay_ref_1",
+                "refunded",
+                5000,
+                &recent,
+            )))
             .expect(1)
             .mount(&server)
             .await;
         Mock::given(method("POST"))
             .and(path("/v1/payments/pay_ref_1/void"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(mock_payment_json("pay_ref_1", "voided", 0, &recent)),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_payment_json(
+                "pay_ref_1",
+                "voided",
+                0,
+                &recent,
+            )))
             .expect(1)
             .mount(&server)
             .await;
@@ -337,10 +345,12 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path("/v1/payments/pay_settled/refund"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(mock_payment_json("pay_settled", "refunded", 15000, &recent)),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_payment_json(
+                "pay_settled",
+                "refunded",
+                15000,
+                &recent,
+            )))
             .expect(1)
             .mount(&server)
             .await;

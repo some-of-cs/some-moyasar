@@ -135,10 +135,11 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/v1/payments/pay_01J9ROUTE/refund"))
             .and(body_json(json!({"amount": 5000})))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(route_payment_json("pay_01J9ROUTE", "refunded", 5000)),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(route_payment_json(
+                "pay_01J9ROUTE",
+                "refunded",
+                5000,
+            )))
             .expect(1)
             .mount(&server)
             .await;
@@ -146,10 +147,11 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/v1/payments/pay_01J9VOID/void"))
             .and(body_string(""))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(route_payment_json("pay_01J9VOID", "voided", 0)),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(route_payment_json(
+                "pay_01J9VOID",
+                "voided",
+                0,
+            )))
             .expect(1)
             .mount(&server)
             .await;

@@ -14,8 +14,8 @@ use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::types::Currency;
 use crate::resources::payment_intents::CreatePaymentIntentParams;
 use crate::resources::payments::{
-    CreatePaymentParams, Payment, is_void_fallback_eligible, PaymentId, PaymentSourceRequest, TokenSource, can_void_payment,
-    remaining_refundable_amount, validate_refund_amount,
+    CreatePaymentParams, Payment, PaymentId, PaymentSourceRequest, TokenSource, can_void_payment,
+    is_void_fallback_eligible, remaining_refundable_amount, validate_refund_amount,
 };
 use crate::resources::tokens::{TokenId, require_active_token};
 use crate::webhook_engine::{ConstantTimeSecretVerifier, REPLAY_TOLERANCE};
@@ -276,9 +276,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
         amount_minor: Option<u64>,
     ) -> Pin<Box<dyn Future<Output = Result<UnifiedReversalResponse, Self::Error>> + Send + 'a>>
     {
-        Box::pin(
-            async move { execute_unified_reversal(self, transaction_id, amount_minor).await },
-        )
+        Box::pin(async move { execute_unified_reversal(self, transaction_id, amount_minor).await })
     }
 
     fn verify_webhook(
@@ -451,13 +449,12 @@ mod tests {
             .build()
             .unwrap();
 
-        let intent_req =
-            UnifiedIntentRequest::new(15000, "SAR", "https://example.com/cb").description("Order #1");
+        let intent_req = UnifiedIntentRequest::new(15000, "SAR", "https://example.com/cb")
+            .description("Order #1");
         let intent = client.create_intent(intent_req).await.unwrap();
         assert_eq!(intent.amount_minor, 15000);
 
-        let charge_req =
-            UnifiedTokenChargeRequest::new(15000, "SAR", "token_abc", Uuid::new_v4());
+        let charge_req = UnifiedTokenChargeRequest::new(15000, "SAR", "token_abc", Uuid::new_v4());
         let charge = client.charge_saved_token(charge_req).await.unwrap();
         assert_eq!(charge.transaction_id, "pay_01J9UNIFIED");
 

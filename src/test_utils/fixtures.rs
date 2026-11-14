@@ -70,7 +70,11 @@ fn payment_fixture_data(event_type: &str, created_at: &str) -> Value {
         _ => "paid",
     };
     let refunded = if status == "refunded" { 15000 } else { 0 };
-    let refunded_fmt = if refunded > 0 { "150.00 SAR" } else { "0.00 SAR" };
+    let refunded_fmt = if refunded > 0 {
+        "150.00 SAR"
+    } else {
+        "0.00 SAR"
+    };
     json!({
         "id": "pay_01J9FIXTURE",
         "status": status,

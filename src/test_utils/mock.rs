@@ -161,19 +161,11 @@ mod tests {
             .build()
             .expect("loopback mock server URL allowed in test-utils");
 
-        #[cfg(all(
-            feature = "payments",
-            feature = "payment-intents",
-            feature = "tokens"
-        ))]
+        #[cfg(all(feature = "payments", feature = "payment-intents", feature = "tokens"))]
         verify_sdk_services_against_mock(&client).await;
     }
 
-    #[cfg(all(
-        feature = "payments",
-        feature = "payment-intents",
-        feature = "tokens"
-    ))]
+    #[cfg(all(feature = "payments", feature = "payment-intents", feature = "tokens"))]
     async fn verify_sdk_services_against_mock(client: &MoyasarClient<SecretKey>) {
         use crate::kernel::types::Currency;
         use crate::resources::payment_intents::CreatePaymentIntentParams;
