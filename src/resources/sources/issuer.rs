@@ -260,9 +260,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let sk_client =
-            MoyasarClient::new(SecretKey::new("sk_test_wiremock").expect("valid key"))
-                .expect("client builds");
+        let sk_client = MoyasarClient::new(SecretKey::new("sk_test_wiremock").expect("valid key"))
+            .expect("client builds");
         let pk_client =
             MoyasarClient::new(PublishableKey::new("pk_test_wiremock").expect("valid key"))
                 .expect("client builds");
@@ -317,9 +316,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client =
-            MoyasarClient::new(SecretKey::new("sk_test_wiremock").expect("valid key"))
-                .expect("client builds");
+        let client = MoyasarClient::new(SecretKey::new("sk_test_wiremock").expect("valid key"))
+            .expect("client builds");
         let url = format!("{}/v1/source/issuer", server.uri());
         let params = BinLookupParams::new("420132").expect("valid BIN");
 
@@ -327,5 +325,23 @@ mod tests {
             .await
             .expect("recovers after 503");
         assert_eq!(meta.issuer_name.as_deref(), Some("Riyad Bank"));
+
+        let server_422 = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/source/issuer"))
+            .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
+                "type": "invalid_request_error",
+                "message": "Invalid BIN prefix"
+            })))
+            .expect(1)
+            .mount(&server_422)
+            .await;
+
+        let url_422 = format!("{}/v1/source/issuer", server_422.uri());
+        let err = execute_with_retry(2, || send_issuer_request(&client, &url_422, &params))
+            .await
+            .expect_err("422 must not succeed or retry");
+        assert!(matches!(err, MoyasarError::Api { .. }));
+        assert!(!err.is_retryable());
     }
 }
