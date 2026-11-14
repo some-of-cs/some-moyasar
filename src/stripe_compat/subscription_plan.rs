@@ -34,7 +34,12 @@ pub struct SubscriptionPlan {
 impl SubscriptionPlan {
     /// Creates a new [`SubscriptionPlan`].
     #[must_use]
-    pub fn new(id: impl Into<String>, amount: u64, currency: Currency, interval: PlanInterval) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        amount: u64,
+        currency: Currency,
+        interval: PlanInterval,
+    ) -> Self {
         Self {
             id: id.into(),
             amount,
@@ -59,7 +64,10 @@ impl SubscriptionPlan {
     /// assert_eq!(e, Utc.with_ymd_and_hms(2024, 2, 29, 0, 0, 0).unwrap());
     /// ```
     #[must_use]
-    pub fn next_period_bounds(&self, period_start: DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
+    pub fn next_period_bounds(
+        &self,
+        period_start: DateTime<Utc>,
+    ) -> (DateTime<Utc>, DateTime<Utc>) {
         next_period_bounds(period_start, self.interval)
     }
 }
@@ -73,11 +81,19 @@ pub fn next_period_bounds(
     let end = match interval {
         PlanInterval::Day => period_start + Duration::days(1),
         PlanInterval::Week => period_start + Duration::weeks(1),
-        PlanInterval::Month => period_start.checked_add_months(Months::new(1)).unwrap_or(period_start + Duration::days(30)),
-        PlanInterval::Year => period_start.checked_add_months(Months::new(12)).unwrap_or_else(|| {
-            let days = if is_leap_year(period_start.year()) { 366 } else { 365 };
-            period_start + Duration::days(days)
-        }),
+        PlanInterval::Month => period_start
+            .checked_add_months(Months::new(1))
+            .unwrap_or(period_start + Duration::days(30)),
+        PlanInterval::Year => period_start
+            .checked_add_months(Months::new(12))
+            .unwrap_or_else(|| {
+                let days = if is_leap_year(period_start.year()) {
+                    366
+                } else {
+                    365
+                };
+                period_start + Duration::days(days)
+            }),
     };
     (period_start, end)
 }
@@ -96,15 +112,27 @@ mod tests {
     fn tc_8_2_0_05_computes_bounds_across_all_intervals_and_leap_years() {
         let start = Utc.with_ymd_and_hms(2024, 1, 31, 12, 0, 0).unwrap();
         let (_, day_end) = next_period_bounds(start, PlanInterval::Day);
-        assert_eq!(day_end, Utc.with_ymd_and_hms(2024, 2, 1, 12, 0, 0).unwrap());
+        assert_eq!(
+            day_end,
+            Utc.with_ymd_and_hms(2024, 2, 1, 12, 0, 0).unwrap()
+        );
 
         let (_, week_end) = next_period_bounds(start, PlanInterval::Week);
-        assert_eq!(week_end, Utc.with_ymd_and_hms(2024, 2, 7, 12, 0, 0).unwrap());
+        assert_eq!(
+            week_end,
+            Utc.with_ymd_and_hms(2024, 2, 7, 12, 0, 0).unwrap()
+        );
 
         let (_, month_end) = next_period_bounds(start, PlanInterval::Month);
-        assert_eq!(month_end, Utc.with_ymd_and_hms(2024, 2, 29, 12, 0, 0).unwrap());
+        assert_eq!(
+            month_end,
+            Utc.with_ymd_and_hms(2024, 2, 29, 12, 0, 0).unwrap()
+        );
 
         let (_, year_end) = next_period_bounds(start, PlanInterval::Year);
-        assert_eq!(year_end, Utc.with_ymd_and_hms(2025, 1, 31, 12, 0, 0).unwrap());
+        assert_eq!(
+            year_end,
+            Utc.with_ymd_and_hms(2025, 1, 31, 12, 0, 0).unwrap()
+        );
     }
 }
