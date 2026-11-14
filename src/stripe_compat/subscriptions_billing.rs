@@ -90,6 +90,7 @@ mod tests {
 
     use super::*;
     use crate::kernel::auth::SecretKey;
+    use crate::kernel::error::ApiErrorType;
 
     fn token_response(status: &str) -> serde_json::Value {
         json!({
@@ -111,6 +112,8 @@ mod tests {
                 "id": "token_inactive",
                 "status": "inactive",
                 "number": "411111XXXXXX1111",
+                "company": "visa",
+                "gateway_id": "gw_1",
                 "created_at": "2026-11-14T10:00:00Z"
             })))
             .mount(&server)
@@ -126,7 +129,13 @@ mod tests {
             .charge_cycle("sub_pro_9921", 4, 29900, Currency::SAR, &bad_tok)
             .await
             .expect_err("inactive token rejected pre-charge");
-        assert!(matches!(err, MoyasarError::InvalidTokenId));
+        assert!(matches!(
+            err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                ..
+            }
+        ));
 
         Mock::given(method("GET"))
             .and(path("/v1/tokens/token_abc"))
