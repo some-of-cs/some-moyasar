@@ -33,7 +33,8 @@ impl<K: SecretAuthKey> SubscriptionsService<'_, K> {
                 self.refund_partial(&id, amount_halalas).await
             }
             RefundStrategy::ProRata { canceled_at } => {
-                self.refund_pro_rata(&id, &payment, params, canceled_at).await
+                self.refund_pro_rata(&id, &payment, params, canceled_at)
+                    .await
             }
         }
     }
