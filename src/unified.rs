@@ -291,7 +291,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
         let event = verifier
             .verify_and_construct(raw_body)
             .map_err(|_| MoyasarError::InvalidWebhookSecret)?;
-        Ok(map_unified_webhook_event(event))
+        Ok(map_unified_webhook_event(&event))
     }
 }
 
@@ -324,7 +324,7 @@ impl MoyasarClient<SecretKey> {
         let event = verifier
             .verify_and_construct(raw_body)
             .map_err(|_| MoyasarError::InvalidWebhookSecret)?;
-        Ok(map_unified_webhook_event(event))
+        Ok(map_unified_webhook_event(&event))
     }
 }
 
@@ -394,13 +394,13 @@ fn resolved_webhook_secret(client: &MoyasarClient<SecretKey>) -> &str {
         .unwrap_or_else(|| client.key().expose_secret())
 }
 
-fn map_unified_webhook_event(event: WebhookEvent) -> UnifiedWebhookEvent {
+fn map_unified_webhook_event(event: &WebhookEvent) -> UnifiedWebhookEvent {
     UnifiedWebhookEvent {
         id: event.id,
         event_type: event.event_type.as_str().to_owned(),
         created_at: event.created_at,
         live: event.live,
-        data: event.data,
+        data: event.data.clone(),
     }
 }
 
