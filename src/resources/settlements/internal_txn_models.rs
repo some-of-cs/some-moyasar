@@ -254,10 +254,7 @@ mod tests {
 
         let unknown_txn: InternalTransaction =
             serde_json::from_value(unknown_payload).expect("unknown recipient_type deserializes");
-        assert_eq!(
-            unknown_txn.recipient_type,
-            SettlementRecipientType::Unknown
-        );
+        assert_eq!(unknown_txn.recipient_type, SettlementRecipientType::Unknown);
         assert_eq!(unknown_txn.transfer_id.as_deref(), Some("tr_01J9XYZ"));
     }
 }
