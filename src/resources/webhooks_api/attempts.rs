@@ -103,7 +103,7 @@ impl<'a, K: SecretAuthKey> WebhooksService<'a, K> {
             if let Some(filter) = params {
                 req = req.query(filter);
             }
-            let response = req.send().await.map_err(map_reqwest_error)?;
+            let response = req.send().await.map_err(MoyasarError::from)?;
             parse_attempts_list_response(response).await
         })
         .await
@@ -136,7 +136,7 @@ impl<'a, K: SecretAuthKey> WebhooksService<'a, K> {
         let retries = self.client().config().max_network_retries;
 
         execute_with_retry(retries, || async {
-            let response = http.get(&url).send().await.map_err(map_reqwest_error)?;
+            let response = http.get(&url).send().await.map_err(MoyasarError::from)?;
             parse_attempt_response(response).await
         })
         .await
@@ -147,7 +147,7 @@ async fn parse_attempts_list_response(
     response: reqwest::Response,
 ) -> Result<PaginatedList<WebhookAttempt>, MoyasarError> {
     let status = response.status();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
@@ -163,7 +163,7 @@ async fn parse_attempt_response(
     response: reqwest::Response,
 ) -> Result<WebhookAttempt, MoyasarError> {
     let status = response.status();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
@@ -171,14 +171,6 @@ async fn parse_attempt_response(
         status: status.as_u16(),
         message: format!("failed to decode WebhookAttempt response: {err}"),
     })
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
 }
 
 #[cfg(test)]
@@ -270,7 +262,7 @@ mod tests {
                 .query(&params)
                 .send()
                 .await
-                .map_err(map_reqwest_error)?;
+                .map_err(MoyasarError::from)?;
             parse_attempts_list_response(resp).await
         })
         .await
@@ -301,7 +293,7 @@ mod tests {
         let url = format!("{}/v1/webhooks/attempts", server.uri());
         let http = reqwest::Client::new();
         let err = execute_with_retry(1, || async {
-            let resp = http.get(&url).send().await.map_err(map_reqwest_error)?;
+            let resp = http.get(&url).send().await.map_err(MoyasarError::from)?;
             parse_attempts_list_response(resp).await
         })
         .await
@@ -343,7 +335,7 @@ mod tests {
         let http = reqwest::Client::new();
         let ok_url = format!("{}/v1/webhooks/attempts/{attempt_id}", server.uri());
         let attempt = execute_with_retry(1, || async {
-            let resp = http.get(&ok_url).send().await.map_err(map_reqwest_error)?;
+            let resp = http.get(&ok_url).send().await.map_err(MoyasarError::from)?;
             parse_attempt_response(resp).await
         })
         .await
@@ -373,7 +365,7 @@ mod tests {
                 .get(&missing_url)
                 .send()
                 .await
-                .map_err(map_reqwest_error)?;
+                .map_err(MoyasarError::from)?;
             parse_attempt_response(resp).await
         })
         .await

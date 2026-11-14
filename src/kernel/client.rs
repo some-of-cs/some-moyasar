@@ -4,7 +4,7 @@ use core::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 
 use crate::kernel::auth::{AuthKey, SecretKey};
 use crate::kernel::error::MoyasarError;
@@ -153,6 +153,14 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
     /// Validates configuration and builds the `MoyasarClient`.
     pub fn build(self) -> Result<MoyasarClient<K>, MoyasarError> {
         validate_https_url(&self.config.base_url)?;
+        if self
+            .config
+            .webhook_secret
+            .as_ref()
+            .is_some_and(|s| s.expose_secret().trim().is_empty())
+        {
+            return Err(MoyasarError::InvalidWebhookSecret);
+        }
         let headers = build_default_headers(&self.key)?;
         let http = reqwest::Client::builder()
             .timeout(self.config.timeout)
@@ -178,8 +186,6 @@ impl<K: AuthKey> fmt::Debug for MoyasarClient<K> {
 
 #[cfg(test)]
 mod tests {
-    use secrecy::ExposeSecret;
-
     use super::*;
 
     #[test]
@@ -217,6 +223,18 @@ mod tests {
         let dbg = format!("{cloned:?}");
         assert!(!dbg.contains("sk_test_secret_value"));
         assert!(!dbg.contains("whsec_configured_123"));
+    }
+
+    #[test]
+    fn rejects_empty_or_whitespace_webhook_secret() {
+        for empty_secret in ["", "   "] {
+            let key = SecretKey::new("sk_test_123").expect("valid key");
+            let err = MoyasarClient::builder(key)
+                .webhook_secret(empty_secret)
+                .build()
+                .expect_err("empty webhook secret must fail build");
+            assert!(matches!(err, MoyasarError::InvalidWebhookSecret));
+        }
     }
 
     #[tokio::test]

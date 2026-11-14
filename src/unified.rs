@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::kernel::auth::{AuthKey, SecretKey};
 use crate::kernel::client::MoyasarClient;
-use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::error::MoyasarError;
 use crate::kernel::types::Currency;
 use crate::resources::payment_intents::CreatePaymentIntentParams;
 use crate::resources::payments::{
@@ -19,19 +19,6 @@ use crate::resources::payments::{
 };
 use crate::resources::tokens::{TokenId, require_active_token};
 use crate::webhook_engine::{ConstantTimeSecretVerifier, REPLAY_TOLERANCE};
-
-const CURRENCY_TABLE: [(&str, Currency); 10] = [
-    ("SAR", Currency::SAR),
-    ("USD", Currency::USD),
-    ("KWD", Currency::KWD),
-    ("BHD", Currency::BHD),
-    ("AED", Currency::AED),
-    ("QAR", Currency::QAR),
-    ("OMR", Currency::OMR),
-    ("EUR", Currency::EUR),
-    ("GBP", Currency::GBP),
-    ("JPY", Currency::JPY),
-];
 
 /// Cross-gateway request parameters for creating a hosted/client-secret payment intent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -225,7 +212,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
         request: UnifiedIntentRequest<'a>,
     ) -> Pin<Box<dyn Future<Output = Result<UnifiedIntentResponse, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            let cur = parse_currency(request.currency)?;
+            let cur: Currency = request.currency.parse()?;
             let mut params =
                 CreatePaymentIntentParams::new(request.amount_minor, cur, request.callback_url);
             if let Some(desc) = request.description {
@@ -247,7 +234,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
         request: UnifiedTokenChargeRequest<'a>,
     ) -> Pin<Box<dyn Future<Output = Result<UnifiedChargeResponse, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            let cur = parse_currency(request.currency)?;
+            let cur: Currency = request.currency.parse()?;
             let token_id = TokenId::new(request.token_id)?;
             let token = self.tokens().retrieve(&token_id).await?;
             require_active_token(token.status)?;
@@ -342,20 +329,6 @@ fn build_reversal_response(
         amount_reversed_minor,
         currency: payment.currency,
     }
-}
-
-fn parse_currency(raw: &str) -> Result<Currency, MoyasarError> {
-    let upper = raw.to_ascii_uppercase();
-    CURRENCY_TABLE
-        .iter()
-        .find(|(code, _)| *code == upper)
-        .map(|(_, cur)| *cur)
-        .ok_or_else(|| MoyasarError::Api {
-            error_type: ApiErrorType::InvalidRequestError,
-            message: format!("unsupported currency: {raw}"),
-            errors: Vec::new(),
-            response_code: None,
-        })
 }
 
 #[cfg(test)]

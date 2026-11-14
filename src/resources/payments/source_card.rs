@@ -3,30 +3,16 @@
 use core::fmt;
 
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 
+use crate::kernel::auth::serialize_secret;
 use crate::kernel::error::MoyasarError;
+use crate::kernel::types::is_valid_prefixed_id;
 
 use super::card_validation::validate_card_fields;
 
-fn serialize_secret<S: Serializer>(
-    secret: &SecretString,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(secret.expose_secret())
-}
-
 fn is_valid_card_auth_id(auth_id: &str) -> bool {
-    match auth_id.strip_prefix("ca_") {
-        Some(suffix) => {
-            !suffix.is_empty()
-                && !suffix.contains("..")
-                && !suffix
-                    .chars()
-                    .any(|ch| ch.is_whitespace() || matches!(ch, '/' | '?' | '#'))
-        }
-        None => false,
-    }
+    is_valid_prefixed_id(auth_id, "ca_")
 }
 
 /// Credit or debit card payment source (`type: "creditcard"`).

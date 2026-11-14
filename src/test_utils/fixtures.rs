@@ -69,11 +69,17 @@ fn payment_fixture_data(event_type: &str, created_at: &str) -> Value {
         "payment_abandoned" => "initiated",
         _ => "paid",
     };
-    let refunded = if status == "refunded" { 15000 } else { 0 };
+    let refunded = if status == "refunded" { 15000_u64 } else { 0 };
     let refunded_fmt = if refunded > 0 {
         "150.00 SAR"
     } else {
         "0.00 SAR"
+    };
+    let is_captured = matches!(status, "paid" | "captured" | "refunded");
+    let (captured, captured_fmt) = if is_captured {
+        (15000_u64, "150.00 SAR")
+    } else {
+        (0_u64, "0.00 SAR")
     };
     json!({
         "id": "pay_01J9FIXTURE",
@@ -84,8 +90,8 @@ fn payment_fixture_data(event_type: &str, created_at: &str) -> Value {
         "fee_format": "0.00 SAR",
         "refunded": refunded,
         "refunded_format": refunded_fmt,
-        "captured": 15000,
-        "captured_format": "150.00 SAR",
+        "captured": captured,
+        "captured_format": captured_fmt,
         "currency": "SAR",
         "source": {"type": "creditcard", "company": "mada"},
         "created_at": created_at,
@@ -223,7 +229,11 @@ mod tests {
             if name.starts_with("card_auth_") {
                 evt.into_card_auth().expect("valid CardAuthentication");
             } else {
-                evt.into_payment().expect("valid Payment");
+                let p = evt.into_payment().expect("valid Payment");
+                if matches!(*name, "payment_authorized" | "payment_voided") {
+                    assert_eq!(p.captured, 0);
+                    assert_eq!(p.captured_format.as_deref(), Some("0.00 SAR"));
+                }
             }
         }
 

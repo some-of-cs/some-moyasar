@@ -9,7 +9,9 @@ use crate::kernel::idempotency_v5::derive_subscription_given_id;
 use crate::kernel::types::Currency;
 use crate::resources::payments::{CreatePaymentParams, Payment, PaymentSourceRequest, TokenSource};
 use crate::resources::tokens::{TokenId, require_active_token};
-use crate::stripe_compat::subscriptions_model::{Subscription, SubscriptionCycle};
+use crate::stripe_compat::subscriptions_model::{
+    Subscription, SubscriptionCycle, SubscriptionCycleId,
+};
 
 /// Parameters for charging a single subscription billing cycle off-session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,15 +47,40 @@ impl<'a> SubscriptionCycleChargeParams<'a> {
     }
 
     /// Creates cycle charge parameters from a [`Subscription`] and [`SubscriptionCycle`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `cycle.id` does not match `SubscriptionCycleId::new(&subscription.id, cycle.cycle_index)`.
+    /// Use [`Self::try_from_cycle`] for fallible validation.
     #[must_use]
     pub fn from_cycle(subscription: &'a Subscription, cycle: &'a SubscriptionCycle) -> Self {
-        Self {
+        Self::try_from_cycle(subscription, cycle)
+            .expect("cycle.id must belong to the provided subscription")
+    }
+
+    /// Fallibly creates cycle charge parameters after verifying `cycle.id` belongs to `subscription`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoyasarError::Api`] (`InvalidRequestError`) when `cycle.id` does not match
+    /// `SubscriptionCycleId::new(&subscription.id, cycle.cycle_index)`.
+    pub fn try_from_cycle(
+        subscription: &'a Subscription,
+        cycle: &'a SubscriptionCycle,
+    ) -> Result<Self, MoyasarError> {
+        let expected_id = SubscriptionCycleId::new(&subscription.id, cycle.cycle_index);
+        if cycle.id != expected_id {
+            return Err(MoyasarError::invalid_request(
+                "subscription cycle does not belong to the given subscription",
+            ));
+        }
+        Ok(Self {
             subscription_id: &subscription.id,
             cycle_index: cycle.cycle_index,
             amount: cycle.amount,
             currency: cycle.currency,
             token_id: &subscription.token_id,
-        }
+        })
     }
 
     /// Overrides the billing currency (defaults to [`Currency::SAR`]).
@@ -168,6 +195,29 @@ mod tests {
             "source": {"type": "token"},
             "created_at": "2026-11-14T10:00:00Z", "updated_at": "2026-11-14T10:00:00Z"
         })
+    }
+
+    #[test]
+    fn rejects_cycle_from_different_subscription() {
+        use chrono::Utc;
+
+        let now = Utc::now();
+        let sub_a = Subscription {
+            id: "sub_A".to_owned(),
+            customer_id: "cus_1".to_owned(),
+            token_id: TokenId::new("token_a").unwrap(),
+            current_cycle: 1,
+        };
+        let cycle_b = SubscriptionCycle {
+            id: SubscriptionCycleId::new("sub_B", 1),
+            cycle_index: 1,
+            amount: 20000,
+            currency: Currency::SAR,
+            payment_id: None,
+            period_start: now,
+            period_end: now,
+        };
+        assert!(SubscriptionCycleChargeParams::try_from_cycle(&sub_a, &cycle_b).is_err());
     }
 
     #[tokio::test]

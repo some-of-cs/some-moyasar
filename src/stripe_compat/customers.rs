@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::MoyasarError;
+use crate::kernel::idempotency_v5::MOYASAR_SUBSCRIPTION_NAMESPACE;
 use crate::kernel::metadata::Metadata;
 use crate::kernel::types::Currency;
 use crate::resources::payments::{CreatePaymentParams, Payment, PaymentSourceRequest, TokenSource};
@@ -177,17 +178,34 @@ impl<K: SecretAuthKey, V: CustomerVault> CustomersService<'_, K, V> {
         let enriched = inject_customer_metadata(params.metadata.clone(), params.customer_id)?;
         let mut source = TokenSource::new(token_id.as_str())?;
         source.three_ds = Some(false);
-        let mut builder = CreatePaymentParams::builder()
+        let given_id = params
+            .given_id
+            .unwrap_or_else(|| derive_customer_charge_given_id(params, token_id, &enriched));
+        let req = CreatePaymentParams::builder()
             .amount(params.amount)
             .currency(params.currency)
+            .given_id(given_id)
             .payment_source(PaymentSourceRequest::Token(source))
-            .metadata(enriched);
-        if let Some(id) = params.given_id {
-            builder = builder.given_id(id);
-        }
-        let req = builder.build()?;
+            .metadata(enriched)
+            .build()?;
         self.client.payments().create(&req).await
     }
+}
+
+fn derive_customer_charge_given_id(
+    params: &CustomerChargeParams<'_>,
+    token_id: &TokenId,
+    metadata: &Metadata,
+) -> Uuid {
+    let meta_json = serde_json::to_string(metadata).unwrap_or_default();
+    let scope = format!(
+        "customer_charge:{}:{}:{}:{}:{meta_json}",
+        params.customer_id,
+        token_id.as_str(),
+        params.amount,
+        params.currency.as_str()
+    );
+    Uuid::new_v5(&MOYASAR_SUBSCRIPTION_NAMESPACE, scope.as_bytes())
 }
 
 #[cfg(test)]
@@ -222,6 +240,16 @@ mod tests {
             .expect(1)
             .mount(server)
             .await;
+    }
+
+    #[test]
+    fn derives_stable_given_id_when_omitted() {
+        let tok = TokenId::new("token_cus101").unwrap();
+        let meta = inject_customer_metadata(None, "cus_101").unwrap();
+        let params = CustomerChargeParams::new("cus_101", 15000, Currency::SAR);
+        let id1 = derive_customer_charge_given_id(&params, &tok, &meta);
+        let id2 = derive_customer_charge_given_id(&params, &tok, &meta);
+        assert_eq!(id1, id2);
     }
 
     #[test]

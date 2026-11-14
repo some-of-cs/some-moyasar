@@ -111,18 +111,10 @@ impl<'a, K: SecretAuthKey> PayoutAccountsService<'a, K> {
         let retries = self.client().config().max_network_retries;
 
         execute_with_retry(retries, || async {
-            let response = http.get(&url).send().await.map_err(map_reqwest_error)?;
+            let response = http.get(&url).send().await.map_err(MoyasarError::from)?;
             parse_retrieve_response(response).await
         })
         .await
-    }
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
     }
 }
 
@@ -130,7 +122,7 @@ async fn parse_retrieve_response(
     response: reqwest::Response,
 ) -> Result<PayoutAccount, MoyasarError> {
     let status = response.status();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }

@@ -6,6 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 use zeroize::Zeroize;
 
 use crate::kernel::error::MoyasarError;
+use crate::kernel::types::is_valid_prefixed_id;
 
 /// Validated `ca_`-prefixed identifier for a standalone 3D Secure card authentication.
 ///
@@ -26,14 +27,6 @@ use crate::kernel::error::MoyasarError;
 #[serde(transparent)]
 pub struct CardAuthId(String);
 
-fn is_valid_id_char(c: char) -> bool {
-    !c.is_whitespace() && !"/?#\\".contains(c)
-}
-
-fn is_valid_card_auth_suffix(suffix: &str) -> bool {
-    !suffix.is_empty() && !suffix.contains("..") && suffix.chars().all(is_valid_id_char)
-}
-
 impl CardAuthId {
     /// Validates and constructs a [`CardAuthId`] from a raw string.
     ///
@@ -45,10 +38,7 @@ impl CardAuthId {
     /// or has an empty/unsafe suffix after `ca_`.
     pub fn new(raw: impl Into<String>) -> Result<Self, MoyasarError> {
         let raw = raw.into();
-        if raw
-            .strip_prefix("ca_")
-            .is_some_and(is_valid_card_auth_suffix)
-        {
+        if is_valid_prefixed_id(&raw, "ca_") {
             return Ok(Self(raw));
         }
         Err(MoyasarError::InvalidCardAuthId)

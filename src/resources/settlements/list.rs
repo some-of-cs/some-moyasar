@@ -1,12 +1,11 @@
 //! Settlement listing (`ListSettlementsParams`, `SettlementsService::list`).
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use serde::de::DeserializeOwned;
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::send_get_json as send_get;
 use crate::resources::settlements::models::{Settlement, SettlementId};
 use crate::resources::settlements::service::SettlementsService;
 
@@ -165,43 +164,6 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
         )
         .await
     }
-}
-
-async fn send_get<T: DeserializeOwned>(
-    http: &reqwest::Client,
-    url: &str,
-    max_retries: u32,
-    query: &[(String, String)],
-) -> Result<T, MoyasarError> {
-    execute_with_retry(max_retries, || async {
-        let response = http
-            .get(url)
-            .query(query)
-            .send()
-            .await
-            .map_err(map_reqwest_error)?;
-        decode_response(response).await
-    })
-    .await
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
-
-async fn decode_response<T: DeserializeOwned>(
-    response: reqwest::Response,
-) -> Result<T, MoyasarError> {
-    let status = response.status();
-    if status.is_success() {
-        return response.json::<T>().await.map_err(map_reqwest_error);
-    }
-    let body = response.text().await.map_err(map_reqwest_error)?;
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
 }
 
 #[cfg(test)]

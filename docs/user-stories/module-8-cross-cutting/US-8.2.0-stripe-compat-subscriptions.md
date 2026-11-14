@@ -194,25 +194,25 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-8.2.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..5`)
-- [ ] **Unit 1 (`feat/us-8.2.0/unit-1-subscription-model`)**: `SubscriptionCycle`, `SubscriptionCycleId`, `Subscription`, `RefundStrategy` enum (Full, Partial, ProRata { canceled_at }) (Files: `src/stripe_compat/subscriptions_model.rs`)  
+- [x] **Unit 1 (`feat/us-8.2.0/unit-1-subscription-model`)**: `SubscriptionCycle`, `SubscriptionCycleId`, `Subscription`, `RefundStrategy` enum (Full, Partial, ProRata { canceled_at }) (Files: `src/stripe_compat/subscriptions_model.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-8.2.0/unit-2-subscription-billing`)**: `client.subscriptions().charge_cycle(sub_id, cycle_index, amount, token_id)`, deterministic UUIDv5: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")`, token status check before charge (Files: `src/stripe_compat/subscriptions_billing.rs`)  
+- [x] **Unit 2 (`feat/us-8.2.0/unit-2-subscription-billing`)**: `client.subscriptions().charge_cycle(sub_id, cycle_index, amount, token_id)`, deterministic UUIDv5: `Uuid::new_v5(&NAMESPACE, "{sub_id}:{cycle_index}")`, token status check before charge (Files: `src/stripe_compat/subscriptions_billing.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-8.2.0/unit-3-pro-rata-calculator`)**: `pro_rata_refund(amount, period_start, period_end, canceled_at) -> u64` — exact halala calculation: `ceil(amount * remaining / total)`, unit tests for 30-day, 365-day, leap-year periods (Files: `src/stripe_compat/pro_rata.rs`)  
+- [x] **Unit 3 (`feat/us-8.2.0/unit-3-pro-rata-calculator`)**: `pro_rata_refund(amount, period_start, period_end, canceled_at) -> u64` — exact halala calculation: `ceil(amount * remaining / total)`, unit tests for 30-day, 365-day, leap-year periods (Files: `src/stripe_compat/pro_rata.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-8.2.0/unit-4-cycle-refund`)**: `client.subscriptions().refund_cycle(params)`: locate cycle Payment, compute pro-rata, execute refund/void with smart routing, `SubscriptionCycleRefundResult` (action, amount, payment_id) (Files: `src/stripe_compat/subscriptions_refund.rs`)  
+- [x] **Unit 4 (`feat/us-8.2.0/unit-4-cycle-refund`)**: `client.subscriptions().refund_cycle(params)`: locate cycle Payment, compute pro-rata, execute refund/void with smart routing, `SubscriptionCycleRefundResult` (action, amount, payment_id) (Files: `src/stripe_compat/subscriptions_refund.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
-- [ ] **Unit 5 (`feat/us-8.2.0/unit-5-subscription-plan`)**: `SubscriptionPlan`, `PlanInterval` (`Day`, `Week`, `Month`, `Year`), billing period boundary calculator (`next_period_bounds`), and subscription cycle unit tests (Files: `src/stripe_compat/subscription_plan.rs`)  
+- [x] **Unit 5 (`feat/us-8.2.0/unit-5-subscription-plan`)**: `SubscriptionPlan`, `PlanInterval` (`Day`, `Week`, `Month`, `Year`), billing period boundary calculator (`next_period_bounds`), and subscription cycle unit tests (Files: `src/stripe_compat/subscription_plan.rs`)  
   *Agent*: `engineering-rust-refactoring-specialist` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 5` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -238,14 +238,14 @@ sequenceDiagram
 - **128-Bit Integer Math**: overflow-proof ceiling division.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Idempotency Test**: retrying `charge_cycle` with identical `(sub_id, cycle_index)` produces identical `given_id`.
-- [ ] **Pro-Rata Overflow Test**: large amounts (`u64::MAX / 2`) do not overflow `u128` intermediate math.
-- [ ] **Active Token Test**: `TokenStatus::Inactive` aborts `charge_cycle` before `POST /v1/payments`.
+- [x] **Idempotency Test**: retrying `charge_cycle` with identical `(sub_id, cycle_index)` produces identical `given_id`.
+- [x] **Pro-Rata Overflow Test**: large amounts (`u64::MAX / 2`) do not overflow `u128` intermediate math.
+- [x] **Active Token Test**: `TokenStatus::Inactive` aborts `charge_cycle` before `POST /v1/payments`.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Subscription billing and pro-rata refunds verified against OWASP ASVS Level 2.
-- [ ] Zero floating-point arithmetic in money calculations.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Subscription billing and pro-rata refunds verified against OWASP ASVS Level 2.
+- [x] Zero floating-point arithmetic in money calculations.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
@@ -254,31 +254,31 @@ sequenceDiagram
 **Status: Ready for Implementation.**
 
 ### G0 — Build, lint & format
-- [ ] **US-8.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-8.2.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-8.2.0-G1:** ≥90% line / ≥85% branch on `stripe_compat` subscriptions.
+- [x] **US-8.2.0-G1:** ≥90% line / ≥85% branch on `stripe_compat` subscriptions.
 
 ### G2 — Security audit
-- [ ] **US-8.2.0-G2:** Recurring-billing audit passes with zero critical/high findings.
+- [x] **US-8.2.0-G2:** Recurring-billing audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-8.2.0-G3:** `stripe_compat` subscriptions compose cleanly over `core` (`idempotency`), `payments`, and `tokens`.
+- [x] **US-8.2.0-G3:** `stripe_compat` subscriptions compose cleanly over `core` (`idempotency`), `payments`, and `tokens`.
 
 ### G-Review — Code review
-- [ ] **US-8.2.0-G-Review:** Peer review on `u128` pro-rata ceiling math and UUIDv5 derivation.
+- [x] **US-8.2.0-G-Review:** Peer review on `u128` pro-rata ceiling math and UUIDv5 derivation.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-8.2.0-G-Borrow:** Subscription IDs and token IDs borrowed during request construction.
+- [x] **US-8.2.0-G-Borrow:** Subscription IDs and token IDs borrowed during request construction.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-8.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-8.2.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-8.2.0-G-Docs:** 100% public symbols documented; subscription cycle charge and pro-rata refund examples runnable.
+- [x] **US-8.2.0-G-Docs:** 100% public symbols documented; subscription cycle charge and pro-rata refund examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-8.2.0-G-Law:** SAMA recurring-payment idempotency and pro-rata consumer protection certified.
+- [x] **US-8.2.0-G-Law:** SAMA recurring-payment idempotency and pro-rata consumer protection certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-8.2.0-G4:** Cycle billing, retry deduplication, pro-rata refund, and 2h void fallback verified against mock server.
+- [x] **US-8.2.0-G4:** Cycle billing, retry deduplication, pro-rata refund, and 2h void fallback verified against mock server.

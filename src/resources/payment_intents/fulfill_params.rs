@@ -3,9 +3,10 @@
 use core::fmt;
 
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use zeroize::Zeroize;
 
+use crate::kernel::auth::serialize_secret;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::metadata::Metadata;
 use crate::resources::payment_intents::fulfill_guard::validate_client_secret;
@@ -87,13 +88,6 @@ impl fmt::Debug for PaymentSourceRequest {
             Self::StcPay { mobile } => f.debug_struct("StcPay").field("mobile", mobile).finish(),
         }
     }
-}
-
-fn serialize_secret<S: Serializer>(
-    secret: &SecretString,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(secret.expose_secret())
 }
 
 /// Request payload for fulfilling a [`PaymentIntent`](crate::resources::payment_intents::models::PaymentIntent)

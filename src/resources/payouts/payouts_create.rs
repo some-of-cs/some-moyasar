@@ -150,7 +150,7 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
                 .json(params)
                 .send()
                 .await
-                .map_err(map_reqwest_error)?;
+                .map_err(MoyasarError::from)?;
             parse_payout_response(response).await
         })
         .await
@@ -159,7 +159,7 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
 
 async fn parse_payout_response(response: reqwest::Response) -> Result<Payout, MoyasarError> {
     let status = response.status();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
@@ -169,14 +169,6 @@ async fn parse_payout_response(response: reqwest::Response) -> Result<Payout, Mo
         errors: Vec::new(),
         response_code: None,
     })
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
 }
 
 #[cfg(test)]

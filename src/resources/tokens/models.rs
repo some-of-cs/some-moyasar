@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize, de};
 
 use crate::kernel::error::MoyasarError;
+use crate::kernel::types::is_valid_prefixed_id;
 
 /// Required prefix for all Moyasar card token identifiers.
 pub const TOKEN_ID_PREFIX: &str = "token_";
@@ -36,14 +37,6 @@ pub const TOKEN_ID_PREFIX: &str = "token_";
 #[serde(transparent)]
 pub struct TokenId(String);
 
-fn is_valid_id_char(c: char) -> bool {
-    !c.is_whitespace() && !"/?#\\".contains(c)
-}
-
-fn is_valid_token_suffix(suffix: &str) -> bool {
-    !suffix.is_empty() && !suffix.contains("..") && suffix.chars().all(is_valid_id_char)
-}
-
 impl TokenId {
     /// Constructs a validated [`TokenId`], rejecting missing `token_` prefixes
     /// or empty/unsafe suffixes.
@@ -54,10 +47,7 @@ impl TokenId {
     /// `"token_"` or has an empty or path-unsafe suffix after the prefix.
     pub fn new(raw: impl Into<String>) -> Result<Self, MoyasarError> {
         let raw = raw.into();
-        if raw
-            .strip_prefix(TOKEN_ID_PREFIX)
-            .is_some_and(is_valid_token_suffix)
-        {
+        if is_valid_prefixed_id(&raw, TOKEN_ID_PREFIX) {
             return Ok(Self(raw));
         }
         Err(MoyasarError::InvalidTokenId)
