@@ -65,7 +65,7 @@ impl<K: SecretAuthKey> SubscriptionsService<'_, K> {
         token_id: &TokenId,
     ) -> Result<Payment, MoyasarError> {
         let token = self.client.tokens().retrieve(token_id).await?;
-        require_active_token(&token)?;
+        require_active_token(token.status)?;
 
         let given_id = derive_subscription_given_id(sub_id, cycle_index);
         let mut source = TokenSource::new(token_id.as_str())?;
