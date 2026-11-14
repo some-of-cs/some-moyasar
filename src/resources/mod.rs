@@ -15,6 +15,9 @@ pub mod invoices;
 #[cfg(feature = "card-auths")]
 pub mod card_auths;
 
+#[cfg(feature = "settlements-ledger")]
+pub mod settlements;
+
 #[cfg(feature = "sources")]
 pub mod sources;
 
