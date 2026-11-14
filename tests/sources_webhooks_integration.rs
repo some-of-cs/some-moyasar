@@ -74,13 +74,8 @@ async fn apple_pay_session_initiation_and_negative_guards() {
         .is_err()
     );
     assert!(
-        InitiateApplePayParams::new(
-            "https://apple-pay-gateway.apple.com/paymentservices/startSession",
-            "Some CS",
-            "   ",
-            common::TEST_PK,
-        )
-        .is_err()
+        InitiateApplePayParams::new("https://", "Some CS", "checkout.somecs.com", common::TEST_PK)
+            .is_err()
     );
 
     let ap_params = InitiateApplePayParams::new(
@@ -247,10 +242,14 @@ fn webhook_engine_verifier_and_payment_payload_extractor() {
             "id": "550e8400-e29b-41d4-a716-446655440000",
             "status": "failed",
             "amount": 10000,
+            "amount_format": "100.00 SAR",
             "fee": 0,
+            "fee_format": "0.00 SAR",
             "currency": "SAR",
             "refunded": 0,
+            "refunded_format": "0.00 SAR",
             "captured": 0,
+            "captured_format": "0.00 SAR",
             "created_at": "2026-11-14T11:55:00Z",
             "updated_at": "2026-11-14T11:55:00Z",
             "source": {
