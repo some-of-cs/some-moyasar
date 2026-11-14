@@ -76,8 +76,14 @@ impl<'a, K: AuthKey, V: CustomerVault> CustomersService<'a, K, V> {
 impl<K: AuthKey> MoyasarClient<K> {
     /// Returns a [`CustomersService`] handle bound to `vault`.
     #[must_use]
-    pub const fn customers<'a, V: CustomerVault>(&'a self, vault: &'a V) -> CustomersService<'a, K, V> {
-        CustomersService { client: self, vault }
+    pub const fn customers<'a, V: CustomerVault>(
+        &'a self,
+        vault: &'a V,
+    ) -> CustomersService<'a, K, V> {
+        CustomersService {
+            client: self,
+            vault,
+        }
     }
 }
 
@@ -87,7 +93,11 @@ impl<K: SecretAuthKey, V: CustomerVault> CustomersService<'_, K, V> {
     /// # Errors
     ///
     /// Propagates any [`MoyasarError`] from the underlying vault.
-    pub async fn attach_token(&self, customer_id: &str, token_id: TokenId) -> Result<(), MoyasarError> {
+    pub async fn attach_token(
+        &self,
+        customer_id: &str,
+        token_id: TokenId,
+    ) -> Result<(), MoyasarError> {
         self.vault.associate(customer_id, token_id).await
     }
 
@@ -107,10 +117,11 @@ impl<K: SecretAuthKey, V: CustomerVault> CustomersService<'_, K, V> {
         let tokens = self.vault.resolve_tokens(customer_id).await?;
         let token_id = tokens.first().ok_or(MoyasarError::InvalidTokenId)?;
         let enriched = inject_customer_metadata(metadata, customer_id)?;
+        let source = TokenSource::new(token_id.as_str())?;
         let params = CreatePaymentParams::builder()
             .amount(amount)
             .currency(currency)
-            .payment_source(PaymentSourceRequest::Token(TokenSource::new(token_id.as_str())?))
+            .payment_source(PaymentSourceRequest::Token(source))
             .metadata(enriched)
             .build()?;
         self.client.payments().create(&params).await
