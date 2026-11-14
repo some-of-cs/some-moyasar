@@ -193,7 +193,8 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
         &'a self,
         transaction_id: &'a str,
         amount_minor: Option<u64>,
-    ) -> Pin<Box<dyn Future<Output = Result<UnifiedReversalResponse, Self::Error>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<UnifiedReversalResponse, Self::Error>> + Send + 'a>>
+    {
         Box::pin(async move {
             let id = PaymentId::new(transaction_id)?;
             let payments = self.payments();
@@ -370,7 +371,10 @@ mod tests {
             .unwrap();
         assert_eq!(charge.transaction_id, "pay_01J9UNIFIED");
 
-        let reversal = client.refund_or_void("pay_01J9UNIFIED", None).await.unwrap();
+        let reversal = client
+            .refund_or_void("pay_01J9UNIFIED", None)
+            .await
+            .unwrap();
         assert_eq!(reversal.action, "voided");
         assert_eq!(reversal.amount_reversed_minor, 15000);
 
