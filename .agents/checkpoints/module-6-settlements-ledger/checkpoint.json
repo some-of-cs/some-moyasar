@@ -1,0 +1,77 @@
+{
+  "moduleId": "module-6-settlements-ledger",
+  "title": "Module 6: Settlements & Ledger",
+  "baseBranch": "main",
+  "moduleBranch": "feat/module-6-settlements-ledger",
+  "updatedAt": "2026-11-14T03:55:00Z",
+  "items": {
+    "us-6.1.0": {
+      "status": "In Progress",
+      "branch": "feat/us-6.1.0-settlements",
+      "prNumber": null,
+      "mergedSha": null,
+      "unitCount": 5
+    },
+    "us-6.1.0/unit-1": {
+      "status": "In Progress",
+      "branch": "feat/us-6.1.0/unit-1-settlement-model",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-6.1.0/unit-2": {
+      "status": "In Progress",
+      "branch": "feat/us-6.1.0/unit-2-settlement-list",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-6.1.0/unit-3": {
+      "status": "In Progress",
+      "branch": "feat/us-6.1.0/unit-3-settlement-retrieve",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-6.1.0/unit-4": {
+      "status": "In Progress",
+      "branch": "feat/us-6.1.0/unit-4-settlement-balance",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-6.1.0/unit-5": {
+      "status": "In Progress",
+      "branch": "feat/us-6.1.0/unit-5-settlement-lines",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-6.2.0": {
+      "status": "In Progress",
+      "branch": "feat/us-6.2.0-transfers-internal-txns",
+      "prNumber": null,
+      "mergedSha": null,
+      "unitCount": 4
+    },
+    "us-6.2.0/unit-1": {
+      "status": "In Progress",
+      "branch": "feat/us-6.2.0/unit-1-transfer-models",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-6.2.0/unit-2": {
+      "status": "In Progress",
+      "branch": "feat/us-6.2.0/unit-2-transfer-endpoints",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-6.2.0/unit-3": {
+      "status": "In Progress",
+      "branch": "feat/us-6.2.0/unit-3-internal-txn-model",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-6.2.0/unit-4": {
+      "status": "In Progress",
+      "branch": "feat/us-6.2.0/unit-4-internal-txn-endpoints",
+      "prNumber": null,
+      "mergedSha": null
+    }
+  }
+}
