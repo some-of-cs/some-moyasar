@@ -16,8 +16,13 @@ fn is_configured_real_secret(raw: &str) -> bool {
     !raw.is_empty() && !raw.contains("replace_with")
 }
 
-fn is_usable_test_key<K: AuthKey>(key: &K) -> bool {
-    key.mode() == AuthMode::Test && is_configured_real_secret(key.expose_secret())
+fn parse_configured_key<K: AuthKey>(
+    env_ref: &str,
+    parse: fn(&str) -> Result<K, MoyasarError>,
+) -> Option<K> {
+    parse(env_ref)
+        .ok()
+        .filter(|k| is_configured_real_secret(k.expose_secret()))
 }
 
 fn resolve_test_key<K: AuthKey>(
@@ -25,9 +30,8 @@ fn resolve_test_key<K: AuthKey>(
     fallback: &str,
     parse: fn(&str) -> Result<K, MoyasarError>,
 ) -> K {
-    parse(env_ref)
-        .ok()
-        .filter(is_usable_test_key)
+    parse_configured_key(env_ref, parse)
+        .filter(|k| k.mode() == AuthMode::Test)
         .unwrap_or_else(|| parse(fallback).expect("valid fallback test key"))
 }
 
@@ -53,9 +57,7 @@ fn configured_base_url() -> String {
 /// Attempts to build a real `MoyasarClient<SecretKey>` from `MOYASAR_SECRET_KEY` in `.env`
 /// or the process environment targeting `https://api.moyasar.com` (or `$MOYASAR_BASE_URL`).
 pub fn try_dotenv_secret_client() -> Option<MoyasarClient<SecretKey>> {
-    let key = SecretKey::new("$MOYASAR_SECRET_KEY")
-        .ok()
-        .filter(|k| is_configured_real_secret(k.expose_secret()))?;
+    let key = parse_configured_key("$MOYASAR_SECRET_KEY", SecretKey::new)?;
     MoyasarClient::builder(key)
         .base_url(configured_base_url())
         .build()
@@ -65,10 +67,8 @@ pub fn try_dotenv_secret_client() -> Option<MoyasarClient<SecretKey>> {
 /// Attempts to build a real `MoyasarClient<PublishableKey>` from `MOYASAR_PUBLISHABLE_KEY`
 /// in `.env` or the process environment targeting `https://api.moyasar.com`.
 pub fn try_dotenv_publishable_client() -> Option<MoyasarClient<PublishableKey>> {
-    let key = PublishableKey::new("$MOYASAR_PUBLISHABLE_KEY")
-        .ok()
-        .filter(|k| is_configured_real_secret(k.expose_secret()))?;
-    MoyasarClient::new(key).ok()
+    parse_configured_key("$MOYASAR_PUBLISHABLE_KEY", PublishableKey::new)
+        .and_then(|key| MoyasarClient::new(key).ok())
 }
 
 /// Returns `true` when a real `MOYASAR_SECRET_KEY` is present in `.env` / environment
@@ -80,10 +80,7 @@ pub fn is_live_dotenv_test_enabled() -> bool {
     !disabled && try_dotenv_secret_client().is_some()
 }
 
-async fn start_client_with_key<K: AuthKey>(
-    key: K,
-    retries: u32,
-) -> (MockServer, MoyasarClient<K>) {
+async fn start_client_with_key<K: AuthKey>(key: K, retries: u32) -> (MockServer, MoyasarClient<K>) {
     let server = MockServer::start().await;
     let client = MoyasarClient::builder(key)
         .base_url(server.uri())
@@ -108,19 +105,27 @@ pub async fn start_publishable_client() -> (MockServer, MoyasarClient<Publishabl
     start_client_with_key(resolve_test_publishable_key(), 1).await
 }
 
+async fn mount_template(server: &MockServer, route: (&str, &str), template: ResponseTemplate) {
+    Mock::given(method(route.0))
+        .and(path(route.1))
+        .and(header("moyasar-version", API_VERSION))
+        .respond_with(template)
+        .mount(server)
+        .await;
+}
+
 pub async fn mount_json_endpoint(
     server: &MockServer,
     route: (&str, &str),
     status: u16,
     body: Value,
 ) {
-    let (http_method, endpoint_path) = route;
-    Mock::given(method(http_method))
-        .and(path(endpoint_path))
-        .and(header("moyasar-version", API_VERSION))
-        .respond_with(ResponseTemplate::new(status).set_body_json(body))
-        .mount(server)
-        .await;
+    mount_template(
+        server,
+        route,
+        ResponseTemplate::new(status).set_body_json(body),
+    )
+    .await;
 }
 
 pub async fn mount_raw_endpoint(
@@ -129,12 +134,12 @@ pub async fn mount_raw_endpoint(
     status: u16,
     raw_body: &str,
 ) {
-    let (http_method, endpoint_path) = route;
-    Mock::given(method(http_method))
-        .and(path(endpoint_path))
-        .respond_with(ResponseTemplate::new(status).set_body_string(raw_body))
-        .mount(server)
-        .await;
+    mount_template(
+        server,
+        route,
+        ResponseTemplate::new(status).set_body_string(raw_body),
+    )
+    .await;
 }
 
 pub fn paginated_envelope(

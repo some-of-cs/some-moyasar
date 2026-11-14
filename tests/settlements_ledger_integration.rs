@@ -5,10 +5,9 @@ use some_moyasar::prelude::*;
 use uuid::Uuid;
 
 #[tokio::test]
-async fn settlements_retrieve_lines_and_balance_read_workflows() {
+async fn settlements_retrieve_and_url_redaction_workflow() {
     let (server, client) = common::start_secret_client().await;
     let set_id = SettlementId::new("set_001");
-    let rec_uuid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
 
     let settlement_json = json!({
         "id": set_id.as_str(),
@@ -36,6 +35,13 @@ async fn settlements_retrieve_lines_and_balance_read_workflows() {
     let debug_str = format!("{settlement:?}");
     assert!(!debug_str.contains("X-Amz-Signature=secret1"));
     assert!(debug_str.contains("[REDACTED]"));
+}
+
+#[tokio::test]
+async fn settlements_lines_and_merchant_balance_workflow() {
+    let (server, client) = common::start_secret_client().await;
+    let set_id = SettlementId::new("set_001");
+    let rec_uuid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
 
     let lines_path = format!("/v1/settlements/{}/lines", set_id.as_str());
     common::mount_json_endpoint(

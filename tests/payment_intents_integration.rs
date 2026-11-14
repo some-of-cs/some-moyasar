@@ -64,13 +64,9 @@ async fn payment_intents_create_and_expiry_redaction_workflow() {
 }
 
 #[tokio::test]
-async fn payment_intents_fulfill_and_cancel_workflows() {
-    let (server, sk_client) = common::start_secret_client().await;
+async fn payment_intents_fulfill_with_publishable_key_workflow() {
+    let (server, pk_client) = common::start_publishable_client().await;
     let intent_id = IntentId::new("pi_550e8400e29b41d4a716446655440000").unwrap();
-    let pk_client = MoyasarClient::builder(PublishableKey::new(common::TEST_PK).unwrap())
-        .base_url(server.uri())
-        .build()
-        .unwrap();
 
     let fulfill_path = format!("/v1/payment_intents/{}/fulfill", intent_id.as_str());
     common::mount_json_endpoint(
@@ -115,8 +111,14 @@ async fn payment_intents_fulfill_and_cancel_workflows() {
             ..
         } if url == "https://api.moyasar.com/v1/3ds/challenge_1"
     ));
+}
 
+#[tokio::test]
+async fn payment_intents_cancel_not_cancelable_error_workflow() {
+    let (server, sk_client) = common::start_secret_client().await;
+    let intent_id = IntentId::new("pi_550e8400e29b41d4a716446655440000").unwrap();
     let cancel_path = format!("/v1/payment_intents/{}/cancel", intent_id.as_str());
+
     common::mount_json_endpoint(
         &server,
         ("POST", &cancel_path),
