@@ -13,7 +13,7 @@ use std::sync::{Mutex, PoisonError};
 
 use uuid::Uuid;
 
-use super::verifier::WebhookError;
+use super::event_types::WebhookError;
 
 /// Asynchronous idempotency store for deduplicating inbound Moyasar webhook events.
 ///
