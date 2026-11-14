@@ -117,7 +117,11 @@ fn build_lines_url(
         return format!("{base}/v1/settlements/{}/lines", id.as_str());
     }
     let query: Vec<String> = pairs.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
-    format!("{base}/v1/settlements/{}/lines?{}", id.as_str(), query.join("&"))
+    format!(
+        "{base}/v1/settlements/{}/lines?{}",
+        id.as_str(),
+        query.join("&")
+    )
 }
 
 impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
