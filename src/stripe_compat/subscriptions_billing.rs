@@ -2,7 +2,7 @@
 
 use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
-use crate::kernel::error::MoyasarError;
+use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::idempotency_v5::derive_subscription_given_id;
 use crate::kernel::types::Currency;
 use crate::resources::payments::{CreatePaymentParams, Payment, PaymentSourceRequest, TokenSource};
@@ -128,7 +128,13 @@ mod tests {
             .charge_cycle("sub_pro_9921", 4, 29900, Currency::SAR, &bad_tok)
             .await
             .expect_err("inactive token rejected pre-charge");
-        assert!(matches!(err, MoyasarError::InvalidTokenId));
+        assert!(matches!(
+            err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                ..
+            }
+        ));
 
         Mock::given(method("GET"))
             .and(path("/v1/tokens/token_abc"))
