@@ -6,7 +6,9 @@ pub use crate::kernel::auth::{
 pub use crate::kernel::client::{MoyasarClient, MoyasarClientBuilder, MoyasarClientConfig};
 pub use crate::kernel::error::{ApiErrorPayload, ApiErrorType, MoyasarError};
 pub use crate::kernel::idempotency::{GivenIdPolicy, inject_given_id};
-pub use crate::kernel::idempotency_v5::derive_subscription_given_id;
+pub use crate::kernel::idempotency_v5::{
+    MOYASAR_SUBSCRIPTION_NAMESPACE, derive_subscription_given_id,
+};
 pub use crate::kernel::metadata::Metadata;
 pub use crate::kernel::pagination::{Meta, PaginatedList};
 pub use crate::kernel::paginator_stream::Paginator;
@@ -131,7 +133,9 @@ pub use crate::stripe_compat::subscription_plan::{
     PlanInterval, SubscriptionPlan, next_period_bounds,
 };
 #[cfg(feature = "stripe-compat")]
-pub use crate::stripe_compat::subscriptions_billing::SubscriptionsService;
+pub use crate::stripe_compat::subscriptions_billing::{
+    SubscriptionCycleChargeParams, SubscriptionsService,
+};
 #[cfg(feature = "stripe-compat")]
 pub use crate::stripe_compat::subscriptions_model::{
     RefundStrategy, ReversalAction, Subscription, SubscriptionCycle, SubscriptionCycleId,
@@ -140,9 +144,12 @@ pub use crate::stripe_compat::subscriptions_model::{
 
 #[cfg(feature = "unified-gateway")]
 pub use crate::unified::{
-    UnifiedChargeResponse, UnifiedIntentResponse, UnifiedPaymentGateway, UnifiedReversalResponse,
-    UnifiedWebhookEvent,
+    PaymentCapability, PayoutCapability, PayoutEngine, UnifiedChargeResponse, UnifiedIntentRequest,
+    UnifiedIntentResponse, UnifiedPaymentGateway, UnifiedReversalResponse,
+    UnifiedTokenChargeRequest, UnifiedWebhookEvent, WebhookCapability, WebhookVerifier,
 };
 
+#[cfg(any(test, feature = "test-utils"))]
+pub use crate::test_utils::fixtures::*;
 #[cfg(any(test, feature = "test-utils"))]
 pub use crate::test_utils::mock::MoyasarMockServer;

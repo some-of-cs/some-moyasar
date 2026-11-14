@@ -4,3 +4,6 @@
 pub mod fixtures;
 /// Hermetic wiremock-backed `MoyasarMockServer` for offline tests.
 pub mod mock;
+
+pub use self::fixtures::*;
+pub use self::mock::MoyasarMockServer;

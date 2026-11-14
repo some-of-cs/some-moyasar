@@ -1,12 +1,16 @@
 //! Virtual Stripe-compatible `RefundsService` (`client.refunds()`).
 
+use std::borrow::Borrow;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::MoyasarError;
-use crate::resources::payments::{Payment, PaymentId, PaymentStatus, can_void_payment};
+use crate::kernel::types::Currency;
+use crate::resources::payments::{Payment, is_void_fallback_eligible, PaymentId, PaymentStatus, validate_refund_amount};
+use crate::stripe_compat::refund_strategy::{RefundRoute, select_refund_route};
 
 /// Parameters for creating a virtual Stripe-style refund receipt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,6 +56,8 @@ pub struct RefundReceipt {
     pub payment_id: String,
     /// Resulting payment status (`refunded`, `voided`, etc.).
     pub status: PaymentStatus,
+    /// ISO 4217 currency of the reversed payment.
+    pub currency: Currency,
     /// Total refunded minor-unit amount (or reversed amount when voided).
     pub refunded_amount: u64,
     /// Formatted refunded amount string from Moyasar.
@@ -68,33 +74,39 @@ impl RefundReceipt {
     /// Synthesizes a [`RefundReceipt`] from a Moyasar [`Payment`].
     #[must_use]
     pub fn from_payment(payment: &Payment) -> Self {
-        let split_reversal_flags = payment
-            .splits
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .map(|split| {
-                split
-                    .get("refunded")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false)
-            })
-            .collect();
-        let refunded_amount = if payment.status == PaymentStatus::Voided && payment.refunded == 0 {
-            payment.amount
+        let split_reversal_flags = extract_split_reversal_flags(payment);
+        let is_voided_full = payment.status == PaymentStatus::Voided && payment.refunded == 0;
+        let (refunded_amount, refunded_format) = if is_voided_full {
+            (payment.amount, payment.amount_format.clone())
         } else {
-            payment.refunded
+            (payment.refunded, payment.refunded_format.clone())
         };
         Self {
             payment_id: payment.id.clone(),
             status: payment.status.clone(),
+            currency: payment.currency,
             refunded_amount,
-            refunded_format: payment.refunded_format.clone(),
+            refunded_format,
             refunded_at: payment.refunded_at,
             voided_at: payment.voided_at,
             split_reversal_flags,
         }
     }
+}
+
+fn extract_split_reversal_flags(payment: &Payment) -> Vec<bool> {
+    payment
+        .splits
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .map(|split| {
+            split
+                .get("refunded")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+        })
+        .collect()
 }
 
 /// Virtual Stripe-compatible refunds service (`client.refunds()`).
@@ -111,7 +123,7 @@ impl RefundReceipt {
 /// # async fn demo() {
 /// let key = PublishableKey::new("pk_test_123").unwrap();
 /// let client = MoyasarClient::new(key).unwrap();
-/// let _ = client.refunds().create(&RefundCreateParams::new("pay_123")).await;
+/// let _ = client.refunds().create(RefundCreateParams::new("pay_123")).await;
 /// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
@@ -138,67 +150,224 @@ impl<K: AuthKey> MoyasarClient<K> {
 impl<K: SecretAuthKey> RefundsService<'_, K> {
     /// Executes a refund or smart unsettled void and returns a [`RefundReceipt`].
     ///
+    /// Accepts either an owned [`RefundCreateParams`] or `&RefundCreateParams`.
+    ///
     /// # Errors
     ///
     /// Returns [`MoyasarError`] on invalid payment IDs, HTTP/API errors, or
     /// invalid refund amounts.
-    pub async fn create(&self, params: &RefundCreateParams) -> Result<RefundReceipt, MoyasarError> {
+    pub async fn create(
+        &self,
+        params: impl Borrow<RefundCreateParams>,
+    ) -> Result<RefundReceipt, MoyasarError> {
+        let params = params.borrow();
         let id = PaymentId::new(&params.payment_id)?;
         let payments = self.client.payments();
         let payment = payments.retrieve(&id).await?;
-        let reversed = if should_void(&payment, params) {
-            payments.void(id.as_str()).await?
-        } else {
-            payments.refund(id.as_str(), params.amount).await?
+        validate_refund_amount(&payment, params.amount)?;
+
+        let route = select_refund_route(
+            &payment,
+            params.amount,
+            params.prefer_void_if_unsettled,
+            Utc::now(),
+        );
+        let reversed = match route {
+            RefundRoute::Void => self.void_with_refund_fallback(&payment, params.amount).await?,
+            RefundRoute::Refund { amount } => payments.refund_payment(&payment, amount).await?,
         };
         Ok(RefundReceipt::from_payment(&reversed))
     }
-}
 
-fn should_void(payment: &Payment, params: &RefundCreateParams) -> bool {
-    let is_partial = params.amount.is_some_and(|amt| amt < payment.amount);
-    params.prefer_void_if_unsettled && !is_partial && can_void_payment(payment, Utc::now())
+    async fn void_with_refund_fallback(
+        &self,
+        payment: &Payment,
+        amount: Option<u64>,
+    ) -> Result<Payment, MoyasarError> {
+        let payments = self.client.payments();
+        match payments.void(&payment.id).await {
+            Ok(voided) => Ok(voided),
+            Err(err) if is_void_fallback_eligible(payment, &err) => {
+                payments.refund_payment(payment, amount).await
+            }
+            Err(err) => Err(err),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
-    use serde_json::json;
+    use chrono::{Duration, TimeZone};
+    use serde_json::{Value, json};
+    use wiremock::matchers::{body_json, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-    use crate::kernel::types::Currency;
+    use crate::kernel::auth::SecretKey;
+    use crate::kernel::error::ApiErrorType;
+
+    fn mock_payment_json(id: &str, status: &str, refunded: u64, created_at: &str) -> Value {
+        let refunded_fmt = match refunded {
+            5000 => "50.00 SAR",
+            15000 => "150.00 SAR",
+            _ => "0.00 SAR",
+        };
+        json!({
+            "id": id,
+            "status": status,
+            "amount": 15000,
+            "amount_format": "150.00 SAR",
+            "fee": 0,
+            "fee_format": "0.00 SAR",
+            "refunded": refunded,
+            "refunded_format": refunded_fmt,
+            "captured": if status == "voided" { 0 } else { 15000 },
+            "captured_format": if status == "voided" { "0.00 SAR" } else { "150.00 SAR" },
+            "currency": "SAR",
+            "source": {"type": "creditcard"},
+            "refunded_at": (status == "refunded").then_some(created_at),
+            "voided_at": (status == "voided").then_some(created_at),
+            "created_at": created_at,
+            "updated_at": created_at
+        })
+    }
+
+    async fn mount_recent_paid_payment(server: &MockServer, id: &str) -> String {
+        let recent = (Utc::now() - Duration::minutes(15)).to_rfc3339();
+        Mock::given(method("GET"))
+            .and(path(format!("/v1/payments/{id}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(mock_payment_json(id, "paid", 0, &recent)),
+            )
+            .mount(server)
+            .await;
+        recent
+    }
 
     #[test]
-    fn synthesizes_refund_receipt_and_split_flags() {
+    fn synthesizes_refund_and_void_receipts_with_currency_and_split_flags() {
         let now = Utc.with_ymd_and_hms(2026, 11, 14, 10, 0, 0).unwrap();
-        let payment = Payment {
-            id: "pay_01J9TEST".to_owned(),
-            status: PaymentStatus::Refunded,
-            amount: 15000,
-            amount_format: "150.00 SAR".to_owned(),
-            fee: 0,
-            fee_format: "0.00 SAR".to_owned(),
-            refunded: 5000,
-            refunded_format: "50.00 SAR".to_owned(),
-            captured: 15000,
-            captured_format: "150.00 SAR".to_owned(),
-            currency: Currency::SAR,
-            description: None,
-            source: json!({"type": "creditcard"}),
-            metadata: Default::default(),
-            splits: Some(vec![json!({"refunded": true}), json!({"refunded": false})]),
-            callback_url: None,
-            invoice_id: None,
-            ip: None,
-            captured_at: Some(now),
-            refunded_at: Some(now),
-            voided_at: None,
-            created_at: now,
-            updated_at: now,
-        };
+        let mut payment: Payment = serde_json::from_value(mock_payment_json(
+            "pay_01J9TEST",
+            "refunded",
+            5000,
+            &now.to_rfc3339(),
+        ))
+        .unwrap();
+        payment.splits = Some(vec![json!({"refunded": true}), json!({"refunded": false})]);
+
         let receipt = RefundReceipt::from_payment(&payment);
         assert_eq!(receipt.payment_id, "pay_01J9TEST");
+        assert_eq!(receipt.currency, Currency::SAR);
         assert_eq!(receipt.refunded_amount, 5000);
+        assert_eq!(receipt.refunded_format, "50.00 SAR");
         assert_eq!(receipt.split_reversal_flags, vec![true, false]);
+
+        let voided: Payment = serde_json::from_value(mock_payment_json(
+            "pay_01J9VOID",
+            "voided",
+            0,
+            &now.to_rfc3339(),
+        ))
+        .unwrap();
+        let void_receipt = RefundReceipt::from_payment(&voided);
+        assert_eq!(void_receipt.refunded_amount, 15000);
+        assert_eq!(void_receipt.refunded_format, "150.00 SAR");
+    }
+
+    #[tokio::test]
+    async fn wiremock_refunds_service_handles_partial_and_unsettled_void() {
+        let server = MockServer::start().await;
+        let recent = mount_recent_paid_payment(&server, "pay_ref_1").await;
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_ref_1/refund"))
+            .and(body_json(json!({"amount": 5000})))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(mock_payment_json("pay_ref_1", "refunded", 5000, &recent)),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_ref_1/void"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(mock_payment_json("pay_ref_1", "voided", 0, &recent)),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = MoyasarClient::builder(SecretKey::new("sk_test_123").unwrap())
+            .base_url(server.uri())
+            .build()
+            .unwrap();
+        let partial = client
+            .refunds()
+            .create(RefundCreateParams::new("pay_ref_1").amount(5000))
+            .await
+            .unwrap();
+        assert_eq!(partial.refunded_amount, 5000);
+        assert_eq!(partial.currency, Currency::SAR);
+
+        let voided = client
+            .refunds()
+            .create(&RefundCreateParams::new("pay_ref_1"))
+            .await
+            .unwrap();
+        assert_eq!(voided.status, PaymentStatus::Voided);
+        assert_eq!(voided.refunded_amount, 15000);
+        assert_eq!(voided.refunded_format, "150.00 SAR");
+    }
+
+    #[tokio::test]
+    async fn wiremock_refunds_service_falls_back_on_settled_void_and_rejects_over_refund() {
+        let server = MockServer::start().await;
+        let recent = mount_recent_paid_payment(&server, "pay_settled").await;
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_settled/void"))
+            .respond_with(ResponseTemplate::new(422).set_body_json(json!({
+                "type": "invalid_request_error",
+                "message": "Payment already settled"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1/payments/pay_settled/refund"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(mock_payment_json("pay_settled", "refunded", 15000, &recent)),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = MoyasarClient::builder(SecretKey::new("sk_test_123").unwrap())
+            .base_url(server.uri())
+            .build()
+            .unwrap();
+        let fallback = client
+            .refunds()
+            .create(RefundCreateParams::new("pay_settled"))
+            .await
+            .unwrap();
+        assert_eq!(fallback.status, PaymentStatus::Refunded);
+        assert_eq!(fallback.refunded_amount, 15000);
+
+        let over_err = client
+            .refunds()
+            .create(RefundCreateParams::new("pay_settled").amount(20000))
+            .await
+            .expect_err("over-refund must be rejected pre-network");
+        assert!(matches!(
+            over_err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                ..
+            }
+        ));
     }
 }

@@ -1,11 +1,25 @@
 //! Hermetic local HTTP mock responder (`MoyasarMockServer`) for offline CI tests.
 
-use chrono::Utc;
 use serde_json::{Value, json};
 use wiremock::matchers::{method, path, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use crate::test_utils::fixtures::FIXTURE_TIMESTAMP;
+
 /// Hermetic local HTTP mock server bound to `127.0.0.1` for offline CI conformance tests.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::test_utils::MoyasarMockServer;
+///
+/// let rt = tokio::runtime::Runtime::new().unwrap();
+/// rt.block_on(async {
+///     let server = MoyasarMockServer::start().await;
+///     server.mount_default_routes().await;
+///     assert!(server.uri().starts_with("http://127.0.0.1:"));
+/// });
+/// ```
 pub struct MoyasarMockServer {
     inner: MockServer,
 }
@@ -32,8 +46,14 @@ impl MoyasarMockServer {
 
     /// Mounts default deterministic responders for payments, intents, and tokens.
     pub async fn mount_default_routes(&self) {
-        let now = Utc::now().to_rfc3339();
-        let payment = sample_payment_json("pay_mock_01", "paid", 15000, &now);
+        self.mount_payment_routes(FIXTURE_TIMESTAMP).await;
+        self.mount_intent_and_token_routes(FIXTURE_TIMESTAMP).await;
+    }
+
+    async fn mount_payment_routes(&self, now: &str) {
+        let payment = build_mock_payment_json("pay_mock_01", "paid", 0, now);
+        let refunded = build_mock_payment_json("pay_mock_01", "refunded", 15000, now);
+        let voided = build_mock_payment_json("pay_mock_01", "voided", 0, now);
 
         Mock::given(method("POST"))
             .and(path("/v1/payments"))
@@ -49,16 +69,18 @@ impl MoyasarMockServer {
 
         Mock::given(method("POST"))
             .and(path_regex(r"^/v1/payments/[^/]+/refund$"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(sample_refunded_json(&now)))
+            .respond_with(ResponseTemplate::new(200).set_body_json(refunded))
             .mount(&self.inner)
             .await;
 
         Mock::given(method("POST"))
             .and(path_regex(r"^/v1/payments/[^/]+/void$"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(sample_voided_json(&now)))
+            .respond_with(ResponseTemplate::new(200).set_body_json(voided))
             .mount(&self.inner)
             .await;
+    }
 
+    async fn mount_intent_and_token_routes(&self, now: &str) {
         Mock::given(method("POST"))
             .and(path("/v1/payment_intents"))
             .respond_with(ResponseTemplate::new(201).set_body_json(json!({
@@ -90,60 +112,33 @@ impl MoyasarMockServer {
     }
 }
 
-fn sample_payment_json(id: &str, status: &str, amount: u64, now: &str) -> Value {
+fn build_mock_payment_json(id: &str, status: &str, refunded: u64, now: &str) -> Value {
+    let captured = if status == "voided" { 0 } else { 15000 };
+    let captured_fmt = if status == "voided" {
+        "0.00 SAR"
+    } else {
+        "150.00 SAR"
+    };
+    let refunded_fmt = if refunded > 0 {
+        "150.00 SAR"
+    } else {
+        "0.00 SAR"
+    };
     json!({
         "id": id,
         "status": status,
-        "amount": amount,
-        "amount_format": "150.00 SAR",
-        "fee": 0,
-        "fee_format": "0.00 SAR",
-        "refunded": 0,
-        "refunded_format": "0.00 SAR",
-        "captured": amount,
-        "captured_format": "150.00 SAR",
-        "currency": "SAR",
-        "source": {"type": "creditcard"},
-        "created_at": now,
-        "updated_at": now
-    })
-}
-
-fn sample_refunded_json(now: &str) -> Value {
-    json!({
-        "id": "pay_mock_01",
-        "status": "refunded",
         "amount": 15000,
         "amount_format": "150.00 SAR",
         "fee": 0,
         "fee_format": "0.00 SAR",
-        "refunded": 15000,
-        "refunded_format": "150.00 SAR",
-        "captured": 15000,
-        "captured_format": "150.00 SAR",
+        "refunded": refunded,
+        "refunded_format": refunded_fmt,
+        "captured": captured,
+        "captured_format": captured_fmt,
         "currency": "SAR",
         "source": {"type": "creditcard"},
-        "refunded_at": now,
-        "created_at": now,
-        "updated_at": now
-    })
-}
-
-fn sample_voided_json(now: &str) -> Value {
-    json!({
-        "id": "pay_mock_01",
-        "status": "voided",
-        "amount": 15000,
-        "amount_format": "150.00 SAR",
-        "fee": 0,
-        "fee_format": "0.00 SAR",
-        "refunded": 0,
-        "refunded_format": "0.00 SAR",
-        "captured": 0,
-        "captured_format": "0.00 SAR",
-        "currency": "SAR",
-        "source": {"type": "creditcard"},
-        "voided_at": now,
+        "refunded_at": (status == "refunded").then_some(now),
+        "voided_at": (status == "voided").then_some(now),
         "created_at": now,
         "updated_at": now
     })
@@ -165,12 +160,54 @@ mod tests {
             .base_url(server.uri())
             .build()
             .expect("loopback mock server URL allowed in test-utils");
-        let resp = client
-            .http()
-            .get(format!("{}/v1/payments/pay_mock_01", server.uri()))
-            .send()
+
+        #[cfg(all(
+            feature = "payments",
+            feature = "payment-intents",
+            feature = "tokens"
+        ))]
+        verify_sdk_services_against_mock(&client).await;
+    }
+
+    #[cfg(all(
+        feature = "payments",
+        feature = "payment-intents",
+        feature = "tokens"
+    ))]
+    async fn verify_sdk_services_against_mock(client: &MoyasarClient<SecretKey>) {
+        use crate::kernel::types::Currency;
+        use crate::resources::payment_intents::CreatePaymentIntentParams;
+        use crate::resources::payments::{PaymentId, PaymentStatus};
+        use crate::resources::tokens::{TokenId, TokenStatus};
+
+        let pid = PaymentId::new("pay_mock_01").unwrap();
+        let fetched = client.payments().retrieve(&pid).await.unwrap();
+        assert_eq!(fetched.id, "pay_mock_01");
+        assert_eq!(fetched.status, PaymentStatus::Paid);
+
+        let refunded = client.payments().refund("pay_mock_01", None).await.unwrap();
+        assert_eq!(refunded.status, PaymentStatus::Refunded);
+        assert_eq!(refunded.refunded, 15000);
+
+        let voided = client.payments().void("pay_mock_01").await.unwrap();
+        assert_eq!(voided.status, PaymentStatus::Voided);
+
+        let intent = client
+            .payment_intents()
+            .create(CreatePaymentIntentParams::new(
+                15000,
+                Currency::SAR,
+                "https://merchant.example/cb",
+            ))
             .await
-            .expect("local mock responds");
-        assert!(resp.status().is_success());
+            .unwrap();
+        assert_eq!(intent.id.as_str(), "pi_mock_01");
+
+        let token = client
+            .tokens()
+            .retrieve(&TokenId::new("token_mock_01").unwrap())
+            .await
+            .unwrap();
+        assert_eq!(token.status, TokenStatus::Active);
     }
 }

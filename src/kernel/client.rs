@@ -4,6 +4,8 @@ use core::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
+use secrecy::SecretString;
+
 use crate::kernel::auth::{AuthKey, SecretKey};
 use crate::kernel::error::MoyasarError;
 use crate::kernel::transport::build_default_headers;
@@ -20,6 +22,8 @@ pub struct MoyasarClientConfig {
     pub timeout: Duration,
     /// Maximum automatic retries for network/5xx errors.
     pub max_network_retries: u32,
+    /// Optional shared webhook secret for constant-time webhook verification.
+    pub webhook_secret: Option<SecretString>,
 }
 
 impl Default for MoyasarClientConfig {
@@ -28,6 +32,7 @@ impl Default for MoyasarClientConfig {
             base_url: DEFAULT_BASE_URL.to_owned(),
             timeout: Duration::from_secs(30),
             max_network_retries: 2,
+            webhook_secret: None,
         }
     }
 }
@@ -77,43 +82,77 @@ impl<K: AuthKey> MoyasarClient<K> {
     pub fn key(&self) -> &K {
         &self.0.key
     }
+
+    /// Returns a reference to the configured shared webhook secret, if any.
+    #[must_use]
+    pub fn webhook_secret(&self) -> Option<&SecretString> {
+        self.0.config.webhook_secret.as_ref()
+    }
 }
 
-fn is_allowed_base_url(url: &str) -> bool {
-    if url.starts_with("https://") {
+/// Validates that `url` is a well-formed `https://` base URL without embedded credentials.
+///
+/// Under `test` or `test-utils`, `http://127.0.0.1` and `http://localhost` are also permitted.
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::InvalidBaseUrl`] if `url` fails to parse, contains userinfo,
+/// or uses a disallowed scheme or host.
+pub fn validate_https_url(url: &str) -> Result<(), MoyasarError> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| MoyasarError::InvalidBaseUrl)?;
+    if !has_clean_authority(&parsed) || !is_permitted_scheme_and_host(&parsed) {
+        return Err(MoyasarError::InvalidBaseUrl);
+    }
+    Ok(())
+}
+
+fn has_clean_authority(parsed: &reqwest::Url) -> bool {
+    parsed.username().is_empty() && parsed.password().is_none() && parsed.host_str().is_some()
+}
+
+fn is_permitted_scheme_and_host(parsed: &reqwest::Url) -> bool {
+    if parsed.scheme() == "https" {
         return true;
     }
     #[cfg(any(test, feature = "test-utils"))]
-    if url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:") {
-        return true;
+    if parsed.scheme() == "http" {
+        return matches!(parsed.host_str(), Some("127.0.0.1" | "localhost"));
     }
     false
 }
 
 impl<K: AuthKey> MoyasarClientBuilder<K> {
-    /// Overrides the API base URL (must start with `https://`).
+    /// Overrides the API base URL (must use `https://` without userinfo).
+    #[must_use]
     pub fn base_url(mut self, url: impl Into<String>) -> Self {
         self.config.base_url = url.into();
         self
     }
 
     /// Sets the per-request timeout.
+    #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.config.timeout = timeout;
         self
     }
 
     /// Sets the maximum retry count for transient network and 5xx failures.
+    #[must_use]
     pub fn max_network_retries(mut self, retries: u32) -> Self {
         self.config.max_network_retries = retries;
         self
     }
 
+    /// Configures the shared webhook secret used by `verify_webhook`.
+    #[must_use]
+    pub fn webhook_secret(mut self, secret: impl Into<String>) -> Self {
+        self.config.webhook_secret = Some(SecretString::from(secret.into()));
+        self
+    }
+
     /// Validates configuration and builds the `MoyasarClient`.
     pub fn build(self) -> Result<MoyasarClient<K>, MoyasarError> {
-        if !is_allowed_base_url(&self.config.base_url) {
-            return Err(MoyasarError::InvalidBaseUrl);
-        }
+        validate_https_url(&self.config.base_url)?;
         let headers = build_default_headers(&self.key)?;
         let http = reqwest::Client::builder()
             .timeout(self.config.timeout)
@@ -139,25 +178,45 @@ impl<K: AuthKey> fmt::Debug for MoyasarClient<K> {
 
 #[cfg(test)]
 mod tests {
+    use secrecy::ExposeSecret;
+
     use super::*;
 
     #[test]
-    fn rejects_plaintext_http_base_url() {
-        let key = SecretKey::new("sk_test_123").expect("valid key");
-        let err = MoyasarClient::builder(key)
-            .base_url("http://api.moyasar.com")
-            .build()
-            .expect_err("must reject http://");
-        assert!(matches!(err, MoyasarError::InvalidBaseUrl));
+    fn rejects_plaintext_http_and_userinfo_base_urls() {
+        for bad_url in [
+            "http://api.moyasar.com",
+            "http://localhost:secret@evil.example.com",
+            "https://user:pass@api.moyasar.com",
+            "https://user@api.moyasar.com",
+            "https://",
+            "not a url",
+        ] {
+            let key = SecretKey::new("sk_test_123").expect("valid key");
+            let err = MoyasarClient::builder(key)
+                .base_url(bad_url)
+                .build()
+                .expect_err("must reject invalid or userinfo base URL");
+            assert!(matches!(err, MoyasarError::InvalidBaseUrl));
+        }
     }
 
     #[test]
     fn arc_clone_shares_inner_and_redacts_debug() {
         let key = SecretKey::new("sk_test_secret_value").expect("valid key");
-        let client = MoyasarClient::new(key).expect("client builds");
+        let client = MoyasarClient::builder(key)
+            .webhook_secret("whsec_configured_123")
+            .build()
+            .expect("client builds");
         let cloned = client.clone();
         assert_eq!(Arc::strong_count(&client.0), 2);
-        assert!(!format!("{cloned:?}").contains("sk_test_secret_value"));
+        assert_eq!(
+            client.webhook_secret().map(ExposeSecret::expose_secret),
+            Some("whsec_configured_123")
+        );
+        let dbg = format!("{cloned:?}");
+        assert!(!dbg.contains("sk_test_secret_value"));
+        assert!(!dbg.contains("whsec_configured_123"));
     }
 
     #[tokio::test]

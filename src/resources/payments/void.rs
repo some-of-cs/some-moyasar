@@ -33,6 +33,22 @@ pub fn can_void_payment(payment: &Payment, now: DateTime<Utc>) -> bool {
     )
 }
 
+
+/// Returns `true` when a failed `void()` call on a `Paid` or `Captured` payment
+/// should fall back to `refund()` because the payment already settled.
+#[must_use]
+pub fn is_void_fallback_eligible(payment: &Payment, err: &MoyasarError) -> bool {
+    matches!(payment.status, PaymentStatus::Paid | PaymentStatus::Captured)
+        && matches!(
+            err,
+            MoyasarError::Api {
+                error_type: crate::kernel::error::ApiErrorType::InvalidRequestError
+                    | crate::kernel::error::ApiErrorType::IntentNotCancelable,
+                ..
+            }
+        )
+}
+
 impl<K: SecretAuthKey> PaymentsService<'_, K> {
     /// Voids an unsettled or authorized payment (`POST /v1/payments/:id/void`).
     ///

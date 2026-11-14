@@ -32,6 +32,10 @@ pub mod stripe_compat;
 
 #[cfg(feature = "unified-gateway")]
 pub mod unified;
+#[cfg(feature = "unified-gateway")]
+pub use crate::unified::*;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+#[cfg(any(test, feature = "test-utils"))]
+pub use crate::test_utils::mock::MoyasarMockServer;

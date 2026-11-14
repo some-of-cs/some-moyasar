@@ -66,4 +66,4 @@ pub use splits_response::{
 };
 pub use stcpay_otp::{StcPayOtpPayment, StcPayOtpRequest, is_otp_cooldown_error};
 pub use update::UpdatePaymentParams;
-pub use void::{VOID_WINDOW_SECS, can_void_payment, is_within_void_window};
+pub use void::{VOID_WINDOW_SECS, can_void_payment, is_void_fallback_eligible, is_within_void_window};

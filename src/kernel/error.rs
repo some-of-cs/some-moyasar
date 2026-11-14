@@ -161,6 +161,9 @@ pub enum MoyasarError {
     /// Webhook endpoint URL must use HTTPS.
     #[error("webhook endpoint URL must use HTTPS")]
     InvalidWebhookUrl,
+    /// Webhook secret token verification failed.
+    #[error("invalid webhook secret")]
+    InvalidWebhookSecret,
 }
 
 impl From<reqwest::Error> for MoyasarError {
@@ -295,6 +298,10 @@ mod tests {
             other => panic!("expected MoyasarError::Api, got {other:?}"),
         }
 
+    }
+
+    #[test]
+    fn tc_1_3_0_02_maps_404_400_and_5xx_fallback() {
         let not_found = MoyasarError::from_api_response(
             404,
             r#"{"type":"record_not_found","message":"Payment not found"}"#,
