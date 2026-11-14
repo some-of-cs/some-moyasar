@@ -236,8 +236,7 @@ mod tests {
     #[test]
     fn expired_timestamp_returns_timestamp_out_of_range() {
         let now = Utc::now();
-        let verifier =
-            ConstantTimeSecretVerifier::new("whsec_live_123", Duration::from_secs(300));
+        let verifier = ConstantTimeSecretVerifier::new("whsec_live_123", Duration::from_secs(300));
         let stale = now - chrono::TimeDelta::seconds(301);
         let body = sample_payload("whsec_live_123", stale);
         let err = verifier
