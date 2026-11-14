@@ -1,6 +1,6 @@
 //! Merchant balance (`MerchantBalance`, `SettlementsService::fetch_balance`).
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
@@ -9,6 +9,9 @@ use crate::kernel::types::{Amount, Currency};
 use crate::resources::settlements::service::SettlementsService;
 
 /// Merchant settlement balance returned by `GET /v1/settlements/balance`.
+///
+/// Supports deserializing both flat balance objects (`{"currency": "SAR", ...}`)
+/// and Moyasar's array-wrapped envelope (`{"balances": [{"currency": "SAR", ...}]}`).
 ///
 /// # Examples
 ///
@@ -32,7 +35,7 @@ use crate::resources::settlements::service::SettlementsService;
 /// assert_eq!(balance.pending_format, None);
 /// assert_eq!(balance.reserved_format, None);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MerchantBalance {
     /// ISO 4217 currency of the balance amounts.
     pub currency: Currency,
@@ -43,14 +46,77 @@ pub struct MerchantBalance {
     /// Funds held in reserve, in minor currency units.
     pub reserved: Amount,
     /// Human-readable formatted available balance, if provided by the API.
-    #[serde(default)]
     pub available_format: Option<String>,
     /// Human-readable formatted pending balance, if provided by the API.
-    #[serde(default)]
     pub pending_format: Option<String>,
     /// Human-readable formatted reserved balance, if provided by the API.
-    #[serde(default)]
     pub reserved_format: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct MerchantBalanceFields {
+    currency: Currency,
+    available: Amount,
+    pending: Amount,
+    reserved: Amount,
+    #[serde(default)]
+    available_format: Option<String>,
+    #[serde(default)]
+    pending_format: Option<String>,
+    #[serde(default)]
+    reserved_format: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct MerchantBalanceEnvelope {
+    balances: Vec<MerchantBalanceFields>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MerchantBalanceWire {
+    Flat(MerchantBalanceFields),
+    Envelope(MerchantBalanceEnvelope),
+}
+
+impl From<MerchantBalanceFields> for MerchantBalance {
+    fn from(fields: MerchantBalanceFields) -> Self {
+        Self {
+            currency: fields.currency,
+            available: fields.available,
+            pending: fields.pending,
+            reserved: fields.reserved,
+            available_format: fields.available_format,
+            pending_format: fields.pending_format,
+            reserved_format: fields.reserved_format,
+        }
+    }
+}
+
+impl TryFrom<MerchantBalanceWire> for MerchantBalance {
+    type Error = &'static str;
+
+    fn try_from(wire: MerchantBalanceWire) -> Result<Self, Self::Error> {
+        match wire {
+            MerchantBalanceWire::Flat(fields) => Ok(Self::from(fields)),
+            MerchantBalanceWire::Envelope(mut envelope) => envelope
+                .balances
+                .drain(..)
+                .next()
+                .map(Self::from)
+                .ok_or("balances array must contain at least one balance entry"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MerchantBalance {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = MerchantBalanceWire::deserialize(deserializer)?;
+        Self::try_from(wire).map_err(serde::de::Error::custom)
+    }
 }
 
 impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
@@ -137,6 +203,39 @@ mod tests {
         assert_eq!(minimal.available_format, None);
         assert_eq!(minimal.pending_format, None);
         assert_eq!(minimal.reserved_format, None);
+    }
+
+    #[test]
+    fn deserializes_flat_and_balances_envelope_payloads() {
+        let flat_payload = json!({
+            "currency": "SAR",
+            "available": 180_000,
+            "pending": 20_000,
+            "reserved": 5_000,
+            "available_format": "1,800.00 SAR"
+        });
+        let envelope_payload = json!({
+            "balances": [
+                {
+                    "currency": "SAR",
+                    "available": 180_000,
+                    "pending": 20_000,
+                    "reserved": 5_000,
+                    "available_format": "1,800.00 SAR"
+                }
+            ]
+        });
+
+        let from_flat: MerchantBalance =
+            serde_json::from_value(flat_payload).expect("flat payload deserializes");
+        let from_envelope: MerchantBalance =
+            serde_json::from_value(envelope_payload).expect("balances envelope deserializes");
+        assert_eq!(from_flat, from_envelope);
+        assert_eq!(from_envelope.currency, Currency::SAR);
+        assert_eq!(from_envelope.available, Amount::from_minor(180_000));
+
+        let empty_envelope = json!({ "balances": [] });
+        assert!(serde_json::from_value::<MerchantBalance>(empty_envelope).is_err());
     }
 
     #[tokio::test]

@@ -106,22 +106,9 @@ impl ListSettlementLinesParams {
     }
 }
 
-fn build_lines_url(
-    base_url: &str,
-    id: &SettlementId,
-    params: &ListSettlementLinesParams,
-) -> String {
+fn build_lines_url(base_url: &str, id: &SettlementId) -> String {
     let base = base_url.trim_end_matches('/');
-    let pairs = params.to_query_pairs();
-    if pairs.is_empty() {
-        return format!("{base}/v1/settlements/{}/lines", id.as_str());
-    }
-    let query: Vec<String> = pairs.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
-    format!(
-        "{base}/v1/settlements/{}/lines?{}",
-        id.as_str(),
-        query.join("&")
-    )
+    format!("{base}/v1/settlements/{}/lines", id.as_str())
 }
 
 impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
@@ -150,12 +137,13 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
         id: &SettlementId,
         params: &ListSettlementLinesParams,
     ) -> Result<PaginatedList<SettlementLine>, MoyasarError> {
-        let url = build_lines_url(&self.client().config().base_url, id, params);
+        let url = build_lines_url(&self.client().config().base_url, id);
+        let pairs = params.to_query_pairs();
         let http = self.client().http();
         let retries = self.client().config().max_network_retries;
 
         execute_with_retry(retries, || async {
-            let response = http.get(&url).send().await?;
+            let response = http.get(&url).query(&pairs).send().await?;
             parse_lines_response(response).await
         })
         .await
@@ -306,17 +294,13 @@ mod tests {
             .mount(&server)
             .await;
 
+        let id = SettlementId::new("stl_01J9LINES");
         let params = ListSettlementLinesParams::new().page(2);
         let pairs = params.to_query_pairs();
-        let url = format!(
-            "{}/v1/settlements/stl_01J9LINES/lines?{}={}",
-            server.uri(),
-            pairs[0].0,
-            pairs[0].1
-        );
+        let url = build_lines_url(&server.uri(), &id);
         let http = reqwest::Client::new();
         let page = execute_with_retry(1, || async {
-            let resp = http.get(&url).send().await?;
+            let resp = http.get(&url).query(&pairs).send().await?;
             parse_lines_response(resp).await
         })
         .await
@@ -337,9 +321,11 @@ mod tests {
             .mount(&server)
             .await;
 
-        let missing_url = format!("{}/v1/settlements/stl_missing/lines", server.uri());
+        let missing_id = SettlementId::new("stl_missing");
+        let missing_url = build_lines_url(&server.uri(), &missing_id);
+        let empty_pairs = ListSettlementLinesParams::new().to_query_pairs();
         let err = execute_with_retry(1, || async {
-            let resp = http.get(&missing_url).send().await?;
+            let resp = http.get(&missing_url).query(&empty_pairs).send().await?;
             parse_lines_response(resp).await
         })
         .await
