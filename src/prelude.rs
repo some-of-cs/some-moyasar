@@ -103,8 +103,8 @@ pub use crate::webhook_engine::{
 pub use crate::stripe_compat::{
     CustomerChargeParams, CustomerVault, CustomersService, InMemoryCustomerVault, PlanInterval,
     RefundCreateParams, RefundReceipt, RefundRoute, RefundStrategy, RefundsService, ReversalAction,
-    Subscription, SubscriptionCycle, SubscriptionCycleId, SubscriptionCycleRefundParams,
-    SubscriptionCycleChargeParams, SubscriptionCycleRefundResult, SubscriptionPlan,
+    Subscription, SubscriptionCycle, SubscriptionCycleChargeParams, SubscriptionCycleId,
+    SubscriptionCycleRefundParams, SubscriptionCycleRefundResult, SubscriptionPlan,
     SubscriptionsService, inject_customer_metadata, next_period_bounds, pro_rata_refund,
     select_refund_route,
 };
