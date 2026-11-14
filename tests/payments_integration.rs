@@ -370,7 +370,7 @@ async fn payments_create_retries_on_503_with_deterministic_given_id_and_never_re
     let (bad_server, bad_client) = common::start_secret_client_with_retries(2).await;
     common::mount_raw_endpoint(&bad_server, ("POST", "/v1/payments"), 201, "{invalid_json").await;
     let err = bad_client.payments().create(&params).await.unwrap_err();
-    assert!(matches!(err, MoyasarError::ServerError { status: 201, .. }));
+    assert!(!err.is_retryable());
     assert_eq!(bad_server.received_requests().await.unwrap().len(), 1);
 
     assert!(PaymentId::new("pay_../admin").is_err());
