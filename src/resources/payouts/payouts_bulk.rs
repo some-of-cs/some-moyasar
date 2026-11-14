@@ -173,9 +173,10 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
     ///
     /// # Errors
     ///
-    /// Returns [`MoyasarError::Api`] on client-side validation failure or 4xx API rejection,
-    /// [`MoyasarError::ServerError`] on unrecoverable 5xx responses, or
-    /// [`MoyasarError::Network`] / [`MoyasarError::Timeout`] when transport retries are exhausted.
+    /// Returns [`MoyasarError::Api`] on client-side validation failure, 4xx API rejection, or
+    /// malformed 2xx response bodies, [`MoyasarError::ServerError`] on unrecoverable 5xx
+    /// responses, or [`MoyasarError::Network`] / [`MoyasarError::Timeout`] when transport retries
+    /// are exhausted.
     ///
     /// # Examples
     ///
@@ -219,9 +220,10 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
     ///
     /// # Errors
     ///
-    /// Returns [`MoyasarError::Api`] on client-side validation failure or 4xx API rejection,
-    /// [`MoyasarError::ServerError`] on unrecoverable 5xx responses, or
-    /// [`MoyasarError::Network`] / [`MoyasarError::Timeout`] when transport retries are exhausted.
+    /// Returns [`MoyasarError::Api`] on client-side validation failure, 4xx API rejection, or
+    /// malformed 2xx response bodies, [`MoyasarError::ServerError`] on unrecoverable 5xx
+    /// responses, or [`MoyasarError::Network`] / [`MoyasarError::Timeout`] when transport retries
+    /// are exhausted.
     pub async fn create_bulk_at(
         &self,
         base_url: &str,
@@ -254,9 +256,11 @@ async fn send_bulk_payout_request<K: SecretAuthKey>(
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &text));
     }
-    serde_json::from_str::<BulkPayoutResponse>(&text).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
+    serde_json::from_str::<BulkPayoutResponse>(&text).map_err(|err| MoyasarError::Api {
+        error_type: ApiErrorType::Unknown,
         message: format!("failed to decode BulkPayoutResponse: {err}"),
+        errors: Vec::new(),
+        response_code: None,
     })
 }
 
@@ -515,5 +519,45 @@ mod tests {
             .await
             .expect("recovers after transient 503");
         assert_eq!(recovered.payouts.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_2xx_response_when_body_fails_to_decode() {
+        let server = MockServer::start().await;
+        let source_id = PayoutAccountId::new("pa_01HXYZ1234567890").expect("valid account id");
+        let params = CreateBulkPayoutParams::new(
+            source_id,
+            vec![BulkPayoutEntry::new(
+                5_000,
+                PayoutPurpose::Personal,
+                sample_wallet_destination(),
+            )],
+        );
+
+        Mock::given(method("POST"))
+            .and(path("/v1/payouts/bulk"))
+            .respond_with(ResponseTemplate::new(201).set_body_string("{not_valid_json"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let key = SecretKey::new("sk_test_bulk_bad_201").expect("valid key");
+        let client = MoyasarClient::new(key).expect("builds client");
+        let err = client
+            .payouts()
+            .create_bulk_at(&server.uri(), &params)
+            .await
+            .expect_err("malformed 201 body must return decode error");
+
+        assert!(!err.is_retryable());
+        assert!(matches!(
+            err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::Unknown,
+                ..
+            }
+        ));
+        let msg = err.to_string();
+        assert!(msg.contains("failed to decode BulkPayoutResponse:"));
     }
 }
