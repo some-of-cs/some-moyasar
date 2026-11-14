@@ -74,7 +74,7 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let pk = PublishableKey::new("pk_test_abc123")?;
     /// let client = MoyasarClient::new(pk)?;
-    /// let id = SettlementId::new("550e8400-e29b-41d4-a716-446655440000")?;
+    /// let id = SettlementId::new("550e8400-e29b-41d4-a716-446655440000");
     /// let _settlement = client.settlements().retrieve(&id).await?;
     /// # Ok(())
     /// # }
@@ -182,8 +182,7 @@ mod tests {
     #[tokio::test]
     async fn retrieve_returns_settlement_and_maps_404_to_record_not_found() {
         let server = MockServer::start().await;
-        let id = SettlementId::new("550e8400-e29b-41d4-a716-446655440000")
-            .expect("valid settlement id");
+        let id = SettlementId::new("550e8400-e29b-41d4-a716-446655440000");
 
         Mock::given(method("GET"))
             .and(path("/v1/settlements/550e8400-e29b-41d4-a716-446655440000"))
@@ -230,7 +229,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let missing_id = SettlementId::new("stl_missing_404").expect("valid settlement id");
+        let missing_id = SettlementId::new("stl_missing_404");
         let err = retrieve_settlement(
             client.http(),
             &server.uri(),
