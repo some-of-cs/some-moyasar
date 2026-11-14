@@ -145,7 +145,11 @@ async fn post_initiate_session<K: PublishableAuthKey>(
     if !params.validation_url.starts_with("https://") {
         return Err(MoyasarError::InvalidBaseUrl);
     }
-    let url = format!("{}{}", base_url.trim_end_matches('/'), APPLE_PAY_INITIATE_PATH);
+    let url = format!(
+        "{}{}",
+        base_url.trim_end_matches('/'),
+        APPLE_PAY_INITIATE_PATH
+    );
     let max_retries = client.config().max_network_retries;
     let (status, body) = execute_with_retry(max_retries, || async {
         dispatch_post(client.http(), &url, params).await
@@ -189,11 +193,9 @@ fn parse_session_response(
     if !(200..300).contains(&status) {
         return Err(MoyasarError::from_api_response(status, body));
     }
-    serde_json::from_str::<ApplePayMerchantSession>(body).map_err(|err| {
-        MoyasarError::ServerError {
-            status,
-            message: format!("failed to decode Apple Pay session response: {err}"),
-        }
+    serde_json::from_str::<ApplePayMerchantSession>(body).map_err(|err| MoyasarError::ServerError {
+        status,
+        message: format!("failed to decode Apple Pay session response: {err}"),
     })
 }
 
