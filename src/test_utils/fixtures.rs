@@ -137,13 +137,22 @@ mod tests {
         assert_eq!(fixtures.len(), 12);
         assert!(fixtures.iter().any(|(k, _)| *k == "payment_faild"));
 
-        assert_eq!(stcpay_sandbox_fixture(STCPAY_SANDBOX_SUCCESS)["status"], "paid");
-        assert_eq!(stcpay_sandbox_fixture(STCPAY_SANDBOX_REJECTED)["status"], "failed");
+        assert_eq!(
+            stcpay_sandbox_fixture(STCPAY_SANDBOX_SUCCESS)["status"],
+            "paid"
+        );
+        assert_eq!(
+            stcpay_sandbox_fixture(STCPAY_SANDBOX_REJECTED)["status"],
+            "failed"
+        );
         assert_eq!(
             stcpay_sandbox_fixture(STCPAY_SANDBOX_INSUFFICIENT_FUNDS)["status"],
             "failed"
         );
         assert_eq!(sadad_sandbox_fixture()["source"]["biller_code"], "007");
-        assert_eq!(iso8583_error_fixture("51", "Insufficient funds")["response_code"], "51");
+        assert_eq!(
+            iso8583_error_fixture("51", "Insufficient funds")["response_code"],
+            "51"
+        );
     }
 }
