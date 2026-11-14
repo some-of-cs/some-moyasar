@@ -34,6 +34,16 @@ pub trait WebhookDeduplicator: Send + Sync {
         &self,
         event_id: Uuid,
     ) -> Pin<Box<dyn Future<Output = Result<bool, WebhookError>> + Send + '_>>;
+
+    /// Removes `event_id` from the deduplication store (for example, to roll back
+    /// a reservation when downstream event processing fails so Moyasar's retry
+    /// can be re-processed).
+    fn remove(
+        &self,
+        _event_id: Uuid,
+    ) -> Pin<Box<dyn Future<Output = Result<(), WebhookError>> + Send + '_>> {
+        Box::pin(ready(Ok(())))
+    }
 }
 
 /// No-op [`WebhookDeduplicator`] that treats every webhook event as fresh.
@@ -92,6 +102,14 @@ impl InMemoryDeduplicator {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Clears all recorded event IDs from the in-memory store.
+    pub fn clear(&self) {
+        self.seen
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
 }
 
 impl WebhookDeduplicator for InMemoryDeduplicator {
@@ -104,6 +122,17 @@ impl WebhookDeduplicator for InMemoryDeduplicator {
             guard.insert(event_id)
         };
         Box::pin(ready(Ok(is_fresh)))
+    }
+
+    fn remove(
+        &self,
+        event_id: Uuid,
+    ) -> Pin<Box<dyn Future<Output = Result<(), WebhookError>> + Send + '_>> {
+        {
+            let mut guard = self.seen.lock().unwrap_or_else(PoisonError::into_inner);
+            guard.remove(&event_id);
+        }
+        Box::pin(ready(Ok(())))
     }
 }
 
@@ -120,10 +149,12 @@ mod tests {
 
         assert!(deduplicator.check_and_record(event_id).await.unwrap());
         assert!(deduplicator.check_and_record(event_id).await.unwrap());
+        deduplicator.remove(event_id).await.unwrap();
     }
 
     #[tokio::test]
-    async fn in_memory_deduplicator_accepts_first_and_rejects_duplicate() {
+    async fn in_memory_deduplicator_accepts_first_rejects_duplicate_and_supports_remove_and_clear()
+    {
         let deduplicator = InMemoryDeduplicator::new();
         assert!(deduplicator.is_empty());
 
@@ -135,6 +166,13 @@ mod tests {
         assert!(deduplicator.check_and_record(other_id).await.unwrap());
         assert_eq!(deduplicator.len(), 2);
         assert!(!deduplicator.is_empty());
+
+        deduplicator.remove(event_id).await.unwrap();
+        assert_eq!(deduplicator.len(), 1);
+        assert!(deduplicator.check_and_record(event_id).await.unwrap());
+
+        deduplicator.clear();
+        assert!(deduplicator.is_empty());
     }
 
     #[tokio::test]

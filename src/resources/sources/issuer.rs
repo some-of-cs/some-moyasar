@@ -4,6 +4,7 @@ use core::fmt;
 
 use http::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
 
 use crate::kernel::auth::AuthKey;
 use crate::kernel::client::MoyasarClient;
@@ -67,7 +68,8 @@ pub struct IssuerMetadata {
 /// assert!(BinLookupParams::new("4111111111111111").is_err());
 /// assert!(BinLookupParams::new("42013a").is_err());
 /// ```
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Zeroize)]
+#[zeroize(drop)]
 pub struct BinLookupParams {
     first_digits: String,
 }
@@ -96,7 +98,7 @@ impl fmt::Debug for BinLookupParams {
     }
 }
 
-fn validate_bin(first_digits: &str) -> Result<(), MoyasarError> {
+pub(crate) fn validate_bin(first_digits: &str) -> Result<(), MoyasarError> {
     let valid_len = (6..=8).contains(&first_digits.len());
     let valid_digits = first_digits.bytes().all(|byte| byte.is_ascii_digit());
     if !valid_len || !valid_digits {
@@ -114,7 +116,6 @@ fn validate_bin(first_digits: &str) -> Result<(), MoyasarError> {
 }
 
 /// Dispatches `POST /v1/source/issuer` with bounded retry handling for transient failures.
-#[allow(dead_code)]
 pub(crate) async fn get_issuer_request<K: AuthKey>(
     client: &MoyasarClient<K>,
     params: &BinLookupParams,
@@ -126,32 +127,35 @@ pub(crate) async fn get_issuer_request<K: AuthKey>(
     execute_with_retry(retries, || send_issuer_request(client, &url, params)).await
 }
 
-#[allow(dead_code)]
 async fn send_issuer_request<K: AuthKey>(
     client: &MoyasarClient<K>,
     url: &str,
     params: &BinLookupParams,
 ) -> Result<IssuerMetadata, MoyasarError> {
-    let response = client
+    let mut payload = serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
+        status: 500,
+        message: format!("failed to serialize BIN lookup request: {err}"),
+    })?;
+    let send_res = client
         .http()
         .post(url)
         .header(CONTENT_TYPE, "application/json")
-        .json(params)
+        .body(payload.clone())
         .send()
-        .await
-        .map_err(map_reqwest_error)?;
-    let status = response.status();
-    if status.is_success() {
-        return response
-            .json::<IssuerMetadata>()
-            .await
-            .map_err(MoyasarError::Network);
+        .await;
+    payload.zeroize();
+    let response = send_res.map_err(map_reqwest_error)?;
+    let status = response.status().as_u16();
+    let body = response.text().await.map_err(map_reqwest_error)?;
+    if !(200..300).contains(&status) {
+        return Err(MoyasarError::from_api_response(status, &body));
     }
-    let body = response.text().await.unwrap_or_default();
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
+    serde_json::from_str::<IssuerMetadata>(&body).map_err(|err| MoyasarError::ServerError {
+        status,
+        message: format!("failed to decode IssuerMetadata response: {err}"),
+    })
 }
 
-#[allow(dead_code)]
 fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
     if err.is_timeout() {
         MoyasarError::Timeout
@@ -263,32 +267,29 @@ mod tests {
             .mount(&server)
             .await;
 
-        let sk_client = MoyasarClient::new(SecretKey::new("sk_test_wiremock").expect("valid key"))
+        let sk_client = MoyasarClient::builder(SecretKey::new("sk_test_wiremock").unwrap())
+            .base_url(server.uri())
+            .build()
             .expect("client builds");
-        let pk_client =
-            MoyasarClient::new(PublishableKey::new("pk_test_wiremock").expect("valid key"))
-                .expect("client builds");
+        let pk_client = MoyasarClient::builder(PublishableKey::new("pk_test_wiremock").unwrap())
+            .base_url(server.uri())
+            .build()
+            .expect("client builds");
 
-        let url = format!("{}/v1/source/issuer", server.uri());
-
-        let mada = send_issuer_request(
-            &sk_client,
-            &url,
-            &BinLookupParams::new("420132").expect("valid 6-digit BIN"),
-        )
-        .await
-        .expect("6-digit BIN lookup succeeds");
+        let mada = sk_client
+            .sources()
+            .get_issuer(&BinLookupParams::new("420132").expect("valid 6-digit BIN"))
+            .await
+            .expect("6-digit BIN lookup succeeds");
         assert_eq!(mada.issuer_country.as_deref(), Some("SA"));
         assert_eq!(mada.issuer_card_type, IssuerCardType::Debit);
         assert_eq!(mada.issuer_name.as_deref(), Some("Al Rajhi Bank"));
 
-        let credit = send_issuer_request(
-            &pk_client,
-            &url,
-            &BinLookupParams::new("42013200").expect("valid 8-digit BIN"),
-        )
-        .await
-        .expect("8-digit BIN lookup succeeds");
+        let credit = pk_client
+            .sources()
+            .get_issuer(&BinLookupParams::new("42013200").expect("valid 8-digit BIN"))
+            .await
+            .expect("8-digit BIN lookup succeeds");
         assert_eq!(credit.issuer_card_type, IssuerCardType::Credit);
         assert_eq!(credit.last_digits.as_deref(), Some("1111"));
     }
@@ -319,12 +320,16 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = MoyasarClient::new(SecretKey::new("sk_test_wiremock").expect("valid key"))
+        let client = MoyasarClient::builder(SecretKey::new("sk_test_wiremock").unwrap())
+            .base_url(server.uri())
+            .max_network_retries(2)
+            .build()
             .expect("client builds");
-        let url = format!("{}/v1/source/issuer", server.uri());
         let params = BinLookupParams::new("420132").expect("valid BIN");
 
-        let meta = execute_with_retry(2, || send_issuer_request(&client, &url, &params))
+        let meta = client
+            .sources()
+            .get_issuer(&params)
             .await
             .expect("recovers after 503");
         assert_eq!(meta.issuer_name.as_deref(), Some("Riyad Bank"));
@@ -340,8 +345,14 @@ mod tests {
             .mount(&server_422)
             .await;
 
-        let url_422 = format!("{}/v1/source/issuer", server_422.uri());
-        let err = execute_with_retry(2, || send_issuer_request(&client, &url_422, &params))
+        let client_422 = MoyasarClient::builder(SecretKey::new("sk_test_wiremock").unwrap())
+            .base_url(server_422.uri())
+            .max_network_retries(2)
+            .build()
+            .expect("client builds");
+        let err = client_422
+            .sources()
+            .get_issuer(&params)
             .await
             .expect_err("422 must not succeed or retry");
         assert!(matches!(err, MoyasarError::Api { .. }));

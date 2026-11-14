@@ -47,6 +47,11 @@ jobs:
           cargo check --no-default-features --features card-auths
           cargo check --no-default-features --features tokens-invoices-3ds
 
+      - name: Check Module 5 payouts feature
+        run: |
+          cargo check --no-default-features --features "core,payouts"
+          cargo check --no-default-features --features payouts
+
       - name: Check Module 6 settlements-ledger & alias features
         run: |
           cargo check --no-default-features --features "core,settlements-ledger"

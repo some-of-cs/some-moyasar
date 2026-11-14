@@ -5,6 +5,7 @@ use std::fmt;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use zeroize::Zeroize;
 
 /// Errors returned by the Moyasar webhook verification and parsing engine.
 #[derive(Debug, thiserror::Error)]
@@ -137,7 +138,8 @@ impl fmt::Display for WebhookEventType {
 /// A parsed Moyasar webhook event envelope.
 ///
 /// The [`secret_token`](Self::secret_token) field is redacted as `"[REDACTED]"` in
-/// [`fmt::Debug`] output to prevent accidental secret leakage in logs.
+/// [`fmt::Debug`] output and zeroized in memory on [`Drop`] to prevent accidental
+/// secret leakage.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WebhookEvent {
     /// Unique identifier of the webhook event.
@@ -162,6 +164,12 @@ pub struct WebhookEvent {
 
     /// Raw JSON payload for the event's `data` object.
     pub data: serde_json::Value,
+}
+
+impl Drop for WebhookEvent {
+    fn drop(&mut self) {
+        self.secret_token.zeroize();
+    }
 }
 
 impl fmt::Debug for WebhookEvent {

@@ -230,27 +230,26 @@ mod tests {
     }
 
     #[test]
-    fn expired_timestamp_returns_timestamp_out_of_range() {
+    fn tc_7_3_0_03_out_of_range_timestamps_return_timestamp_out_of_range() {
         let now = Utc::now();
-        let verifier = ConstantTimeSecretVerifier::new("whsec_live_123", Duration::from_secs(300));
-        let stale = now - chrono::TimeDelta::seconds(301);
-        let body = sample_payload("whsec_live_123", stale);
-        let err = verifier
-            .verify_and_construct_at(&body, now)
-            .expect_err("stale webhook timestamp must fail");
-        assert!(matches!(err, WebhookError::TimestampOutOfRange));
-    }
-
-    #[test]
-    fn future_skew_beyond_5m_returns_timestamp_out_of_range() {
-        let now = Utc::now();
-        let verifier =
-            ConstantTimeSecretVerifier::new("whsec_live_123", Duration::from_secs(4 * 3600));
-        let future = now + chrono::TimeDelta::seconds(5 * 60 + 1);
-        let body = sample_payload("whsec_live_123", future);
-        let err = verifier
-            .verify_and_construct_at(&body, now)
-            .expect_err("future webhook timestamp beyond 5m must fail");
-        assert!(matches!(err, WebhookError::TimestampOutOfRange));
+        for (tolerance_secs, delta_secs, reason) in [
+            (300_u64, -301_i64, "stale webhook timestamp must fail"),
+            (
+                4 * 3600,
+                5 * 60 + 1,
+                "future webhook timestamp beyond 5m must fail",
+            ),
+        ] {
+            let verifier = ConstantTimeSecretVerifier::new(
+                "whsec_live_123",
+                Duration::from_secs(tolerance_secs),
+            );
+            let target_time = now + chrono::TimeDelta::seconds(delta_secs);
+            let body = sample_payload("whsec_live_123", target_time);
+            let err = verifier
+                .verify_and_construct_at(&body, now)
+                .expect_err(reason);
+            assert!(matches!(err, WebhookError::TimestampOutOfRange));
+        }
     }
 }

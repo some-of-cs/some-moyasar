@@ -61,6 +61,21 @@ pub struct ApplePayMerchantSession {
     pub retries: Option<u32>,
 }
 
+/// Validates that an Apple Pay validation URL uses `https://` with a non-empty host
+/// and contains no whitespace.
+pub(crate) fn validate_apple_pay_url(url: &str) -> Result<(), MoyasarError> {
+    let Some(rest) = url.strip_prefix("https://") else {
+        return Err(MoyasarError::InvalidBaseUrl);
+    };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let valid_host = !host.is_empty()
+        && (host.contains('.') || host == "localhost" || host.starts_with("localhost:"));
+    if !valid_host || url.chars().any(char::is_whitespace) {
+        return Err(MoyasarError::InvalidBaseUrl);
+    }
+    Ok(())
+}
+
 /// Request parameters for initiating an Apple Pay Web Merchant session
 /// (`POST /v1/applepay/initiate`).
 ///
@@ -108,7 +123,7 @@ impl InitiateApplePayParams {
     ///
     /// # Errors
     ///
-    /// Returns [`MoyasarError::InvalidBaseUrl`] if `validation_url` does not start with `https://`.
+    /// Returns [`MoyasarError::InvalidBaseUrl`] if `validation_url` is not a valid `https://` URL.
     pub fn new(
         validation_url: impl Into<String>,
         display_name: impl Into<String>,
@@ -116,9 +131,7 @@ impl InitiateApplePayParams {
         publishable_api_key: impl Into<String>,
     ) -> Result<Self, MoyasarError> {
         let validation_url = validation_url.into();
-        if !validation_url.starts_with("https://") {
-            return Err(MoyasarError::InvalidBaseUrl);
-        }
+        validate_apple_pay_url(&validation_url)?;
         Ok(Self {
             validation_url,
             display_name: display_name.into(),
@@ -129,7 +142,6 @@ impl InitiateApplePayParams {
 }
 
 /// Sends `POST /v1/applepay/initiate` using a publishable key client and bounded retry transport.
-#[allow(dead_code)]
 pub(crate) async fn initiate_session_request<K: PublishableAuthKey>(
     client: &MoyasarClient<K>,
     params: &InitiateApplePayParams,
@@ -142,9 +154,7 @@ async fn post_initiate_session<K: PublishableAuthKey>(
     base_url: &str,
     params: &InitiateApplePayParams,
 ) -> Result<ApplePayMerchantSession, MoyasarError> {
-    if !params.validation_url.starts_with("https://") {
-        return Err(MoyasarError::InvalidBaseUrl);
-    }
+    validate_apple_pay_url(&params.validation_url)?;
     let url = format!(
         "{}{}",
         base_url.trim_end_matches('/'),
@@ -276,6 +286,9 @@ mod tests {
             "http://apple-pay-gateway.apple.com/paymentservices/paymentSession",
             "ftp://apple-pay-gateway.apple.com/session",
             "apple-pay-gateway.apple.com/session",
+            "https://",
+            "https:///paymentservices/paymentSession",
+            "https://apple-pay-gateway.apple.com/payment services",
             "",
         ] {
             let err = InitiateApplePayParams::new(
@@ -284,7 +297,7 @@ mod tests {
                 "store.example.com",
                 "pk_test_123",
             )
-            .expect_err("non-https URL must be rejected");
+            .expect_err("non-https or malformed URL must be rejected");
             assert!(matches!(err, MoyasarError::InvalidBaseUrl));
         }
     }
@@ -310,7 +323,10 @@ mod tests {
             .await;
 
         let pk = PublishableKey::new("pk_test_unit2_pub").expect("valid publishable key");
-        let client = MoyasarClient::new(pk).expect("client builds");
+        let client = MoyasarClient::builder(pk)
+            .base_url(server.uri())
+            .build()
+            .expect("client builds");
         let params = InitiateApplePayParams::new(
             "https://apple-pay-gateway.apple.com/paymentservices/paymentSession",
             "Example Store",
@@ -319,7 +335,9 @@ mod tests {
         )
         .expect("valid params");
 
-        let session = post_initiate_session(&client, &server.uri(), &params)
+        let session = client
+            .apple_pay()
+            .initiate_session(&params)
             .await
             .expect("session initiated");
         assert_eq!(session.merchant_session_identifier, "SSH1234567890");
@@ -337,7 +355,10 @@ mod tests {
             .await;
 
         let pk = PublishableKey::new("pk_test_unit2_pub").expect("valid publishable key");
-        let client = MoyasarClient::new(pk).expect("client builds");
+        let client = MoyasarClient::builder(pk)
+            .base_url(server.uri())
+            .build()
+            .expect("client builds");
         let tampered = InitiateApplePayParams {
             validation_url: "http://insecure.example.com/session".to_owned(),
             display_name: "Example Store".to_owned(),
@@ -345,7 +366,9 @@ mod tests {
             publishable_api_key: "pk_test_unit2_pub".to_owned(),
         };
 
-        let err = post_initiate_session(&client, &server.uri(), &tampered)
+        let err = client
+            .apple_pay()
+            .initiate_session(&tampered)
             .await
             .expect_err("http URL must fail pre-transport");
         assert!(matches!(err, MoyasarError::InvalidBaseUrl));
@@ -379,7 +402,11 @@ mod tests {
             .await;
 
         let pk = PublishableKey::new("pk_test_retry").expect("valid key");
-        let client = MoyasarClient::new(pk).expect("client builds");
+        let client = MoyasarClient::builder(pk)
+            .base_url(server.uri())
+            .max_network_retries(2)
+            .build()
+            .expect("client builds");
         let params = InitiateApplePayParams::new(
             "https://apple-pay-gateway.apple.com/paymentservices/paymentSession",
             "Example Store",
@@ -388,7 +415,9 @@ mod tests {
         )
         .expect("valid params");
 
-        let session = post_initiate_session(&client, &server.uri(), &params)
+        let session = client
+            .apple_pay()
+            .initiate_session(&params)
             .await
             .expect("recovers after 503");
         assert_eq!(session.merchant_session_identifier, "SSH1234567890");
@@ -404,7 +433,14 @@ mod tests {
             .mount(&err_server)
             .await;
 
-        let err = post_initiate_session(&client, &err_server.uri(), &params)
+        let err_client = MoyasarClient::builder(PublishableKey::new("pk_test_retry").unwrap())
+            .base_url(err_server.uri())
+            .max_network_retries(2)
+            .build()
+            .expect("client builds");
+        let err = err_client
+            .apple_pay()
+            .initiate_session(&params)
             .await
             .expect_err("422 must fail immediately");
         assert!(matches!(

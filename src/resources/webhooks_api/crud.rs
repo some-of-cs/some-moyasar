@@ -3,6 +3,7 @@
 use http::header::CONTENT_TYPE;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use zeroize::Zeroize;
 
 use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
@@ -15,15 +16,14 @@ use crate::webhook_engine::event_types::WebhookEventType;
 
 const WEBHOOKS_PATH: &str = "/v1/webhooks";
 
-/// Validates that a webhook callback URL uses the `https://` scheme.
+/// Validates that a webhook callback URL uses the `https://` scheme with a non-empty host.
 ///
-/// Rejects plaintext `http://` URLs, empty strings, and any other non-HTTPS
-/// schemes before any network call is attempted.
+/// Rejects plaintext `http://` URLs, empty strings, bare `"https://"`, whitespace,
+/// and any other non-HTTPS schemes before any network call is attempted.
 ///
 /// # Errors
 ///
-/// Returns [`MoyasarError::InvalidWebhookUrl`] if `url` does not start with
-/// `"https://"`.
+/// Returns [`MoyasarError::InvalidWebhookUrl`] if `url` is not a valid `https://` URL.
 ///
 /// # Examples
 ///
@@ -36,13 +36,22 @@ const WEBHOOKS_PATH: &str = "/v1/webhooks";
 ///     validate_https_url("http://merchant.example/webhooks"),
 ///     Err(MoyasarError::InvalidWebhookUrl)
 /// ));
+/// assert!(matches!(
+///     validate_https_url("https://"),
+///     Err(MoyasarError::InvalidWebhookUrl)
+/// ));
 /// ```
 pub fn validate_https_url(url: &str) -> Result<(), MoyasarError> {
-    if url.starts_with("https://") {
-        Ok(())
-    } else {
-        Err(MoyasarError::InvalidWebhookUrl)
+    let Some(rest) = url.strip_prefix("https://") else {
+        return Err(MoyasarError::InvalidWebhookUrl);
+    };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let valid_host = !host.is_empty()
+        && (host.contains('.') || host == "localhost" || host.starts_with("localhost:"));
+    if !valid_host || url.chars().any(char::is_whitespace) {
+        return Err(MoyasarError::InvalidWebhookUrl);
     }
+    Ok(())
 }
 
 /// Request payload for registering a Moyasar webhook endpoint (`POST /v1/webhooks`).
@@ -93,8 +102,7 @@ impl CreateWebhookParams {
     ///
     /// # Errors
     ///
-    /// Returns [`MoyasarError::InvalidWebhookUrl`] if `url` does not start with
-    /// `"https://"`.
+    /// Returns [`MoyasarError::InvalidWebhookUrl`] if `url` is not a valid `https://` URL.
     pub fn new(url: impl Into<String>, shared_secret: WebhookSecret) -> Result<Self, MoyasarError> {
         let url = url.into();
         validate_https_url(&url)?;
@@ -253,17 +261,18 @@ async fn dispatch_post(
     url: &str,
     params: &CreateWebhookParams,
 ) -> Result<(u16, String), MoyasarError> {
-    let payload = serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
+    let mut payload = serde_json::to_vec(params).map_err(|err| MoyasarError::ServerError {
         status: 500,
         message: format!("failed to serialize webhook request: {err}"),
     })?;
-    let response = http
+    let send_res = http
         .post(url)
         .header(CONTENT_TYPE, "application/json")
-        .body(payload)
+        .body(payload.clone())
         .send()
-        .await
-        .map_err(map_reqwest_error)?;
+        .await;
+    payload.zeroize();
+    let response = send_res.map_err(map_reqwest_error)?;
     read_response_text(response).await
 }
 
@@ -364,6 +373,9 @@ mod tests {
         for bad_url in [
             "http://merchant.example/webhooks",
             "ftp://merchant.example/webhooks",
+            "https://",
+            "https:///webhooks",
+            "https://merchant.example/webhooks with spaces",
             "",
         ] {
             assert!(matches!(
@@ -371,7 +383,7 @@ mod tests {
                 Err(MoyasarError::InvalidWebhookUrl)
             ));
             let err = CreateWebhookParams::new(bad_url, WebhookSecret::new("whsec_123"))
-                .expect_err("non-https must fail");
+                .expect_err("non-https or malformed URL must fail");
             assert!(matches!(err, MoyasarError::InvalidWebhookUrl));
         }
 
