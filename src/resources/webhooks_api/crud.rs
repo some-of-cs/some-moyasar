@@ -95,10 +95,7 @@ impl CreateWebhookParams {
     ///
     /// Returns [`MoyasarError::InvalidWebhookUrl`] if `url` does not start with
     /// `"https://"`.
-    pub fn new(
-        url: impl Into<String>,
-        shared_secret: WebhookSecret,
-    ) -> Result<Self, MoyasarError> {
+    pub fn new(url: impl Into<String>, shared_secret: WebhookSecret) -> Result<Self, MoyasarError> {
         let url = url.into();
         validate_https_url(&url)?;
         Ok(Self {
@@ -415,10 +412,12 @@ mod tests {
                 "shared_secret": "whsec_sample_secret",
                 "events": ["payment_paid", "payment_failed"]
             })))
-            .respond_with(ResponseTemplate::new(201).set_body_json(sample_endpoint_json(
-                endpoint_id,
-                json!(["payment_paid", "payment_failed"]),
-            )))
+            .respond_with(
+                ResponseTemplate::new(201).set_body_json(sample_endpoint_json(
+                    endpoint_id,
+                    json!(["payment_paid", "payment_failed"]),
+                )),
+            )
             .expect(1)
             .mount(&server)
             .await;
