@@ -64,7 +64,10 @@ impl<'a, K: AuthKey> SourcesService<'a, K> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn get_issuer(&self, params: &BinLookupParams) -> Result<IssuerMetadata, MoyasarError> {
+    pub async fn get_issuer(
+        &self,
+        params: &BinLookupParams,
+    ) -> Result<IssuerMetadata, MoyasarError> {
         post_json(self.client, ISSUER_PATH, params).await
     }
 }
