@@ -108,8 +108,6 @@ fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::auth::SecretKey;
-    use crate::kernel::client::MoyasarClient;
     use crate::kernel::error::ApiErrorType;
     use serde_json::json;
     use wiremock::matchers::{method, path};
@@ -142,14 +140,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = MoyasarClient::builder(SecretKey::new("sk_test_events").unwrap())
-            .base_url(server.uri())
-            .max_network_retries(1)
-            .build()
-            .expect("client builds");
-        let events = client
-            .webhooks()
-            .available_events()
+        let http = reqwest::Client::new();
+        let events = fetch_available_events(&http, &server.uri(), 1)
             .await
             .expect("available_events deserializes all variants");
 
@@ -186,14 +178,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = MoyasarClient::builder(SecretKey::new("sk_test_events").unwrap())
-            .base_url(server.uri())
-            .max_network_retries(1)
-            .build()
-            .expect("client builds");
-        let wrapped = client
-            .webhooks()
-            .available_events()
+        let http = reqwest::Client::new();
+        let wrapped = fetch_available_events(&http, &server.uri(), 1)
             .await
             .expect("wrapped available_events object decodes");
         assert_eq!(
@@ -215,14 +201,7 @@ mod tests {
             .mount(&err_server)
             .await;
 
-        let err_client = MoyasarClient::builder(SecretKey::new("sk_test_events").unwrap())
-            .base_url(err_server.uri())
-            .max_network_retries(2)
-            .build()
-            .expect("client builds");
-        let err = err_client
-            .webhooks()
-            .available_events()
+        let err = fetch_available_events(&http, &err_server.uri(), 2)
             .await
             .expect_err("401 must fail without retrying");
 
@@ -254,14 +233,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = MoyasarClient::builder(SecretKey::new("sk_test_events").unwrap())
-            .base_url(server.uri())
-            .max_network_retries(2)
-            .build()
-            .expect("client builds");
-        let events = client
-            .webhooks()
-            .available_events()
+        let http = reqwest::Client::new();
+        let events = fetch_available_events(&http, &server.uri(), 2)
             .await
             .expect("recovers after transient 503");
 

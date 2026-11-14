@@ -206,16 +206,18 @@ mod tests {
 
         let key = SecretKey::new("sk_test_webhook_retrieve").expect("valid secret key");
         let client = MoyasarClient::builder(key)
-            .base_url(server.uri())
             .max_network_retries(0)
             .build()
             .expect("client builds");
 
-        let endpoint = client
-            .webhooks()
-            .retrieve(webhook_id)
-            .await
-            .expect("webhook retrieval succeeds");
+        let endpoint = retrieve_webhook(
+            client.http(),
+            &server.uri(),
+            client.config().max_network_retries,
+            webhook_id,
+        )
+        .await
+        .expect("webhook retrieval succeeds");
 
         assert_eq!(endpoint.id, webhook_id);
         assert_eq!(endpoint.http_method, "post");
@@ -250,18 +252,17 @@ mod tests {
 
         let key = SecretKey::new("sk_test_webhook_delete").expect("valid secret key");
         let client = MoyasarClient::builder(key)
-            .base_url(server.uri())
             .max_network_retries(0)
             .build()
             .expect("client builds");
 
-        let res_200 = client.webhooks().delete(id_200).await;
+        let res_200 = delete_webhook(client.http(), &server.uri(), 0, id_200).await;
         assert!(
             res_200.is_ok(),
             "expected Ok(()) for 200 OK, got {res_200:?}"
         );
 
-        let res_204 = client.webhooks().delete(id_204).await;
+        let res_204 = delete_webhook(client.http(), &server.uri(), 0, id_204).await;
         assert!(
             res_204.is_ok(),
             "expected Ok(()) for 204 No Content, got {res_204:?}"
@@ -294,22 +295,27 @@ mod tests {
 
         let key = SecretKey::new("sk_test_webhook_404").expect("valid secret key");
         let client = MoyasarClient::builder(key)
-            .base_url(server.uri())
             .max_network_retries(2)
             .build()
             .expect("client builds");
 
-        client
-            .webhooks()
-            .delete(webhook_id)
-            .await
-            .expect("delete succeeds");
+        delete_webhook(
+            client.http(),
+            &server.uri(),
+            client.config().max_network_retries,
+            webhook_id,
+        )
+        .await
+        .expect("delete succeeds");
 
-        let err = client
-            .webhooks()
-            .retrieve(webhook_id)
-            .await
-            .expect_err("retrieve after delete must return 404 RecordNotFound");
+        let err = retrieve_webhook(
+            client.http(),
+            &server.uri(),
+            client.config().max_network_retries,
+            webhook_id,
+        )
+        .await
+        .expect_err("retrieve after delete must return 404 RecordNotFound");
 
         assert!(!err.is_retryable());
         assert!(matches!(
@@ -340,16 +346,18 @@ mod tests {
 
         let key = SecretKey::new("sk_test_webhook_unauth").expect("valid secret key");
         let client = MoyasarClient::builder(key)
-            .base_url(server.uri())
             .max_network_retries(2)
             .build()
             .expect("client builds");
 
-        let err = client
-            .webhooks()
-            .delete(webhook_id)
-            .await
-            .expect_err("401 must return error without retrying");
+        let err = delete_webhook(
+            client.http(),
+            &server.uri(),
+            client.config().max_network_retries,
+            webhook_id,
+        )
+        .await
+        .expect_err("401 must return error without retrying");
 
         assert!(matches!(
             err,
@@ -406,19 +414,27 @@ mod tests {
 
         let key = SecretKey::new("sk_test_webhook_retry").expect("valid secret key");
         let client = MoyasarClient::builder(key)
-            .base_url(server.uri())
             .max_network_retries(2)
             .build()
             .expect("client builds");
 
-        let endpoint = client
-            .webhooks()
-            .retrieve(webhook_id)
-            .await
-            .expect("retrieve retries 503 and succeeds");
+        let endpoint = retrieve_webhook(
+            client.http(),
+            &server.uri(),
+            client.config().max_network_retries,
+            webhook_id,
+        )
+        .await
+        .expect("retrieve retries 503 and succeeds");
         assert_eq!(endpoint.id, webhook_id);
 
-        let delete_res = client.webhooks().delete(webhook_id).await;
+        let delete_res = delete_webhook(
+            client.http(),
+            &server.uri(),
+            client.config().max_network_retries,
+            webhook_id,
+        )
+        .await;
         assert!(
             delete_res.is_ok(),
             "delete retries 503 and succeeds: {delete_res:?}"

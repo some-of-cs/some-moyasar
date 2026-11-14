@@ -267,29 +267,32 @@ mod tests {
             .mount(&server)
             .await;
 
-        let sk_client = MoyasarClient::builder(SecretKey::new("sk_test_wiremock").unwrap())
-            .base_url(server.uri())
-            .build()
+        let sk_client = MoyasarClient::new(SecretKey::new("sk_test_wiremock").expect("valid key"))
             .expect("client builds");
-        let pk_client = MoyasarClient::builder(PublishableKey::new("pk_test_wiremock").unwrap())
-            .base_url(server.uri())
-            .build()
-            .expect("client builds");
+        let pk_client =
+            MoyasarClient::new(PublishableKey::new("pk_test_wiremock").expect("valid key"))
+                .expect("client builds");
 
-        let mada = sk_client
-            .sources()
-            .get_issuer(&BinLookupParams::new("420132").expect("valid 6-digit BIN"))
-            .await
-            .expect("6-digit BIN lookup succeeds");
+        let url = format!("{}/v1/source/issuer", server.uri());
+
+        let mada = send_issuer_request(
+            &sk_client,
+            &url,
+            &BinLookupParams::new("420132").expect("valid 6-digit BIN"),
+        )
+        .await
+        .expect("6-digit BIN lookup succeeds");
         assert_eq!(mada.issuer_country.as_deref(), Some("SA"));
         assert_eq!(mada.issuer_card_type, IssuerCardType::Debit);
         assert_eq!(mada.issuer_name.as_deref(), Some("Al Rajhi Bank"));
 
-        let credit = pk_client
-            .sources()
-            .get_issuer(&BinLookupParams::new("42013200").expect("valid 8-digit BIN"))
-            .await
-            .expect("8-digit BIN lookup succeeds");
+        let credit = send_issuer_request(
+            &pk_client,
+            &url,
+            &BinLookupParams::new("42013200").expect("valid 8-digit BIN"),
+        )
+        .await
+        .expect("8-digit BIN lookup succeeds");
         assert_eq!(credit.issuer_card_type, IssuerCardType::Credit);
         assert_eq!(credit.last_digits.as_deref(), Some("1111"));
     }
@@ -320,16 +323,12 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = MoyasarClient::builder(SecretKey::new("sk_test_wiremock").unwrap())
-            .base_url(server.uri())
-            .max_network_retries(2)
-            .build()
+        let client = MoyasarClient::new(SecretKey::new("sk_test_wiremock").expect("valid key"))
             .expect("client builds");
+        let url = format!("{}/v1/source/issuer", server.uri());
         let params = BinLookupParams::new("420132").expect("valid BIN");
 
-        let meta = client
-            .sources()
-            .get_issuer(&params)
+        let meta = execute_with_retry(2, || send_issuer_request(&client, &url, &params))
             .await
             .expect("recovers after 503");
         assert_eq!(meta.issuer_name.as_deref(), Some("Riyad Bank"));
@@ -345,14 +344,8 @@ mod tests {
             .mount(&server_422)
             .await;
 
-        let client_422 = MoyasarClient::builder(SecretKey::new("sk_test_wiremock").unwrap())
-            .base_url(server_422.uri())
-            .max_network_retries(2)
-            .build()
-            .expect("client builds");
-        let err = client_422
-            .sources()
-            .get_issuer(&params)
+        let url_422 = format!("{}/v1/source/issuer", server_422.uri());
+        let err = execute_with_retry(2, || send_issuer_request(&client, &url_422, &params))
             .await
             .expect_err("422 must not succeed or retry");
         assert!(matches!(err, MoyasarError::Api { .. }));

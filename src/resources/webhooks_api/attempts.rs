@@ -184,8 +184,6 @@ fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::auth::SecretKey;
-    use crate::kernel::client::MoyasarClient;
     use crate::kernel::error::ApiErrorType;
     use serde_json::json;
     use wiremock::matchers::{method, path, query_param};
@@ -263,17 +261,20 @@ mod tests {
         let params = ListWebhookAttemptsParams::new()
             .page(1)
             .webhook_id(webhook_id);
-        let client = MoyasarClient::builder(SecretKey::new("sk_test_attempts").unwrap())
-            .base_url(server.uri())
-            .max_network_retries(1)
-            .build()
-            .expect("client builds");
+        let url = format!("{}/v1/webhooks/attempts", server.uri());
+        let http = reqwest::Client::new();
 
-        let page = client
-            .webhooks()
-            .list_attempts(Some(&params))
-            .await
-            .expect("lists webhook attempts");
+        let page = execute_with_retry(1, || async {
+            let resp = http
+                .get(&url)
+                .query(&params)
+                .send()
+                .await
+                .map_err(map_reqwest_error)?;
+            parse_attempts_list_response(resp).await
+        })
+        .await
+        .expect("lists webhook attempts");
 
         assert_eq!(page.items.len(), 1);
         assert_eq!(page.items[0].id, attempt_id);
@@ -297,16 +298,14 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = MoyasarClient::builder(SecretKey::new("sk_test_attempts").unwrap())
-            .base_url(server.uri())
-            .max_network_retries(1)
-            .build()
-            .expect("client builds");
-        let err = client
-            .webhooks()
-            .list_attempts(None)
-            .await
-            .expect_err("401 maps to AuthenticationError");
+        let url = format!("{}/v1/webhooks/attempts", server.uri());
+        let http = reqwest::Client::new();
+        let err = execute_with_retry(1, || async {
+            let resp = http.get(&url).send().await.map_err(map_reqwest_error)?;
+            parse_attempts_list_response(resp).await
+        })
+        .await
+        .expect_err("401 maps to AuthenticationError");
 
         assert!(matches!(
             err,
@@ -341,16 +340,14 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = MoyasarClient::builder(SecretKey::new("sk_test_attempts").unwrap())
-            .base_url(server.uri())
-            .max_network_retries(1)
-            .build()
-            .expect("client builds");
-        let attempt = client
-            .webhooks()
-            .retrieve_attempt(attempt_id)
-            .await
-            .expect("retrieves webhook attempt");
+        let http = reqwest::Client::new();
+        let ok_url = format!("{}/v1/webhooks/attempts/{attempt_id}", server.uri());
+        let attempt = execute_with_retry(1, || async {
+            let resp = http.get(&ok_url).send().await.map_err(map_reqwest_error)?;
+            parse_attempt_response(resp).await
+        })
+        .await
+        .expect("retrieves webhook attempt");
 
         assert_eq!(attempt.id, attempt_id);
         assert_eq!(attempt.webhook_id, None);
@@ -370,11 +367,17 @@ mod tests {
             .mount(&server)
             .await;
 
-        let err = client
-            .webhooks()
-            .retrieve_attempt(missing_id)
-            .await
-            .expect_err("404 maps to RecordNotFound");
+        let missing_url = format!("{}/v1/webhooks/attempts/{missing_id}", server.uri());
+        let err = execute_with_retry(1, || async {
+            let resp = http
+                .get(&missing_url)
+                .send()
+                .await
+                .map_err(map_reqwest_error)?;
+            parse_attempt_response(resp).await
+        })
+        .await
+        .expect_err("404 maps to RecordNotFound");
 
         assert!(matches!(
             err,

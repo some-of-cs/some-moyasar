@@ -323,10 +323,7 @@ mod tests {
             .await;
 
         let pk = PublishableKey::new("pk_test_unit2_pub").expect("valid publishable key");
-        let client = MoyasarClient::builder(pk)
-            .base_url(server.uri())
-            .build()
-            .expect("client builds");
+        let client = MoyasarClient::new(pk).expect("client builds");
         let params = InitiateApplePayParams::new(
             "https://apple-pay-gateway.apple.com/paymentservices/paymentSession",
             "Example Store",
@@ -335,9 +332,7 @@ mod tests {
         )
         .expect("valid params");
 
-        let session = client
-            .apple_pay()
-            .initiate_session(&params)
+        let session = post_initiate_session(&client, &server.uri(), &params)
             .await
             .expect("session initiated");
         assert_eq!(session.merchant_session_identifier, "SSH1234567890");
@@ -355,10 +350,7 @@ mod tests {
             .await;
 
         let pk = PublishableKey::new("pk_test_unit2_pub").expect("valid publishable key");
-        let client = MoyasarClient::builder(pk)
-            .base_url(server.uri())
-            .build()
-            .expect("client builds");
+        let client = MoyasarClient::new(pk).expect("client builds");
         let tampered = InitiateApplePayParams {
             validation_url: "http://insecure.example.com/session".to_owned(),
             display_name: "Example Store".to_owned(),
@@ -366,9 +358,7 @@ mod tests {
             publishable_api_key: "pk_test_unit2_pub".to_owned(),
         };
 
-        let err = client
-            .apple_pay()
-            .initiate_session(&tampered)
+        let err = post_initiate_session(&client, &server.uri(), &tampered)
             .await
             .expect_err("http URL must fail pre-transport");
         assert!(matches!(err, MoyasarError::InvalidBaseUrl));
@@ -402,11 +392,7 @@ mod tests {
             .await;
 
         let pk = PublishableKey::new("pk_test_retry").expect("valid key");
-        let client = MoyasarClient::builder(pk)
-            .base_url(server.uri())
-            .max_network_retries(2)
-            .build()
-            .expect("client builds");
+        let client = MoyasarClient::new(pk).expect("client builds");
         let params = InitiateApplePayParams::new(
             "https://apple-pay-gateway.apple.com/paymentservices/paymentSession",
             "Example Store",
@@ -415,9 +401,7 @@ mod tests {
         )
         .expect("valid params");
 
-        let session = client
-            .apple_pay()
-            .initiate_session(&params)
+        let session = post_initiate_session(&client, &server.uri(), &params)
             .await
             .expect("recovers after 503");
         assert_eq!(session.merchant_session_identifier, "SSH1234567890");
@@ -433,14 +417,7 @@ mod tests {
             .mount(&err_server)
             .await;
 
-        let err_client = MoyasarClient::builder(PublishableKey::new("pk_test_retry").unwrap())
-            .base_url(err_server.uri())
-            .max_network_retries(2)
-            .build()
-            .expect("client builds");
-        let err = err_client
-            .apple_pay()
-            .initiate_session(&params)
+        let err = post_initiate_session(&client, &err_server.uri(), &params)
             .await
             .expect_err("422 must fail immediately");
         assert!(matches!(
