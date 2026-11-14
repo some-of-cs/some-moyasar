@@ -2,7 +2,7 @@
 
 use crate::kernel::auth::{AuthKey, SecretAuthKey};
 use crate::kernel::client::MoyasarClient;
-use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::error::MoyasarError;
 use crate::kernel::idempotency_v5::derive_subscription_given_id;
 use crate::kernel::types::Currency;
 use crate::resources::payments::{CreatePaymentParams, Payment, PaymentSourceRequest, TokenSource};
@@ -90,6 +90,7 @@ mod tests {
 
     use super::*;
     use crate::kernel::auth::SecretKey;
+    use crate::kernel::error::ApiErrorType;
 
     fn token_response(status: &str) -> serde_json::Value {
         json!({
