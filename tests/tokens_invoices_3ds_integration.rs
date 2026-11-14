@@ -23,7 +23,7 @@ async fn tokens_create_retrieve_delete_204_and_lifecycle_gates() {
         "created_at": "2026-11-14T10:00:00Z"
     });
 
-    common::mount_json_endpoint(&server, "POST", "/v1/tokens", 201, token_json.clone()).await;
+    common::mount_json_endpoint(&server, ("POST", "/v1/tokens"), 201, token_json.clone()).await;
     let create_params =
         CreateTokenParams::new("MAHER MANSOUR", "4111111111111111", "12", "2029", "123")
             .callback_url("https://merchant.example.com/token-cb");
@@ -32,25 +32,12 @@ async fn tokens_create_retrieve_delete_204_and_lifecycle_gates() {
     assert!(is_token_deletable(created.status));
     assert!(require_active_token(created.status).is_ok());
 
-    common::mount_json_endpoint(
-        &server,
-        "GET",
-        &format!("/v1/tokens/{}", token_id.as_str()),
-        200,
-        token_json,
-    )
-    .await;
+    let token_path = format!("/v1/tokens/{}", token_id.as_str());
+    common::mount_json_endpoint(&server, ("GET", &token_path), 200, token_json).await;
     let retrieved = sk_client.tokens().retrieve(&token_id).await.unwrap();
     assert_eq!(retrieved.last_four(), Some("1111"));
 
-    common::mount_raw_endpoint(
-        &server,
-        "DELETE",
-        &format!("/v1/tokens/{}", token_id.as_str()),
-        204,
-        "",
-    )
-    .await;
+    common::mount_raw_endpoint(&server, ("DELETE", &token_path), 204, "").await;
     sk_client.tokens().delete(&token_id).await.unwrap();
 
     assert!(TokenId::new("invalid_prefix").is_err());
@@ -87,17 +74,16 @@ async fn invoices_crud_bulk_cancel_put_and_sadad_expiry_sync() {
         "payments": []
     });
 
-    common::mount_json_endpoint(&server, "POST", "/v1/invoices", 201, inv_json.clone()).await;
-    let params =
-        CreateInvoiceParams::new(Amount::from_minor(50000), Currency::SAR).description("SaaS Annual Plan");
+    common::mount_json_endpoint(&server, ("POST", "/v1/invoices"), 201, inv_json.clone()).await;
+    let params = CreateInvoiceParams::new(Amount::from_minor(50000), Currency::SAR)
+        .description("SaaS Annual Plan");
     let created = client.invoices().create(&params).await.unwrap();
     assert_eq!(created.id, inv_id);
     assert!(validate_invoice_cancelable(&created).is_ok());
 
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/invoices/bulk",
+        ("POST", "/v1/invoices/bulk"),
         201,
         json!([inv_json.clone()]),
     )
@@ -105,16 +91,10 @@ async fn invoices_crud_bulk_cancel_put_and_sadad_expiry_sync() {
     let bulk = client.invoices().create_bulk(vec![params]).await.unwrap();
     assert_eq!(bulk.len(), 1);
 
-    let mut canceled_json = inv_json.clone();
+    let mut canceled_json = inv_json;
     canceled_json["status"] = json!("canceled");
-    common::mount_json_endpoint(
-        &server,
-        "PUT",
-        &format!("/v1/invoices/{inv_id}/cancel"),
-        200,
-        canceled_json,
-    )
-    .await;
+    let cancel_path = format!("/v1/invoices/{inv_id}/cancel");
+    common::mount_json_endpoint(&server, ("PUT", &cancel_path), 200, canceled_json).await;
     let canceled = client.invoices().cancel(inv_id).await.unwrap();
     assert_eq!(canceled.status, InvoiceStatus::Canceled);
     assert!(validate_invoice_cancelable(&canceled).is_err());
@@ -145,7 +125,7 @@ async fn card_auths_create_retrieve_mpi_bridge_and_cavv_redaction() {
         }
     });
 
-    common::mount_json_endpoint(&server, "POST", "/v1/card_auths", 201, ca_json).await;
+    common::mount_json_endpoint(&server, ("POST", "/v1/card_auths"), 201, ca_json).await;
     let create_params = CreateCardAuthParams::new(
         Amount::from_minor(15000),
         Currency::SAR,
@@ -168,7 +148,10 @@ async fn card_auths_create_retrieve_mpi_bridge_and_cavv_redaction() {
     assert_eq!(mpi.eci.as_deref(), Some("05"));
     let bridge = CardAuthBridgeData::from_mpi(mpi);
     assert_eq!(
-        bridge.card_auth_data.as_ref().and_then(|d| d.eci.as_deref()),
+        bridge
+            .card_auth_data
+            .as_ref()
+            .and_then(|d| d.eci.as_deref()),
         Some("05")
     );
 

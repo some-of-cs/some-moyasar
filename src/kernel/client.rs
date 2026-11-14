@@ -136,10 +136,7 @@ fn is_permitted_scheme_and_host(parsed: &reqwest::Url, mode: AuthMode) -> bool {
     }
     mode == AuthMode::Test
         && parsed.scheme() == "http"
-        && matches!(
-            parsed.host_str(),
-            Some("127.0.0.1" | "localhost" | "[::1]")
-        )
+        && matches!(parsed.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"))
 }
 
 impl<K: AuthKey> MoyasarClientBuilder<K> {

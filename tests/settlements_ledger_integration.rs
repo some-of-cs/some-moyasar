@@ -5,10 +5,9 @@ use some_moyasar::prelude::*;
 use uuid::Uuid;
 
 #[tokio::test]
-async fn settlements_transfers_and_internal_transactions_full_read_workflows() {
+async fn settlements_retrieve_lines_and_balance_read_workflows() {
     let (server, client) = common::start_secret_client().await;
     let set_id = SettlementId::new("set_001");
-    let tr_id = TransferId::new("tr_001");
     let rec_uuid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
 
     let settlement_json = json!({
@@ -27,14 +26,8 @@ async fn settlements_transfers_and_internal_transactions_full_read_workflows() {
         "created_at": "2026-11-14T10:00:00Z"
     });
 
-    common::mount_json_endpoint(
-        &server,
-        "GET",
-        &format!("/v1/settlements/{}", set_id.as_str()),
-        200,
-        settlement_json,
-    )
-    .await;
+    let set_path = format!("/v1/settlements/{}", set_id.as_str());
+    common::mount_json_endpoint(&server, ("GET", &set_path), 200, settlement_json).await;
 
     let settlement = client.settlements().retrieve(&set_id).await.unwrap();
     assert_eq!(settlement.net(), Amount::from_minor(90400));
@@ -44,10 +37,10 @@ async fn settlements_transfers_and_internal_transactions_full_read_workflows() {
     assert!(!debug_str.contains("X-Amz-Signature=secret1"));
     assert!(debug_str.contains("[REDACTED]"));
 
+    let lines_path = format!("/v1/settlements/{}/lines", set_id.as_str());
     common::mount_json_endpoint(
         &server,
-        "GET",
-        &format!("/v1/settlements/{}/lines", set_id.as_str()),
+        ("GET", &lines_path),
         200,
         common::paginated_envelope(
             "lines",
@@ -75,8 +68,7 @@ async fn settlements_transfers_and_internal_transactions_full_read_workflows() {
 
     common::mount_json_endpoint(
         &server,
-        "GET",
-        "/v1/settlements/balance",
+        ("GET", "/v1/settlements/balance"),
         200,
         json!({
             "balances": [
@@ -93,11 +85,18 @@ async fn settlements_transfers_and_internal_transactions_full_read_workflows() {
     let balance = client.settlements().fetch_balance().await.unwrap();
     assert_eq!(balance.available, Amount::from_minor(500000));
     assert_eq!(balance.pending, Amount::from_minor(120000));
+}
 
+#[tokio::test]
+async fn transfers_and_internal_transactions_read_and_negative_guards() {
+    let (server, client) = common::start_secret_client().await;
+    let tr_id = TransferId::new("tr_001");
+    let rec_uuid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+
+    let tr_path = format!("/v1/transfers/{}", tr_id.as_str());
     common::mount_json_endpoint(
         &server,
-        "GET",
-        &format!("/v1/transfers/{}", tr_id.as_str()),
+        ("GET", &tr_path),
         200,
         json!({
             "id": tr_id.as_str(),
@@ -120,8 +119,7 @@ async fn settlements_transfers_and_internal_transactions_full_read_workflows() {
 
     common::mount_json_endpoint(
         &server,
-        "GET",
-        "/v1/internal_transactions",
+        ("GET", "/v1/internal_transactions"),
         200,
         common::paginated_envelope(
             "internal_transactions",

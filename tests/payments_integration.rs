@@ -41,14 +41,13 @@ fn sample_payment_json(
 }
 
 #[tokio::test]
-async fn payments_crud_capture_void_refund_and_list_lifecycle() {
+async fn payments_create_retrieve_and_capture_lifecycle() {
     let (server, client) = common::start_secret_client().await;
     let pay_uuid = "550e8400-e29b-41d4-a716-446655440000";
 
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/payments",
+        ("POST", "/v1/payments"),
         201,
         sample_payment_json(pay_uuid, "authorized", "visa", "2026-11-14T10:00:00Z"),
     )
@@ -69,10 +68,10 @@ async fn payments_crud_capture_void_refund_and_list_lifecycle() {
     assert_eq!(created.amount, 10000);
 
     let pay_id = PaymentId::new(format!("pay_{pay_uuid}")).unwrap();
+    let get_path = format!("/v1/payments/pay_{pay_uuid}");
     common::mount_json_endpoint(
         &server,
-        "GET",
-        &format!("/v1/payments/pay_{pay_uuid}"),
+        ("GET", &get_path),
         200,
         sample_payment_json(pay_uuid, "authorized", "visa", "2026-11-14T10:00:00Z"),
     )
@@ -80,10 +79,10 @@ async fn payments_crud_capture_void_refund_and_list_lifecycle() {
     let fetched = client.payments().retrieve(&pay_id).await.unwrap();
     assert_eq!(fetched.id, pay_uuid);
 
+    let capture_path = format!("/v1/payments/{pay_uuid}/capture");
     common::mount_json_endpoint(
         &server,
-        "POST",
-        &format!("/v1/payments/{pay_uuid}/capture"),
+        ("POST", &capture_path),
         200,
         sample_payment_json(pay_uuid, "captured", "visa", "2026-11-14T10:05:00Z"),
     )
@@ -94,11 +93,17 @@ async fn payments_crud_capture_void_refund_and_list_lifecycle() {
         .await
         .unwrap();
     assert_eq!(captured.status, PaymentStatus::Captured);
+}
+
+#[tokio::test]
+async fn payments_update_refund_guard_and_filtered_list_lifecycle() {
+    let (server, client) = common::start_secret_client().await;
+    let pay_uuid = "550e8400-e29b-41d4-a716-446655440000";
+    let update_path = format!("/v1/payments/{pay_uuid}");
 
     common::mount_json_endpoint(
         &server,
-        "PUT",
-        &format!("/v1/payments/{pay_uuid}"),
+        ("PUT", &update_path),
         200,
         sample_payment_json(pay_uuid, "paid", "visa", "2026-11-14T10:05:00Z"),
     )
@@ -189,18 +194,18 @@ async fn smart_reversal_voids_within_2h_falls_back_to_refund_and_checks_mada_14d
         ReversalStrategy::Refund { amount: None }
     );
 
+    let void_path = format!("/v1/payments/{pay_uuid}/void");
+    let refund_path = format!("/v1/payments/{pay_uuid}/refund");
     common::mount_json_endpoint(
         &server,
-        "POST",
-        &format!("/v1/payments/{pay_uuid}/void"),
+        ("POST", &void_path),
         400,
         common::api_error_body("invalid_request_error", "Void window elapsed", None),
     )
     .await;
     common::mount_json_endpoint(
         &server,
-        "POST",
-        &format!("/v1/payments/{pay_uuid}/refund"),
+        ("POST", &refund_path),
         200,
         sample_payment_json(pay_uuid, "refunded", "mada", "2026-11-14T10:00:00Z"),
     )
@@ -234,7 +239,7 @@ async fn stc_pay_otp_verification_rejects_non_https_or_invalid_otp_before_networ
 }
 
 #[test]
-fn polymorphic_sources_splits_and_aft_sender_enforce_all_negative_validations() {
+fn polymorphic_sources_enforce_card_stcpay_and_sadad_negative_validations() {
     let now = Utc.with_ymd_and_hms(2026, 11, 14, 12, 0, 0).unwrap();
 
     assert!(matches!(
@@ -269,11 +274,16 @@ fn polymorphic_sources_splits_and_aft_sender_enforce_all_negative_validations() 
         validate_sadad_expiry(Some(too_far), now),
         Err(MoyasarError::SadadExpiryTooFar)
     ));
+}
 
+#[test]
+fn marketplace_splits_and_aft_sender_enforce_validation_and_redaction() {
     let ent_1 = Uuid::new_v4();
     let ent_2 = Uuid::new_v4();
-    let s1 = PaymentSplitRequest::new(6000, SplitRecipientType::Entity, ent_1).with_fee_source(true);
-    let s2 = PaymentSplitRequest::new(6000, SplitRecipientType::Entity, ent_2).with_fee_source(true);
+    let s1 =
+        PaymentSplitRequest::new(6000, SplitRecipientType::Entity, ent_1).with_fee_source(true);
+    let s2 =
+        PaymentSplitRequest::new(6000, SplitRecipientType::Entity, ent_2).with_fee_source(true);
     assert!(matches!(
         validate_splits(&[s1.clone(), s2], 15000),
         Err(MoyasarError::MultipleFeeSources)
@@ -333,8 +343,7 @@ async fn payments_create_retries_on_503_with_deterministic_given_id_and_never_re
         .await;
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/payments",
+        ("POST", "/v1/payments"),
         201,
         sample_payment_json(pay_uuid, "paid", "visa", "2026-11-14T10:00:00Z"),
     )
@@ -359,7 +368,7 @@ async fn payments_create_retries_on_503_with_deterministic_given_id_and_never_re
     assert_eq!(payment.status, PaymentStatus::Paid);
 
     let (bad_server, bad_client) = common::start_secret_client_with_retries(2).await;
-    common::mount_raw_endpoint(&bad_server, "POST", "/v1/payments", 201, "{invalid_json").await;
+    common::mount_raw_endpoint(&bad_server, ("POST", "/v1/payments"), 201, "{invalid_json").await;
     let err = bad_client.payments().create(&params).await.unwrap_err();
     assert!(matches!(err, MoyasarError::ServerError { status: 201, .. }));
     assert_eq!(bad_server.received_requests().await.unwrap().len(), 1);

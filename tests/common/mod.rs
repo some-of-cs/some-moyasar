@@ -16,55 +16,58 @@ fn is_configured_real_secret(raw: &str) -> bool {
     !raw.is_empty() && !raw.contains("replace_with")
 }
 
+fn is_usable_test_key<K: AuthKey>(key: &K) -> bool {
+    key.mode() == AuthMode::Test && is_configured_real_secret(key.expose_secret())
+}
+
+fn resolve_test_key<K: AuthKey>(
+    env_ref: &str,
+    fallback: &str,
+    parse: fn(&str) -> Result<K, MoyasarError>,
+) -> K {
+    parse(env_ref)
+        .ok()
+        .filter(is_usable_test_key)
+        .unwrap_or_else(|| parse(fallback).expect("valid fallback test key"))
+}
+
 /// Loads `MOYASAR_SECRET_KEY` from the process environment or `.env.local` / `.env`
-/// using the SDK's built-in `$VAR` resolver (`env-keys` feature).
-/// Falls back to [`TEST_SK`] when no `.env` key is configured (e.g., in CI) or when
-/// the configured key is a live key and a test-mode loopback client is required.
+/// using the SDK's built-in `$VAR` resolver (`env-keys` feature), with fallback to [`TEST_SK`].
 pub fn resolve_test_secret_key() -> SecretKey {
-    if let Ok(key) = SecretKey::new("$MOYASAR_SECRET_KEY")
-        && key.mode() == AuthMode::Test
-        && is_configured_real_secret(key.expose_secret())
-    {
-        return key;
-    }
-    SecretKey::new(TEST_SK).expect("valid fallback test secret key")
+    resolve_test_key("$MOYASAR_SECRET_KEY", TEST_SK, SecretKey::new)
 }
 
 /// Loads `MOYASAR_PUBLISHABLE_KEY` from the process environment or `.env.local` / `.env`
-/// using the SDK's built-in `$VAR` resolver (`env-keys` feature).
-/// Falls back to [`TEST_PK`] when no `.env` key is configured.
+/// using the SDK's built-in `$VAR` resolver (`env-keys` feature), with fallback to [`TEST_PK`].
 pub fn resolve_test_publishable_key() -> PublishableKey {
-    if let Ok(key) = PublishableKey::new("$MOYASAR_PUBLISHABLE_KEY")
-        && key.mode() == AuthMode::Test
-        && is_configured_real_secret(key.expose_secret())
-    {
-        return key;
-    }
-    PublishableKey::new(TEST_PK).expect("valid fallback test publishable key")
+    resolve_test_key("$MOYASAR_PUBLISHABLE_KEY", TEST_PK, PublishableKey::new)
+}
+
+fn configured_base_url() -> String {
+    std::env::var("MOYASAR_BASE_URL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
 }
 
 /// Attempts to build a real `MoyasarClient<SecretKey>` from `MOYASAR_SECRET_KEY` in `.env`
 /// or the process environment targeting `https://api.moyasar.com` (or `$MOYASAR_BASE_URL`).
-/// Returns `None` if `MOYASAR_SECRET_KEY` is not set or still holds the `.env.example` placeholder.
 pub fn try_dotenv_secret_client() -> Option<MoyasarClient<SecretKey>> {
-    let key = SecretKey::new("$MOYASAR_SECRET_KEY").ok()?;
-    if !is_configured_real_secret(key.expose_secret()) {
-        return None;
-    }
-    let base_url = std::env::var("MOYASAR_BASE_URL")
+    let key = SecretKey::new("$MOYASAR_SECRET_KEY")
         .ok()
-        .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
-    MoyasarClient::builder(key).base_url(base_url).build().ok()
+        .filter(|k| is_configured_real_secret(k.expose_secret()))?;
+    MoyasarClient::builder(key)
+        .base_url(configured_base_url())
+        .build()
+        .ok()
 }
 
 /// Attempts to build a real `MoyasarClient<PublishableKey>` from `MOYASAR_PUBLISHABLE_KEY`
 /// in `.env` or the process environment targeting `https://api.moyasar.com`.
 pub fn try_dotenv_publishable_client() -> Option<MoyasarClient<PublishableKey>> {
-    let key = PublishableKey::new("$MOYASAR_PUBLISHABLE_KEY").ok()?;
-    if !is_configured_real_secret(key.expose_secret()) {
-        return None;
-    }
+    let key = PublishableKey::new("$MOYASAR_PUBLISHABLE_KEY")
+        .ok()
+        .filter(|k| is_configured_real_secret(k.expose_secret()))?;
     MoyasarClient::new(key).ok()
 }
 
@@ -77,15 +80,11 @@ pub fn is_live_dotenv_test_enabled() -> bool {
     !disabled && try_dotenv_secret_client().is_some()
 }
 
-pub async fn start_secret_client() -> (MockServer, MoyasarClient<SecretKey>) {
-    start_secret_client_with_retries(1).await
-}
-
-pub async fn start_secret_client_with_retries(
+async fn start_client_with_key<K: AuthKey>(
+    key: K,
     retries: u32,
-) -> (MockServer, MoyasarClient<SecretKey>) {
+) -> (MockServer, MoyasarClient<K>) {
     let server = MockServer::start().await;
-    let key = resolve_test_secret_key();
     let client = MoyasarClient::builder(key)
         .base_url(server.uri())
         .timeout(Duration::from_millis(400))
@@ -95,25 +94,27 @@ pub async fn start_secret_client_with_retries(
     (server, client)
 }
 
+pub async fn start_secret_client() -> (MockServer, MoyasarClient<SecretKey>) {
+    start_secret_client_with_retries(1).await
+}
+
+pub async fn start_secret_client_with_retries(
+    retries: u32,
+) -> (MockServer, MoyasarClient<SecretKey>) {
+    start_client_with_key(resolve_test_secret_key(), retries).await
+}
+
 pub async fn start_publishable_client() -> (MockServer, MoyasarClient<PublishableKey>) {
-    let server = MockServer::start().await;
-    let key = resolve_test_publishable_key();
-    let client = MoyasarClient::builder(key)
-        .base_url(server.uri())
-        .timeout(Duration::from_millis(400))
-        .max_network_retries(1)
-        .build()
-        .expect("loopback publishable test client should build");
-    (server, client)
+    start_client_with_key(resolve_test_publishable_key(), 1).await
 }
 
 pub async fn mount_json_endpoint(
     server: &MockServer,
-    http_method: &str,
-    endpoint_path: &str,
+    route: (&str, &str),
     status: u16,
     body: Value,
 ) {
+    let (http_method, endpoint_path) = route;
     Mock::given(method(http_method))
         .and(path(endpoint_path))
         .and(header("moyasar-version", API_VERSION))
@@ -124,11 +125,11 @@ pub async fn mount_json_endpoint(
 
 pub async fn mount_raw_endpoint(
     server: &MockServer,
-    http_method: &str,
-    endpoint_path: &str,
+    route: (&str, &str),
     status: u16,
     raw_body: &str,
 ) {
+    let (http_method, endpoint_path) = route;
     Mock::given(method(http_method))
         .and(path(endpoint_path))
         .respond_with(ResponseTemplate::new(status).set_body_string(raw_body))

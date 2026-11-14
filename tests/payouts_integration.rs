@@ -6,10 +6,9 @@ use serde_json::json;
 use some_moyasar::prelude::*;
 
 #[tokio::test]
-async fn payout_accounts_and_payouts_single_bulk_list_retrieve_lifecycle() {
+async fn payout_accounts_create_and_retrieve_lifecycle() {
     let (server, client) = common::start_secret_client().await;
     let acct_id = PayoutAccountId::new("pa_acct_001").unwrap();
-    let payout_id = PayoutId::new("po_payout_001").unwrap();
 
     let acct_json = json!({
         "id": acct_id.as_str(),
@@ -24,20 +23,13 @@ async fn payout_accounts_and_payouts_single_bulk_list_retrieve_lifecycle() {
     });
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/payout_accounts",
+        ("POST", "/v1/payout_accounts"),
         201,
         acct_json.clone(),
     )
     .await;
-    common::mount_json_endpoint(
-        &server,
-        "GET",
-        &format!("/v1/payout_accounts/{}", acct_id.as_str()),
-        200,
-        acct_json,
-    )
-    .await;
+    let acct_get_path = format!("/v1/payout_accounts/{}", acct_id.as_str());
+    common::mount_json_endpoint(&server, ("GET", &acct_get_path), 200, acct_json).await;
 
     let acct_params = CreatePayoutAccountParams::new(
         PayoutAccountType::Bank,
@@ -56,6 +48,13 @@ async fn payout_accounts_and_payouts_single_bulk_list_retrieve_lifecycle() {
     assert_eq!(created_acct.id, acct_id);
     let fetched_acct = client.payout_accounts().retrieve(&acct_id).await.unwrap();
     assert_eq!(fetched_acct.currency, Currency::SAR);
+}
+
+#[tokio::test]
+async fn payouts_single_and_bulk_creation_lifecycle() {
+    let (server, client) = common::start_secret_client().await;
+    let acct_id = PayoutAccountId::new("pa_acct_001").unwrap();
+    let payout_id = PayoutId::new("po_payout_001").unwrap();
 
     let payout_json = json!({
         "id": payout_id.as_str(),
@@ -65,7 +64,7 @@ async fn payout_accounts_and_payouts_single_bulk_list_retrieve_lifecycle() {
         "message": "Success",
         "failure_reason": null
     });
-    common::mount_json_endpoint(&server, "POST", "/v1/payouts", 201, payout_json.clone()).await;
+    common::mount_json_endpoint(&server, ("POST", "/v1/payouts"), 201, payout_json.clone()).await;
 
     let bank_dest = PayoutDestination::Bank(BankDestination {
         iban: "SA4420000001234567891234".to_string(),
@@ -90,12 +89,9 @@ async fn payout_accounts_and_payouts_single_bulk_list_retrieve_lifecycle() {
 
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/payouts/bulk",
+        ("POST", "/v1/payouts/bulk"),
         201,
-        json!({
-            "payouts": [payout_json]
-        }),
+        json!({ "payouts": [payout_json] }),
     )
     .await;
     let entry = BulkPayoutEntry::new(

@@ -26,14 +26,11 @@ impl Drop for TempDotenvFile {
 
 #[tokio::test]
 async fn dotenv_secret_and_publishable_keys_load_and_authenticate_requests() {
-    let _guard = TempDotenvFile::create(
-        ".env.integration_test",
-        "MOYASAR_DOTENV_IT_SK="sk_test_from_dotenv_file_777"
-MOYASAR_DOTENV_IT_PK='pk_test_from_dotenv_file_888'
-",
-    );
+    let dotenv_body = "MOYASAR_DOTENV_IT_SK=\"sk_test_from_dotenv_file_777\"\nMOYASAR_DOTENV_IT_PK='pk_test_from_dotenv_file_888'\n";
+    let _guard = TempDotenvFile::create(".env.integration_test", dotenv_body);
 
-    let sk = SecretKey::new("$MOYASAR_DOTENV_IT_SK").expect("resolve SK from .env.integration_test");
+    let sk =
+        SecretKey::new("$MOYASAR_DOTENV_IT_SK").expect("resolve SK from .env.integration_test");
     let pk = PublishableKey::new("${MOYASAR_DOTENV_IT_PK}")
         .expect("resolve PK from .env.integration_test");
     assert_eq!(sk.mode(), AuthMode::Test);
@@ -49,8 +46,7 @@ MOYASAR_DOTENV_IT_PK='pk_test_from_dotenv_file_888'
 
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/source/issuer",
+        ("POST", "/v1/source/issuer"),
         200,
         json!({
             "issuer_name": "Saudi National Bank",

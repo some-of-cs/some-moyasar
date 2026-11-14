@@ -20,8 +20,7 @@ async fn sources_bin_lookup_and_apple_pay_session_initiation_with_negative_guard
 
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/source/issuer",
+        ("POST", "/v1/source/issuer"),
         200,
         json!({
             "issuer_name": "Al Rajhi Bank",
@@ -56,8 +55,7 @@ async fn sources_bin_lookup_and_apple_pay_session_initiation_with_negative_guard
 
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/applepay/initiate",
+        ("POST", "/v1/applepay/initiate"),
         200,
         json!({
             "epochTimestamp": 1700000000000_u64,
@@ -82,10 +80,9 @@ async fn sources_bin_lookup_and_apple_pay_session_initiation_with_negative_guard
 }
 
 #[tokio::test]
-async fn webhooks_api_crud_available_events_and_attempts_lifecycle() {
+async fn webhooks_api_create_and_available_events_lifecycle() {
     let (server, client) = common::start_secret_client().await;
     let hook_id = Uuid::parse_str("990e8400-e29b-41d4-a716-446655440000").unwrap();
-    let attempt_id = Uuid::parse_str("aa0e8400-e29b-41d4-a716-446655440000").unwrap();
 
     assert!(matches!(
         CreateWebhookParams::new(
@@ -115,26 +112,32 @@ async fn webhooks_api_crud_available_events_and_attempts_lifecycle() {
         "events": ["payment_paid", "payment_failed"],
         "created_at": "2026-11-14T10:00:00Z"
     });
-    common::mount_json_endpoint(&server, "POST", "/v1/webhooks", 201, hook_json).await;
+    common::mount_json_endpoint(&server, ("POST", "/v1/webhooks"), 201, hook_json).await;
     let created = client.webhooks().create(&create_params).await.unwrap();
     assert_eq!(created.id, hook_id);
     assert!(!format!("{created:?}").contains("whsec_top_secret"));
 
     common::mount_json_endpoint(
         &server,
-        "GET",
-        "/v1/webhooks/available_events",
+        ("GET", "/v1/webhooks/available_events"),
         200,
         json!({ "events": ["payment_paid", "payment_failed", "balance_transferred"] }),
     )
     .await;
     let events = client.webhooks().available_events().await.unwrap();
     assert_eq!(events.len(), 3);
+}
 
+#[tokio::test]
+async fn webhooks_api_attempts_and_delete_lifecycle() {
+    let (server, client) = common::start_secret_client().await;
+    let hook_id = Uuid::parse_str("990e8400-e29b-41d4-a716-446655440000").unwrap();
+    let attempt_id = Uuid::parse_str("aa0e8400-e29b-41d4-a716-446655440000").unwrap();
+
+    let attempt_path = format!("/v1/webhooks/attempts/{attempt_id}");
     common::mount_json_endpoint(
         &server,
-        "GET",
-        &format!("/v1/webhooks/attempts/{attempt_id}"),
+        ("GET", &attempt_path),
         200,
         json!({
             "id": attempt_id,
@@ -143,7 +146,7 @@ async fn webhooks_api_crud_available_events_and_attempts_lifecycle() {
             "event_type": "payment_paid",
             "response_code": 200,
             "response_headers": { "content-type": "application/json" },
-            "response_body": "{"ok":true}",
+            "response_body": "{\"ok\":true}",
             "succeeded": true,
             "message": "OK",
             "created_at": "2026-11-14T10:01:00Z"
@@ -157,8 +160,8 @@ async fn webhooks_api_crud_available_events_and_attempts_lifecycle() {
         .unwrap();
     assert_eq!(attempt.response_code, Some(200));
 
-    common::mount_raw_endpoint(&server, "DELETE", &format!("/v1/webhooks/{hook_id}"), 204, "")
-        .await;
+    let delete_path = format!("/v1/webhooks/{hook_id}");
+    common::mount_raw_endpoint(&server, ("DELETE", &delete_path), 204, "").await;
     client.webhooks().delete(hook_id).await.unwrap();
 }
 
@@ -200,9 +203,7 @@ async fn webhook_engine_constant_time_verifier_replay_guard_deduplicator_and_typ
     });
     let raw_bytes = serde_json::to_vec(&payload).unwrap();
 
-    let event = verifier
-        .verify_and_construct_at(&raw_bytes, now)
-        .unwrap();
+    let event = verifier.verify_and_construct_at(&raw_bytes, now).unwrap();
     assert_eq!(event.event_type, WebhookEventType::PaymentFailed);
     let payment = event.into_payment().unwrap();
     assert_eq!(payment.status, PaymentStatus::Failed);

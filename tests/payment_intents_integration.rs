@@ -25,14 +25,13 @@ fn sample_intent_json(
 }
 
 #[tokio::test]
-async fn payment_intents_create_retrieve_fulfill_and_cancel_workflows() {
+async fn payment_intents_create_and_expiry_redaction_workflow() {
     let (server, sk_client) = common::start_secret_client().await;
     let intent_id = IntentId::new("pi_550e8400e29b41d4a716446655440000").unwrap();
 
     common::mount_json_endpoint(
         &server,
-        "POST",
-        "/v1/payment_intents",
+        ("POST", "/v1/payment_intents"),
         201,
         sample_intent_json(
             intent_id.as_str(),
@@ -62,16 +61,21 @@ async fn payment_intents_create_retrieve_fulfill_and_cancel_workflows() {
     let created_time = Utc.with_ymd_and_hms(2026, 11, 14, 10, 0, 0).unwrap();
     assert!(created.is_usable_at(created_time + ChronoDuration::minutes(59)));
     assert!(!created.is_usable_at(created_time + ChronoDuration::minutes(60)));
+}
 
+#[tokio::test]
+async fn payment_intents_fulfill_and_cancel_workflows() {
+    let (server, sk_client) = common::start_secret_client().await;
+    let intent_id = IntentId::new("pi_550e8400e29b41d4a716446655440000").unwrap();
     let pk_client = MoyasarClient::builder(PublishableKey::new(common::TEST_PK).unwrap())
         .base_url(server.uri())
         .build()
         .unwrap();
 
+    let fulfill_path = format!("/v1/payment_intents/{}/fulfill", intent_id.as_str());
     common::mount_json_endpoint(
         &server,
-        "POST",
-        &format!("/v1/payment_intents/{}/fulfill", intent_id.as_str()),
+        ("POST", &fulfill_path),
         200,
         json!({
             "id": "pay_fulfilled_1",
@@ -112,10 +116,10 @@ async fn payment_intents_create_retrieve_fulfill_and_cancel_workflows() {
         } if url == "https://api.moyasar.com/v1/3ds/challenge_1"
     ));
 
+    let cancel_path = format!("/v1/payment_intents/{}/cancel", intent_id.as_str());
     common::mount_json_endpoint(
         &server,
-        "POST",
-        &format!("/v1/payment_intents/{}/cancel", intent_id.as_str()),
+        ("POST", &cancel_path),
         400,
         common::api_error_body(
             "intent_not_cancelable",
