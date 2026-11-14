@@ -8,6 +8,7 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::transport::execute_with_retry;
+use crate::kernel::types::is_valid_prefixed_id;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
 
@@ -16,24 +17,13 @@ use crate::resources::payments::service::PaymentsService;
 #[serde(transparent)]
 pub struct PaymentId(String);
 
-fn is_valid_id_char(c: char) -> bool {
-    !c.is_whitespace() && !"/?#\\".contains(c)
-}
-
-fn is_valid_payment_suffix(suffix: &str) -> bool {
-    !suffix.is_empty() && !suffix.contains("..") && suffix.chars().all(is_valid_id_char)
-}
-
 impl PaymentId {
     /// Parses and validates a Moyasar payment identifier.
     ///
     /// Requires the `pay_` prefix followed by a non-empty, URL-safe suffix.
     pub fn new(raw: impl Into<String>) -> Result<Self, MoyasarError> {
         let value = raw.into();
-        if !value
-            .strip_prefix("pay_")
-            .is_some_and(is_valid_payment_suffix)
-        {
+        if !is_valid_prefixed_id(&value, "pay_") {
             return Err(MoyasarError::Api {
                 error_type: ApiErrorType::InvalidRequestError,
                 message: "invalid payment id: expected non-empty URL-safe suffix after 'pay_'"

@@ -9,7 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use crate::kernel::error::{ApiErrorType, MoyasarError};
-use crate::kernel::types::Currency;
+use crate::kernel::types::{Currency, is_valid_id_char};
 
 /// Strongly typed, non-empty identifier for a Moyasar payout account.
 ///
@@ -28,10 +28,7 @@ use crate::kernel::types::Currency;
 pub struct PayoutAccountId(String);
 
 pub(crate) fn has_unsafe_path_chars(raw: &str) -> bool {
-    raw.contains("..")
-        || raw
-            .chars()
-            .any(|c| c.is_whitespace() || "/?#\\".contains(c))
+    raw.contains("..") || !raw.chars().all(is_valid_id_char)
 }
 
 impl PayoutAccountId {

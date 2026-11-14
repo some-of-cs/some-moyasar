@@ -4,10 +4,10 @@ use core::fmt;
 
 use http::header::CONTENT_TYPE;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use zeroize::Zeroize;
 
-use crate::kernel::auth::AuthKey;
+use crate::kernel::auth::{AuthKey, serialize_secret};
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
@@ -16,13 +16,6 @@ use crate::resources::tokens::TokensService;
 use crate::resources::tokens::models::Token;
 
 const TOKENS_PATH: &str = "/v1/tokens";
-
-fn serialize_secret<S: Serializer>(
-    secret: &SecretString,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(secret.expose_secret())
-}
 
 /// Request payload for creating a Moyasar card token (`POST /v1/tokens`).
 ///
@@ -199,22 +192,15 @@ async fn dispatch_post(
         .send()
         .await;
     body_bytes.zeroize();
-    let response = send_res.map_err(map_reqwest_error)?;
+    let response = send_res.map_err(MoyasarError::from)?;
     let status = response.status().as_u16();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if status >= 500 {
         return Err(MoyasarError::from_api_response(status, &body));
     }
     Ok((status, body))
 }
 
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
 
 fn parse_token_response(status: u16, body: &str) -> Result<Token, MoyasarError> {
     if !(200..300).contains(&status) {

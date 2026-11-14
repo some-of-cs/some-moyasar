@@ -3,13 +3,12 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::send_get_json;
 use crate::resources::invoices::InvoicesService;
 use crate::resources::invoices::models::{Invoice, InvoiceStatus};
 
@@ -200,7 +199,7 @@ impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {
     pub async fn retrieve(&self, id: Uuid) -> Result<Invoice, MoyasarError> {
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{INVOICES_PATH}/{id}");
-        send_get(
+        send_get_json(
             self.client().http(),
             &url,
             self.client().config().max_network_retries,
@@ -256,7 +255,7 @@ impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {
         let base = self.client().config().base_url.trim_end_matches('/');
         let url = format!("{base}{INVOICES_PATH}");
         let query = params.to_query_pairs();
-        send_get(
+        send_get_json(
             self.client().http(),
             &url,
             self.client().config().max_network_retries,
@@ -266,42 +265,6 @@ impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {
     }
 }
 
-async fn send_get<T: DeserializeOwned>(
-    http: &reqwest::Client,
-    url: &str,
-    max_retries: u32,
-    query: &[(String, String)],
-) -> Result<T, MoyasarError> {
-    execute_with_retry(max_retries, || async {
-        let response = http
-            .get(url)
-            .query(query)
-            .send()
-            .await
-            .map_err(map_reqwest_error)?;
-        decode_response(response).await
-    })
-    .await
-}
-
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
-
-async fn decode_response<T: DeserializeOwned>(
-    response: reqwest::Response,
-) -> Result<T, MoyasarError> {
-    let status = response.status();
-    if status.is_success() {
-        return response.json::<T>().await.map_err(map_reqwest_error);
-    }
-    let body = response.text().await.map_err(map_reqwest_error)?;
-    Err(MoyasarError::from_api_response(status.as_u16(), &body))
-}
 
 #[cfg(test)]
 mod tests {

@@ -115,7 +115,7 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
                 .query(params)
                 .send()
                 .await
-                .map_err(map_reqwest_error)?;
+                .map_err(MoyasarError::from)?;
             decode_response(response).await
         })
         .await
@@ -166,26 +166,19 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
         let retries = self.client().config().max_network_retries;
 
         execute_with_retry(retries, || async {
-            let response = http.get(&url).send().await.map_err(map_reqwest_error)?;
+            let response = http.get(&url).send().await.map_err(MoyasarError::from)?;
             decode_response(response).await
         })
         .await
     }
 }
 
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
 
 async fn decode_response<T: DeserializeOwned>(
     response: reqwest::Response,
 ) -> Result<T, MoyasarError> {
     let status = response.status();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }

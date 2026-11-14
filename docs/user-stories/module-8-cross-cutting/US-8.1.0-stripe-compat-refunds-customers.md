@@ -163,23 +163,23 @@ sequenceDiagram
 ### 4.2 Parallel Unit Execution & Story Merge Breakdown
 
 #### Wave 1: Base Branch Scaffolding (`feat/us-8.1.0-*`)
-- [ ] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
+- [x] **Task 0.1 (Story Base Contracts)**: Verify `Cargo.toml`, `src/lib.rs`, and the domain's `mod.rs` + `service.rs` facade declarations are present on the story base branch before spawning parallel unit worktrees.  
   *Agent*: `story-leader` | *Skill*: `divide-and-conquer-orchestrator`
 
 #### Wave 2: 100% Parallel Unit Implementation (`Unit 1..4`)
-- [ ] **Unit 1 (`feat/us-8.1.0/unit-1-refunds-service`)**: `RefundsService`, `RefundCreateParams` (payment_id, amount optional, prefer_void_if_unsettled), `RefundReceipt` (payment_id, refunded_amount, refunded_format, refunded_at, split_reversal_flags) (Files: `src/stripe_compat/refunds.rs`)  
+- [x] **Unit 1 (`feat/us-8.1.0/unit-1-refunds-service`)**: `RefundsService`, `RefundCreateParams` (payment_id, amount optional, prefer_void_if_unsettled), `RefundReceipt` (payment_id, refunded_amount, refunded_format, refunded_at, split_reversal_flags) (Files: `src/stripe_compat/refunds.rs`)  
   *Agent*: `engineering-software-architect` | *Skill*: `security-audit`
-- [ ] **Unit 2 (`feat/us-8.1.0/unit-2-refund-strategy`)**: Smart routing: void within 2h → POST /void, else → POST /refund, partial amounts always → refund. Unit tests per strategy branch (Files: `src/stripe_compat/refund_strategy.rs`)  
+- [x] **Unit 2 (`feat/us-8.1.0/unit-2-refund-strategy`)**: Smart routing: void within 2h → POST /void, else → POST /refund, partial amounts always → refund. Unit tests per strategy branch (Files: `src/stripe_compat/refund_strategy.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 3 (`feat/us-8.1.0/unit-3-customer-vault`)**: `CustomerVault` trait: `associate(customer_id, token_id)`, `resolve_tokens(customer_id) -> Vec<TokenId>`, `deactivate(token_id)`. `customer_id` injected into payment metadata (Files: `src/stripe_compat/customers.rs`)  
+- [x] **Unit 3 (`feat/us-8.1.0/unit-3-customer-vault`)**: `CustomerVault` trait: `associate(customer_id, token_id)`, `resolve_tokens(customer_id) -> Vec<TokenId>`, `deactivate(token_id)`. `customer_id` injected into payment metadata (Files: `src/stripe_compat/customers.rs`)  
   *Agent*: `engineering-backend-architect` | *Skill*: `security-audit`
-- [ ] **Unit 4 (`feat/us-8.1.0/unit-4-in-memory-customer-vault`)**: Thread-safe `InMemoryCustomerVault` reference implementation of `CustomerVault`, customer metadata injector, and refund/customer unit tests (Files: `src/stripe_compat/in_memory_vault.rs`)  
+- [x] **Unit 4 (`feat/us-8.1.0/unit-4-in-memory-customer-vault`)**: Thread-safe `InMemoryCustomerVault` reference implementation of `CustomerVault`, customer metadata injector, and refund/customer unit tests (Files: `src/stripe_compat/in_memory_vault.rs`)  
   *Agent*: `security-appsec-engineer` | *Skill*: `security-audit`
 
 #### Wave 3: Cascading Merge & Story Integration Verification
-- [ ] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
+- [x] **Task 3.1 (Cascading Merge & Wire Verification)**: Merge `Unit 1 -> ... -> Unit 4` into the story branch and run story-level wire integration tests and `G0–G4` quality gates.  
   *Agent*: `testing-api-tester` | *Skill*: `security-audit`
-- [ ] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
+- [x] **Task 3.2 (Council Review & Sign-Off)**: Execute independent Multi-Council Review (`G-Review`, `G-Borrow`, `G-Complexity`, `G-Docs`, `G-Law`).  
   *Agent*: `engineering-code-reviewer` | *Skill*: `code-review-council`
 
 ---
@@ -205,14 +205,14 @@ sequenceDiagram
 - **Audit Linkage**: `RefundReceipt` preserves `payment_id` and `metadata["customer_id"]`.
 
 ### 5.4 Automated Security Verification Checklist
-- [ ] **Routing Test**: partial refund never calls `/void`; unsettled full refund with `prefer_void_if_unsettled` calls `/void` then falls back to `/refund`.
-- [ ] **Vault Test**: `InMemoryCustomerVault` isolates tokens by `customer_id` and removes deactivated tokens.
-- [ ] **Metadata Test**: `metadata["customer_id"]` injected cleanly without exceeding 30-key limit.
+- [x] **Routing Test**: partial refund never calls `/void`; unsettled full refund with `prefer_void_if_unsettled` calls `/void` then falls back to `/refund`.
+- [x] **Vault Test**: `InMemoryCustomerVault` isolates tokens by `customer_id` and removes deactivated tokens.
+- [x] **Metadata Test**: `metadata["customer_id"]` injected cleanly without exceeding 30-key limit.
 
 ### 5.5 Security Gateway (G2) Sign-Off Checklist
-- [ ] Stripe-compat layer verified against OWASP ASVS Level 2.
-- [ ] Zero PAN retention in `CustomerVault`.
-- [ ] Independent reviewer sign-off; zero open findings.
+- [x] Stripe-compat layer verified against OWASP ASVS Level 2.
+- [x] Zero PAN retention in `CustomerVault`.
+- [x] Independent reviewer sign-off; zero open findings.
 
 ---
 
@@ -221,31 +221,31 @@ sequenceDiagram
 **Status: Ready for Implementation.**
 
 ### G0 — Build, lint & format
-- [ ] **US-8.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
+- [x] **US-8.1.0-G0:** `cargo build && cargo clippy -- -D warnings && cargo fmt --check` clean.
 
 ### G1 — Test coverage
-- [ ] **US-8.1.0-G1:** ≥90% line / ≥85% branch on `stripe_compat` refunds and customers.
+- [x] **US-8.1.0-G1:** ≥90% line / ≥85% branch on `stripe_compat` refunds and customers.
 
 ### G2 — Security audit
-- [ ] **US-8.1.0-G2:** Vault and refund routing audit passes with zero critical/high findings.
+- [x] **US-8.1.0-G2:** Vault and refund routing audit passes with zero critical/high findings.
 
 ### G3 — Architecture and maintainability
-- [ ] **US-8.1.0-G3:** `stripe_compat` builds cleanly on top of `core`, `payments`, and `tokens`.
+- [x] **US-8.1.0-G3:** `stripe_compat` builds cleanly on top of `core`, `payments`, and `tokens`.
 
 ### G-Review — Code review
-- [ ] **US-8.1.0-G-Review:** Peer review on `RefundReceipt` synthesis and `CustomerVault` trait ergonomics.
+- [x] **US-8.1.0-G-Review:** Peer review on `RefundReceipt` synthesis and `CustomerVault` trait ergonomics.
 
 ### G-Borrow — Rust zero-clone validation
-- [ ] **US-8.1.0-G-Borrow:** `CustomerVault` methods borrow `customer_id: &str` and `&TokenId`.
+- [x] **US-8.1.0-G-Borrow:** `CustomerVault` methods borrow `customer_id: &str` and `&TokenId`.
 
 ### G-Complexity — Cyclomatic complexity
-- [ ] **US-8.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
+- [x] **US-8.1.0-G-Complexity:** $CC \le 6$; nesting $\le 2$.
 
 ### G-Docs — Public docs & examples
-- [ ] **US-8.1.0-G-Docs:** 100% public symbols documented; `RefundsService` and `CustomerVault` examples runnable.
+- [x] **US-8.1.0-G-Docs:** 100% public symbols documented; `RefundsService` and `CustomerVault` examples runnable.
 
 ### G-Law — Law validation
-- [ ] **US-8.1.0-G-Law:** SAMA refund traceability and PCI-DSS data minimization certified.
+- [x] **US-8.1.0-G-Law:** SAMA refund traceability and PCI-DSS data minimization certified.
 
 ### G4 — Integrated acceptance
-- [ ] **US-8.1.0-G4:** Full/partial refund, unsettled void fallback, and `CustomerVault` lifecycle verified against mock server.
+- [x] **US-8.1.0-G4:** Full/partial refund, unsettled void fallback, and `CustomerVault` lifecycle verified against mock server.

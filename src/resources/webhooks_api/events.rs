@@ -75,7 +75,7 @@ async fn fetch_available_events(
     );
 
     execute_with_retry(max_network_retries, || async {
-        let response = http.get(&url).send().await.map_err(map_reqwest_error)?;
+        let response = http.get(&url).send().await.map_err(MoyasarError::from)?;
         parse_available_events_response(response).await
     })
     .await
@@ -85,7 +85,7 @@ async fn parse_available_events_response(
     response: reqwest::Response,
 ) -> Result<Vec<WebhookEventType>, MoyasarError> {
     let status = response.status();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
@@ -97,13 +97,6 @@ async fn parse_available_events_response(
         })
 }
 
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
 
 #[cfg(test)]
 mod tests {

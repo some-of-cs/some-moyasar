@@ -144,10 +144,10 @@ async fn send_update_request(
             .json(params)
             .send()
             .await
-            .map_err(map_reqwest_error)?;
+            .map_err(MoyasarError::from)?;
 
         let status = response.status();
-        let body = response.text().await.map_err(map_reqwest_error)?;
+        let body = response.text().await.map_err(MoyasarError::from)?;
         if !status.is_success() {
             return Err(MoyasarError::from_api_response(status.as_u16(), &body));
         }
@@ -156,13 +156,6 @@ async fn send_update_request(
     .await
 }
 
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
 
 fn deserialize_invoice(body: &str) -> Result<Invoice, MoyasarError> {
     serde_json::from_str::<Invoice>(body).map_err(|err| MoyasarError::Api {

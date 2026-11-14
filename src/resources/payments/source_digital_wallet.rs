@@ -3,16 +3,10 @@
 use core::fmt;
 
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 
+use crate::kernel::auth::serialize_secret;
 use crate::kernel::error::MoyasarError;
-
-fn serialize_secret<S: Serializer>(
-    secret: &SecretString,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(secret.expose_secret())
-}
 
 /// Apple Pay payment source (`type: "applepay"`).
 ///

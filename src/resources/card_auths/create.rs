@@ -223,9 +223,9 @@ impl<'a, K: AuthKey> CardAuthsService<'a, K> {
             .send()
             .await;
         body_bytes.zeroize();
-        let response = send_res.map_err(map_reqwest_error)?;
+        let response = send_res.map_err(MoyasarError::from)?;
         let status = response.status();
-        let body = response.text().await.map_err(map_reqwest_error)?;
+        let body = response.text().await.map_err(MoyasarError::from)?;
         if !status.is_success() {
             return Err(MoyasarError::from_api_response(status.as_u16(), &body));
         }
@@ -238,13 +238,6 @@ impl<'a, K: AuthKey> CardAuthsService<'a, K> {
     }
 }
 
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
 
 #[cfg(test)]
 mod tests {

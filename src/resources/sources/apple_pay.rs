@@ -179,22 +179,15 @@ async fn dispatch_post(
         .json(params)
         .send()
         .await
-        .map_err(map_reqwest_error)?;
+        .map_err(MoyasarError::from)?;
     let status = response.status().as_u16();
-    let body = response.text().await.map_err(map_reqwest_error)?;
+    let body = response.text().await.map_err(MoyasarError::from)?;
     if status >= 500 {
         return Err(MoyasarError::from_api_response(status, &body));
     }
     Ok((status, body))
 }
 
-fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
-    if err.is_timeout() {
-        MoyasarError::Timeout
-    } else {
-        MoyasarError::Network(err)
-    }
-}
 
 fn parse_session_response(
     status: u16,

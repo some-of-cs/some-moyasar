@@ -5,6 +5,8 @@ use std::future::Future;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use http::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use zeroize::Zeroize;
 
 use crate::kernel::auth::{AuthKey, PublishableKey, SecretKey};
@@ -114,6 +116,43 @@ where
     Fut: Future<Output = Result<T, MoyasarError>>,
 {
     execute_with_retry(max_network_retries, operation).await
+}
+
+/// Decodes a `2xx` [`reqwest::Response`] body as JSON into `T`, or maps non-`2xx`
+/// responses into a structured [`MoyasarError`] via [`MoyasarError::from_api_response`].
+pub async fn decode_json_response<T: DeserializeOwned>(
+    response: reqwest::Response,
+) -> Result<T, MoyasarError> {
+    let status = response.status();
+    if status.is_success() {
+        return response.json::<T>().await.map_err(MoyasarError::from);
+    }
+    let body = response.text().await.map_err(MoyasarError::from)?;
+    Err(MoyasarError::from_api_response(status.as_u16(), &body))
+}
+
+/// Dispatches an idempotent `GET` request with query parameters through [`execute_with_retry`]
+/// and decodes the JSON response via [`decode_json_response`].
+pub async fn send_get_json<T, Q>(
+    http: &reqwest::Client,
+    url: &str,
+    max_retries: u32,
+    query: &Q,
+) -> Result<T, MoyasarError>
+where
+    T: DeserializeOwned,
+    Q: Serialize + Sync + ?Sized,
+{
+    execute_with_retry(max_retries, || async {
+        let response = http
+            .get(url)
+            .query(query)
+            .send()
+            .await
+            .map_err(MoyasarError::from)?;
+        decode_json_response(response).await
+    })
+    .await
 }
 
 impl TryFrom<&SecretKey> for HeaderValue {

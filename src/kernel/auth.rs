@@ -2,6 +2,7 @@
 
 use core::fmt;
 use secrecy::{ExposeSecret, SecretString};
+use serde::Serializer;
 #[cfg(feature = "env-keys")]
 use zeroize::Zeroize;
 
@@ -195,6 +196,25 @@ impl fmt::Debug for SecretKey {
 impl fmt::Debug for PublishableKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("PublishableKey([REDACTED])")
+    }
+}
+
+/// Serializes a [`SecretString`] by exposing its inner UTF-8 string slice.
+pub fn serialize_secret<S: Serializer>(
+    secret: &SecretString,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(secret.expose_secret())
+}
+
+/// Serializes an optional [`SecretString`] by exposing its inner UTF-8 string slice when `Some`.
+pub fn serialize_opt_secret<S: Serializer>(
+    secret: &Option<SecretString>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match secret {
+        Some(value) => serializer.serialize_some(value.expose_secret()),
+        None => serializer.serialize_none(),
     }
 }
 

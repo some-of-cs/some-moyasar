@@ -9,6 +9,7 @@ use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
 use crate::kernel::transport::execute_with_retry;
+use crate::kernel::types::validate_path_segment;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
 
@@ -17,21 +18,7 @@ use crate::resources::payments::service::PaymentsService;
 /// Rejects empty strings, whitespace, `/`, `?`, `#`, and `..` traversal sequences
 /// before interpolating `id` into Moyasar API request URLs.
 pub(crate) fn validate_payment_id(id: &str) -> Result<(), MoyasarError> {
-    let invalid = id.is_empty()
-        || id.chars().any(char::is_whitespace)
-        || id.contains('/')
-        || id.contains('?')
-        || id.contains('#')
-        || id.contains("..");
-    if invalid {
-        return Err(MoyasarError::Api {
-            error_type: ApiErrorType::InvalidRequestError,
-            message: "payment id must be a non-empty URL-safe path segment".to_owned(),
-            errors: Vec::new(),
-            response_code: None,
-        });
-    }
-    Ok(())
+    validate_path_segment(id, "payment id")
 }
 
 /// Parameters for updating an existing payment via `PUT /v1/payments/:id`.
