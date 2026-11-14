@@ -129,7 +129,12 @@ impl ConstantTimeSecretVerifier {
         if !matched {
             return Err(WebhookError::SecretMismatch);
         }
-        event.validate_timestamp_at(now, self.tolerance)?;
+        let max_delta =
+            chrono::TimeDelta::from_std(self.tolerance).unwrap_or(chrono::TimeDelta::MAX);
+        let delta = now.signed_duration_since(event.created_at);
+        if delta > max_delta || delta < -max_delta {
+            return Err(WebhookError::TimestampOutOfRange);
+        }
         Ok(event)
     }
 
@@ -226,5 +231,18 @@ mod tests {
         let dbg = format!("{verifier:?}");
         assert!(dbg.contains("[REDACTED]"));
         assert_eq!(verifier.tolerance(), tolerance);
+    }
+
+    #[test]
+    fn expired_timestamp_returns_timestamp_out_of_range() {
+        let now = Utc::now();
+        let verifier =
+            ConstantTimeSecretVerifier::new("whsec_live_123", Duration::from_secs(300));
+        let stale = now - chrono::TimeDelta::seconds(301);
+        let body = sample_payload("whsec_live_123", stale);
+        let err = verifier
+            .verify_and_construct_at(&body, now)
+            .expect_err("stale webhook timestamp must fail");
+        assert!(matches!(err, WebhookError::TimestampOutOfRange));
     }
 }
