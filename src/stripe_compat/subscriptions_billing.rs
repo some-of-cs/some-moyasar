@@ -111,6 +111,8 @@ mod tests {
                 "id": "token_inactive",
                 "status": "inactive",
                 "number": "411111XXXXXX1111",
+                "company": "visa",
+                "gateway_id": "gw_1",
                 "created_at": "2026-11-14T10:00:00Z"
             })))
             .mount(&server)
