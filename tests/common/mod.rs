@@ -12,6 +12,8 @@ pub const TEST_PK: &str = "pk_test_integration_publishable_12345";
 pub const LIVE_SK: &str = "sk_live_integration_secret_99999";
 pub const LIVE_PK: &str = "pk_live_integration_publishable_99999";
 
+pub type Route<'a> = (&'a str, &'a str);
+
 fn is_configured_real_secret(raw: &str) -> bool {
     !raw.is_empty() && !raw.contains("replace_with")
 }
@@ -105,7 +107,7 @@ pub async fn start_publishable_client() -> (MockServer, MoyasarClient<Publishabl
     start_client_with_key(resolve_test_publishable_key(), 1).await
 }
 
-async fn mount_template(server: &MockServer, route: (&str, &str), template: ResponseTemplate) {
+async fn mount_template(server: &MockServer, route: Route<'_>, template: ResponseTemplate) {
     Mock::given(method(route.0))
         .and(path(route.1))
         .and(header("moyasar-version", API_VERSION))
@@ -114,32 +116,12 @@ async fn mount_template(server: &MockServer, route: (&str, &str), template: Resp
         .await;
 }
 
-pub async fn mount_json_endpoint(
-    server: &MockServer,
-    route: (&str, &str),
-    status: u16,
-    body: Value,
-) {
-    mount_template(
-        server,
-        route,
-        ResponseTemplate::new(status).set_body_json(body),
-    )
-    .await;
+pub async fn mount_json_endpoint(srv: &MockServer, route: Route<'_>, status: u16, body: Value) {
+    mount_template(srv, route, ResponseTemplate::new(status).set_body_json(body)).await;
 }
 
-pub async fn mount_raw_endpoint(
-    server: &MockServer,
-    route: (&str, &str),
-    status: u16,
-    raw_body: &str,
-) {
-    mount_template(
-        server,
-        route,
-        ResponseTemplate::new(status).set_body_string(raw_body),
-    )
-    .await;
+pub async fn mount_raw_endpoint(srv: &MockServer, route: Route<'_>, status: u16, raw: &str) {
+    mount_template(srv, route, ResponseTemplate::new(status).set_body_string(raw)).await;
 }
 
 pub fn paginated_envelope(

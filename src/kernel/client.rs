@@ -185,7 +185,7 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
         let http = reqwest::Client::builder()
             .timeout(self.config.timeout)
             .default_headers(headers)
-            .https_only(self.config.base_url.starts_with("https://"))
+            .https_only(self.key.mode() == AuthMode::Live)
             .build()?;
 
         Ok(MoyasarClient(Arc::new(ClientInner {
