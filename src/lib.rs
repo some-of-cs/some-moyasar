@@ -16,6 +16,7 @@ pub mod prelude;
     feature = "payment-intents",
     feature = "tokens",
     feature = "invoices",
-    feature = "card-auths"
+    feature = "card-auths",
+    feature = "payouts"
 ))]
 pub mod resources;

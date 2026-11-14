@@ -7,7 +7,7 @@ description = "Idiomatic, microkernel-architected Rust SDK for the Moyasar Payme
 repository = "https://github.com/some-of-cs/some-moyasar"
 
 [features]
-default = ["core", "env-keys", "payments", "payment-intents", "tokens-invoices-3ds"]
+default = ["core", "env-keys", "payments", "payment-intents", "tokens-invoices-3ds", "payouts"]
 core = []
 env-keys = []
 payments = ["core"]
@@ -16,6 +16,7 @@ tokens = ["core"]
 invoices = ["core"]
 card-auths = ["core"]
 tokens-invoices-3ds = ["tokens", "invoices", "card-auths"]
+payouts = ["core"]
 
 [dependencies]
 base64 = "0.22"
