@@ -145,7 +145,12 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
         let retries = self.client().config().max_network_retries;
 
         execute_with_retry(retries, || async {
-            let response = http.post(&url).json(params).send().await?;
+            let response = http
+                .post(&url)
+                .json(params)
+                .send()
+                .await
+                .map_err(map_reqwest_error)?;
             parse_payout_response(response).await
         })
         .await
@@ -154,7 +159,7 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
 
 async fn parse_payout_response(response: reqwest::Response) -> Result<Payout, MoyasarError> {
     let status = response.status();
-    let body = response.text().await?;
+    let body = response.text().await.map_err(map_reqwest_error)?;
     if !status.is_success() {
         return Err(MoyasarError::from_api_response(status.as_u16(), &body));
     }
@@ -162,6 +167,14 @@ async fn parse_payout_response(response: reqwest::Response) -> Result<Payout, Mo
         status: status.as_u16(),
         message: format!("failed to decode Payout response: {err}"),
     })
+}
+
+fn map_reqwest_error(err: reqwest::Error) -> MoyasarError {
+    if err.is_timeout() {
+        MoyasarError::Timeout
+    } else {
+        MoyasarError::Network(err)
+    }
 }
 
 #[cfg(test)]
@@ -178,12 +191,14 @@ mod tests {
             "source_id": "pa_01J9PAYACC0001",
             "sequence_number": sequence_number,
             "amount": amount,
-            "purpose": "payroll",
+            "purpose": "payroll_benefits",
             "destination": {
                 "type": "bank",
                 "iban": "SA0380000000608010167519",
                 "name": "Acme Employee",
-                "mobile": "+966500000001"
+                "mobile": "+966500000001",
+                "country": "SA",
+                "city": "Riyadh"
             }
         }))
         .expect("valid CreatePayoutParams JSON fixture")
@@ -194,17 +209,20 @@ mod tests {
         let server = MockServer::start().await;
         let response_body = json!({
             "id": "po_01J9PAYOUT0001",
+            "channel": "sarie",
             "source_id": "pa_01J9PAYACC0001",
             "sequence_number": "2026111400000001",
             "amount": 50_000,
             "currency": "SAR",
-            "purpose": "payroll",
+            "purpose": "payroll_benefits",
             "status": "initiated",
             "destination": {
                 "type": "bank",
                 "iban": "SA0380000000608010167519",
                 "name": "Acme Employee",
-                "mobile": "+966500000001"
+                "mobile": "+966500000001",
+                "country": "SA",
+                "city": "Riyadh"
             },
             "created_at": "2026-11-14T06:00:00Z",
             "updated_at": "2026-11-14T06:00:00Z"
