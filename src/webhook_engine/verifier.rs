@@ -121,7 +121,10 @@ impl ConstantTimeSecretVerifier {
     ) -> Result<WebhookEvent, WebhookError> {
         let event: WebhookEvent = serde_json::from_slice(raw_body)?;
         let mut provided_digest = Self::compute_digest(event.secret_token.as_bytes());
-        let matched = provided_digest.ct_eq(&self.expected_secret_digest).unwrap_u8() == 1;
+        let matched = provided_digest
+            .ct_eq(&self.expected_secret_digest)
+            .unwrap_u8()
+            == 1;
         provided_digest.zeroize();
         if !matched {
             return Err(WebhookError::SecretMismatch);
