@@ -139,7 +139,6 @@ impl CreateCardAuthParams {
     }
 }
 
-
 fn has_https_host(parsed: &reqwest::Url) -> bool {
     parsed.scheme() == "https" && parsed.host_str().is_some()
 }
