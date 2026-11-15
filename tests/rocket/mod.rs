@@ -1,23 +1,12 @@
 //! Shared Rocket async tracked client harness and E2E test modules.
-//!
-//! Note for Story 2 integration: once `examples/rocket/*` are merged,
-//! `examples/rocket/routes_*.rs` reference `crate::state` and
-//! `crate::responder`, so `tests/rocket_integration.rs` will need crate-root
-//! `#[path]` declarations (or `pub use rocket_suite::{state, responder};`)
-//! alongside mounting the example route modules directly.
-
 #![warn(missing_docs)]
 
 use std::time::Duration;
 
-use chrono::{Duration as ChronoDuration, Utc};
-use rocket::http::Status;
 use rocket::local::asynchronous::Client;
-use rocket::serde::{Deserialize, json::Json};
-use rocket::{Build, Rocket, State, post, routes};
-use serde_json::{Value, json};
+use rocket::{Build, Rocket};
+use serde_json::Value;
 use some_moyasar::prelude::*;
-use uuid::Uuid;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -41,25 +30,6 @@ mod invoices_payouts_test;
 mod settlements_test;
 mod webhooks_test;
 
-/// Managed Rocket test application state holding a loopback-wired SDK client.
-pub struct RocketTestState {
-    /// Authenticated Moyasar secret client targeting [`MoyasarMockServer`].
-    pub client: MoyasarClient<SecretKey>,
-}
-
-/// JSON request payload accepted by the test `POST /invoices` Rocket route.
-#[derive(Debug, Deserialize)]
-pub struct InvoiceCreateRequest {
-    /// Invoice amount in minor currency units (e.g. Halalas for SAR).
-    pub amount: Amount,
-    /// ISO 4217 currency code.
-    pub currency: Currency,
-    /// Optional human-readable invoice description.
-    pub description: Option<String>,
-    /// Optional callback URL for invoice status webhooks.
-    pub callback_url: Option<String>,
-}
-
 /// Deterministic HTTP status and JSON body specification for mock endpoints.
 pub struct MockResponseSpec {
     /// HTTP status code returned by the mock endpoint.
@@ -68,81 +38,19 @@ pub struct MockResponseSpec {
     pub body: Value,
 }
 
-/// Maps a [`MoyasarError`] to an appropriate HTTP [`Status`] for test routes.
-fn map_error_status(err: &MoyasarError) -> Status {
-    match err {
-        MoyasarError::InvalidIban | MoyasarError::InvalidPayoutAmount => Status::BadRequest,
-        _ => Status::BadGateway,
-    }
-}
-
-/// Formats a redacted JSON error response with the provided HTTP [`Status`].
-fn error_response(status: Status, err: &MoyasarError) -> (Status, Json<Value>) {
-    (status, Json(json!({ "error": err.to_string() })))
-}
-
-/// Test Rocket handler for `POST /invoices`.
-#[post("/invoices", data = "<payload>")]
-async fn create_invoice(
-    state: &State<RocketTestState>,
-    payload: Json<InvoiceCreateRequest>,
-) -> (Status, Json<Value>) {
-    let req = payload.into_inner();
-    let mut params = CreateInvoiceParams::new(req.amount, req.currency);
-    params.description = req.description;
-    params.callback_url = req.callback_url;
-
-    match state.client.invoices().create(&params).await {
-        Ok(invoice) => (Status::Created, Json(json!(invoice))),
-        Err(err) => error_response(map_error_status(&err), &err),
-    }
-}
-
-/// Test Rocket handler for `POST /invoices/<id>/cancel` with 29-day SADAD sync.
-#[post("/invoices/<id>/cancel")]
-async fn cancel_invoice(state: &State<RocketTestState>, id: &str) -> (Status, Json<Value>) {
-    let Ok(invoice_id) = Uuid::parse_str(id) else {
-        return (
-            Status::BadRequest,
-            Json(json!({ "error": "invalid invoice uuid" })),
-        );
-    };
-
-    match state.client.invoices().cancel(invoice_id).await {
-        Ok(invoice) => {
-            let now = Utc::now();
-            let synced = sync_sadad_expiry(Some(now + ChronoDuration::days(35)), now);
-            (
-                Status::Ok,
-                Json(json!({
-                    "invoice": invoice,
-                    "sadad_synced_expiry": synced.to_rfc3339(),
-                    "max_sadad_expiry_days": MAX_SADAD_EXPIRY_DAYS,
-                })),
-            )
-        }
-        Err(err) => error_response(map_error_status(&err), &err),
-    }
-}
-
-/// Test Rocket handler for `POST /payouts` with SAMA IBAN and purpose validation.
-#[post("/payouts", data = "<payload>")]
-async fn create_payout(
-    state: &State<RocketTestState>,
-    payload: Json<CreatePayoutParams>,
-) -> (Status, Json<Value>) {
-    match state.client.payouts().create(&payload.into_inner()).await {
-        Ok(payout) => (Status::Created, Json(json!(payout))),
-        Err(err) => error_response(map_error_status(&err), &err),
-    }
-}
-
-/// Builds a [`Rocket`] instance managed with [`RocketTestState`] and E2E routes.
+/// Builds a [`Rocket`] instance managed with [`state::RocketAppState`] and real example routes.
 #[must_use]
 pub fn build_test_rocket(client: MoyasarClient<SecretKey>) -> Rocket<Build> {
+    let app_state = state::RocketAppState::new(
+        client,
+        ConstantTimeSecretVerifier::with_default_tolerance("whsec_test_secret"),
+        InMemoryDeduplicator::new(),
+    );
     rocket::build()
-        .manage(RocketTestState { client })
-        .mount("/", routes![create_invoice, cancel_invoice, create_payout])
+        .manage(app_state)
+        .mount("/", routes_invoices_payouts::routes())
+        .mount("/", routes_settlements::routes())
+        .mount("/", routes_webhooks::routes())
 }
 
 /// Spawns a [`MoyasarMockServer`] and a tracked Rocket [`Client`] wired to it.

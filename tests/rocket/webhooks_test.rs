@@ -68,9 +68,14 @@ async fn webhook_invalid_secret_rejected() {
         .await;
 
     assert_eq!(response.status(), Status::Unauthorized);
+    let body: Value = response
+        .into_json()
+        .await
+        .expect("webhook 401 response should have a JSON body");
+    assert_eq!(body["error_type"], "authentication_error");
 }
 
-/// Verifies that replaying the same `event.id` to `POST /webhooks/moyasar` is rejected (`400`/`409`).
+/// Verifies that replaying the same `event.id` to `POST /webhooks/moyasar` is rejected (`400 Bad Request`).
 #[rocket::async_test]
 async fn webhook_replay_same_event_id_rejected() {
     let (_mock_server, client) = super::spawn_test_client().await;
@@ -91,12 +96,10 @@ async fn webhook_replay_same_event_id_rejected() {
         .body(payload)
         .dispatch()
         .await;
-    assert!(
-        matches!(
-            replay_response.status(),
-            Status::BadRequest | Status::Conflict
-        ),
-        "expected 400 Bad Request or 409 Conflict for replayed event_id, got {}",
-        replay_response.status()
-    );
+    assert_eq!(replay_response.status(), Status::BadRequest);
+    let body: Value = replay_response
+        .into_json()
+        .await
+        .expect("webhook replay 400 response should have a JSON body");
+    assert_eq!(body["error_type"], "invalid_request_error");
 }
