@@ -362,7 +362,10 @@ mod tests {
                 .code(),
             Code::InvalidArgument
         );
-        assert_eq!(parse_currency("SAR").expect("valid currency"), Currency::SAR);
+        assert_eq!(
+            parse_currency("SAR").expect("valid currency"),
+            Currency::SAR
+        );
         assert_eq!(
             parse_currency("INVALID").expect_err("bad currency").code(),
             Code::InvalidArgument
@@ -372,7 +375,7 @@ mod tests {
             parse_given_id("bad-uuid").expect_err("bad uuid").code(),
             Code::InvalidArgument
         );
-        assert_eq!(to_json_string(&vec![1_u32, 2]).expect("json"), "[1,2]");
+        assert_eq!(to_json_string(&[1_u32, 2]).expect("json"), "[1,2]");
     }
 
     #[test]
