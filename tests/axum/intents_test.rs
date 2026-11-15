@@ -54,29 +54,62 @@ async fn read_json_body(response: axum::response::Response) -> Value {
     serde_json::from_slice(&bytes).expect("valid JSON response body")
 }
 
-/// Verifies `POST /intents` creates a payment intent with integer minor-unit `amount`.
-#[tokio::test]
-async fn creates_payment_intent_with_integer_minor_unit_amount() {
+/// Mounts a single-use upstream mock and dispatches a JSON request to the Axum router.
+async fn mount_and_dispatch(
+    http_method: Method,
+    upstream_path: &str,
+    upstream_status: u16,
+    mock_body: Value,
+    app_uri: &str,
+    req_body: Option<Value>,
+) -> axum::response::Response {
     let (mock_server, app) = super::spawn_test_app().await;
-    let expires_at = Utc::now() + Duration::seconds(INTENT_EXPIRY_SECS);
-    let mock_body = intent_payload("pi_e2e_create_01", "created", 25000, expires_at);
-
-    Mock::given(method("POST"))
-        .and(path("/v1/payment_intents"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(mock_body))
+    Mock::given(method(http_method.as_str()))
+        .and(path(upstream_path))
+        .respond_with(ResponseTemplate::new(upstream_status).set_body_json(mock_body))
         .with_priority(1)
         .expect(1)
         .mount(mock_server.server())
         .await;
 
+    let request = json_request(http_method, app_uri, req_body);
+    app.oneshot(request).await.expect("router response")
+}
+
+/// Asserts a `200 OK` response and returns the parsed JSON body after checking `id` and `status`.
+async fn assert_intent_ok(
+    response: axum::response::Response,
+    expected_id: &str,
+    expected_status: &str,
+) -> Value {
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = read_json_body(response).await;
+    assert_eq!(body["id"], expected_id);
+    assert_eq!(body["status"], expected_status);
+    body
+}
+
+/// Verifies `POST /intents` creates a payment intent with integer minor-unit `amount`.
+#[tokio::test]
+async fn creates_payment_intent_with_integer_minor_unit_amount() {
+    let expires_at = Utc::now() + Duration::seconds(INTENT_EXPIRY_SECS);
+    let mock_body = intent_payload("pi_e2e_create_01", "created", 25000, expires_at);
     let req_body = json!({
         "amount": 25000_u64,
         "currency": "SAR",
         "description": "Order #42",
         "callback_url": "https://example.com/callback"
     });
-    let request = json_request(Method::POST, "/intents", Some(req_body));
-    let response = app.oneshot(request).await.expect("router response");
+
+    let response = mount_and_dispatch(
+        Method::POST,
+        "/v1/payment_intents",
+        201,
+        mock_body,
+        "/intents",
+        Some(req_body),
+    )
+    .await;
 
     assert!(
         response.status() == StatusCode::CREATED || response.status() == StatusCode::OK,
@@ -92,54 +125,45 @@ async fn creates_payment_intent_with_integer_minor_unit_amount() {
 /// Verifies `GET /intents/{id}` returns `200 OK` when the intent is still usable.
 #[tokio::test]
 async fn retrieves_usable_payment_intent_with_200_ok() {
-    let (mock_server, app) = super::spawn_test_app().await;
     let expires_at = Utc::now() + Duration::minutes(45);
     let mock_body = intent_payload("pi_e2e_usable_01", "created", 25000, expires_at);
-
     let model: PaymentIntent =
         serde_json::from_value(mock_body.clone()).expect("valid PaymentIntent fixture");
     assert!(model.is_usable());
 
-    Mock::given(method("GET"))
-        .and(path("/v1/payment_intents/pi_e2e_usable_01"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(mock_body))
-        .with_priority(1)
-        .expect(1)
-        .mount(mock_server.server())
-        .await;
+    let response = mount_and_dispatch(
+        Method::GET,
+        "/v1/payment_intents/pi_e2e_usable_01",
+        200,
+        mock_body,
+        "/intents/pi_e2e_usable_01",
+        None,
+    )
+    .await;
 
-    let request = json_request(Method::GET, "/intents/pi_e2e_usable_01", None);
-    let response = app.oneshot(request).await.expect("router response");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let body = read_json_body(response).await;
-    assert_eq!(body["id"], "pi_e2e_usable_01");
-    assert_eq!(body["status"], "created");
+    let body = assert_intent_ok(response, "pi_e2e_usable_01", "created").await;
     assert_eq!(body["amount"], 25000);
 }
 
 /// Verifies `GET /intents/{id}` returns `410 Gone` when `is_usable() == false` due to expiry.
 #[tokio::test]
 async fn rejects_expired_payment_intent_with_410_gone() {
-    let (mock_server, app) = super::spawn_test_app().await;
     let expired_at = Utc::now() - Duration::minutes(10);
     let mock_body = intent_payload("pi_e2e_expired_01", "created", 25000, expired_at);
-
     let model: PaymentIntent =
         serde_json::from_value(mock_body.clone()).expect("valid PaymentIntent fixture");
     assert_eq!(model.status, PaymentIntentStatus::Created);
     assert!(!model.is_usable());
 
-    Mock::given(method("GET"))
-        .and(path("/v1/payment_intents/pi_e2e_expired_01"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(mock_body))
-        .with_priority(1)
-        .expect(1)
-        .mount(mock_server.server())
-        .await;
-
-    let request = json_request(Method::GET, "/intents/pi_e2e_expired_01", None);
-    let response = app.oneshot(request).await.expect("router response");
+    let response = mount_and_dispatch(
+        Method::GET,
+        "/v1/payment_intents/pi_e2e_expired_01",
+        200,
+        mock_body,
+        "/intents/pi_e2e_expired_01",
+        None,
+    )
+    .await;
 
     assert_eq!(response.status(), StatusCode::GONE);
 }
@@ -147,23 +171,18 @@ async fn rejects_expired_payment_intent_with_410_gone() {
 /// Verifies `POST /intents/{id}/cancel` cancels an active payment intent.
 #[tokio::test]
 async fn cancels_payment_intent_with_200_ok() {
-    let (mock_server, app) = super::spawn_test_app().await;
     let expires_at = Utc::now() + Duration::minutes(30);
     let mock_body = intent_payload("pi_e2e_cancel_01", "canceled", 25000, expires_at);
 
-    Mock::given(method("POST"))
-        .and(path("/v1/payment_intents/pi_e2e_cancel_01/cancel"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(mock_body))
-        .with_priority(1)
-        .expect(1)
-        .mount(mock_server.server())
-        .await;
+    let response = mount_and_dispatch(
+        Method::POST,
+        "/v1/payment_intents/pi_e2e_cancel_01/cancel",
+        200,
+        mock_body,
+        "/intents/pi_e2e_cancel_01/cancel",
+        None,
+    )
+    .await;
 
-    let request = json_request(Method::POST, "/intents/pi_e2e_cancel_01/cancel", None);
-    let response = app.oneshot(request).await.expect("router response");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let body = read_json_body(response).await;
-    assert_eq!(body["id"], "pi_e2e_cancel_01");
-    assert_eq!(body["status"], "canceled");
+    assert_intent_ok(response, "pi_e2e_cancel_01", "canceled").await;
 }
