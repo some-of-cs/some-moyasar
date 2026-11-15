@@ -6,7 +6,7 @@ use rocket::serde::json::Json;
 use serde::Serialize;
 use uuid::Uuid;
 
-use some_moyasar::prelude::{MoyasarError, WebhookError};
+use some_moyasar::prelude::{MoyasarError, WebhookDeduplicator, WebhookError};
 
 use crate::responder::MoyasarResponder;
 use crate::state::RocketAppState;

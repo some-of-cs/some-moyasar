@@ -5,11 +5,24 @@ use rocket::serde::json::Json;
 use serde::Serialize;
 
 use some_moyasar::prelude::{
-    Amount, ListSettlementsParams, MerchantBalance, PaginatedList, Settlement, SettlementId,
+    Amount, ListSettlementsParams, MerchantBalance, Settlement, SettlementId,
 };
 
 use crate::responder::MoyasarResponder;
 use crate::state::RocketAppState;
+
+/// Serializable response payload for the paginated settlements listing endpoint.
+#[derive(Debug, Clone, Serialize)]
+pub struct SettlementsListResponse {
+    /// Settlement records returned on the current page.
+    pub items: Vec<Settlement>,
+    /// Total number of matching settlement records across all pages.
+    pub total_count: Option<u64>,
+    /// Current 1-based page number.
+    pub current_page: Option<u32>,
+    /// Next page number, if more results exist.
+    pub next_page: Option<u32>,
+}
 
 /// Response payload pairing a [`Settlement`] with its checked net payout amount.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -26,13 +39,18 @@ pub struct SettlementBreakdownResponse {
 #[rocket::get("/settlements")]
 pub async fn list_settlements(
     state: &State<RocketAppState>,
-) -> Result<Json<PaginatedList<Settlement>>, MoyasarResponder> {
-    let settlements = state
+) -> Result<Json<SettlementsListResponse>, MoyasarResponder> {
+    let page = state
         .client
         .settlements()
         .list(&ListSettlementsParams::new())
         .await?;
-    Ok(Json(settlements))
+    Ok(Json(SettlementsListResponse {
+        items: page.items,
+        total_count: Some(page.meta.total_count),
+        current_page: Some(page.meta.current_page),
+        next_page: page.meta.next_page,
+    }))
 }
 
 /// Retrieves a single Moyasar settlement by ID along with its checked net amount.
