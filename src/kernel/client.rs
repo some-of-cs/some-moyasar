@@ -337,6 +337,7 @@ impl<K: AuthKey> fmt::Debug for MoyasarClient<K> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use secrecy::ExposeSecret;
 
     #[test]
     fn rejects_plaintext_http_and_userinfo_base_urls() {
