@@ -322,3 +322,47 @@ async fn webhook_engine_card_auth_extractor_and_deduplicators() {
     assert!(noop.check_and_record(event_id).await.unwrap());
     assert!(noop.check_and_record(event_id).await.unwrap());
 }
+
+#[tokio::test]
+async fn sources_apple_pay_url_credentials_guard_and_webhooks_404_500_errors() {
+    assert!(matches!(
+        validate_apple_pay_url("https://"),
+        Err(MoyasarError::InvalidBaseUrl)
+    ));
+    assert!(matches!(
+        validate_apple_pay_url("https://user:pass@merchant.example.com/session"),
+        Err(MoyasarError::InvalidBaseUrl)
+    ));
+
+    let (server, client) = common::start_secret_client().await;
+    let hook_id = Uuid::parse_str("990e8400-e29b-41d4-a716-446655440000").unwrap();
+    let delete_path = format!("/v1/webhooks/{hook_id}");
+    common::mount_json_endpoint(
+        &server,
+        ("DELETE", &delete_path),
+        404,
+        common::api_error_body("record_not_found", "Webhook not found", None),
+    )
+    .await;
+    let del_err = client.webhooks().delete(hook_id).await.unwrap_err();
+    assert!(matches!(
+        del_err,
+        MoyasarError::Api {
+            error_type: ApiErrorType::RecordNotFound,
+            ..
+        }
+    ));
+
+    let attempt_id = Uuid::parse_str("aa0e8400-e29b-41d4-a716-446655440000").unwrap();
+    let retry_path = format!("/v1/webhooks/attempts/{attempt_id}/retry");
+    common::mount_raw_endpoint(&server, ("POST", &retry_path), 500, "Server Error").await;
+    let retry_err = client
+        .webhooks()
+        .retry_attempt(attempt_id)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        retry_err,
+        MoyasarError::ServerError { status: 500, .. }
+    ));
+}

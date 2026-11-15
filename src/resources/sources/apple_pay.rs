@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::kernel::auth::PublishableAuthKey;
 use crate::kernel::client::MoyasarClient;
-use crate::kernel::error::{ApiErrorType, MoyasarError};
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::error::MoyasarError;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 
 const APPLE_PAY_INITIATE_PATH: &str = "/v1/applepay/initiate";
 
@@ -61,19 +61,34 @@ pub struct ApplePayMerchantSession {
     pub retries: Option<u32>,
 }
 
-/// Validates that an Apple Pay validation URL uses `https://` with a non-empty host
-/// and contains no whitespace.
-pub(crate) fn validate_apple_pay_url(url: &str) -> Result<(), MoyasarError> {
-    let Some(rest) = url.strip_prefix("https://") else {
+/// Validates that an Apple Pay validation URL uses `https://` with a non-empty host,
+/// no embedded credentials or fragment, and no whitespace.
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::InvalidBaseUrl`] if `url` is not a valid `https://` URL.
+pub fn validate_apple_pay_url(url: &str) -> Result<(), MoyasarError> {
+    let trimmed = url.trim();
+    if trimmed.starts_with("https:///") || trimmed.chars().any(char::is_whitespace) {
         return Err(MoyasarError::InvalidBaseUrl);
-    };
-    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let valid_host = !host.is_empty()
-        && (host.contains('.') || host == "localhost" || host.starts_with("localhost:"));
-    if !valid_host || url.chars().any(char::is_whitespace) {
+    }
+    let parsed = reqwest::Url::parse(trimmed).map_err(|_| MoyasarError::InvalidBaseUrl)?;
+    if !is_valid_apple_pay_target(&parsed) {
         return Err(MoyasarError::InvalidBaseUrl);
     }
     Ok(())
+}
+
+fn is_valid_apple_pay_target(parsed: &reqwest::Url) -> bool {
+    let clean_url = parsed.scheme() == "https"
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+        && parsed.fragment().is_none();
+    clean_url && parsed.host_str().is_some_and(has_resolvable_apple_pay_host)
+}
+
+fn has_resolvable_apple_pay_host(host: &str) -> bool {
+    host.contains('.') || host == "localhost"
 }
 
 /// Request parameters for initiating an Apple Pay Web Merchant session
@@ -161,18 +176,17 @@ async fn post_initiate_session<K: PublishableAuthKey>(
         APPLE_PAY_INITIATE_PATH
     );
     let max_retries = client.config().max_network_retries;
-    let (status, body) = execute_with_retry(max_retries, || async {
+    execute_with_retry(max_retries, || async {
         dispatch_post(client.http(), &url, params).await
     })
-    .await?;
-    parse_session_response(status, &body)
+    .await
 }
 
 async fn dispatch_post(
     http: &reqwest::Client,
     url: &str,
     params: &InitiateApplePayParams,
-) -> Result<(u16, String), MoyasarError> {
+) -> Result<ApplePayMerchantSession, MoyasarError> {
     let response = http
         .post(url)
         .header(CONTENT_TYPE, "application/json")
@@ -180,33 +194,14 @@ async fn dispatch_post(
         .send()
         .await
         .map_err(MoyasarError::from)?;
-    let status = response.status().as_u16();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    if status >= 500 {
-        return Err(MoyasarError::from_api_response(status, &body));
-    }
-    Ok((status, body))
-}
-
-fn parse_session_response(
-    status: u16,
-    body: &str,
-) -> Result<ApplePayMerchantSession, MoyasarError> {
-    if !(200..300).contains(&status) {
-        return Err(MoyasarError::from_api_response(status, body));
-    }
-    serde_json::from_str::<ApplePayMerchantSession>(body).map_err(|err| MoyasarError::Api {
-        error_type: ApiErrorType::Unknown,
-        message: format!("failed to decode Apple Pay session response: {err}"),
-        errors: Vec::new(),
-        response_code: None,
-    })
+    decode_json_response(response).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::kernel::auth::PublishableKey;
+    use crate::kernel::error::ApiErrorType;
     use crate::kernel::transport::{API_VERSION, MOYASAR_VERSION_HEADER};
     use std::sync::atomic::{AtomicU32, Ordering};
     use wiremock::matchers::{body_json, header, header_exists, method, path};

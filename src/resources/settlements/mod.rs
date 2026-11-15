@@ -12,6 +12,8 @@ pub mod lines;
 pub mod list;
 /// Settlement and settlement line domain models.
 pub mod models;
+/// Settlement net-amount and line-item reconciliation helpers.
+pub mod reconciliation;
 /// Settlement retrieval endpoint.
 pub mod retrieve;
 /// Service wrappers for settlements, transfers, and internal transactions.
@@ -27,6 +29,7 @@ pub use internal_txn_models::{InternalTransaction, InternalTransactionId};
 pub use lines::{ListSettlementLinesParams, SettlementLine};
 pub use list::ListSettlementsParams;
 pub use models::{Settlement, SettlementId, SettlementRecipientType};
+pub use reconciliation::reconcile_settlement;
 pub use service::{InternalTransactionsService, SettlementsService, TransfersService};
 pub use transfer_models::{Transfer, TransferId, TransferLine};
 pub use transfers::{ListTransferLinesParams, ListTransfersParams};

@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::kernel::types::{Amount, Currency};
 use crate::resources::settlements::service::SettlementsService;
 
@@ -138,25 +138,11 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
         let retries = self.client().config().max_network_retries;
 
         execute_with_retry(retries, || async {
-            let response = http.get(&url).send().await?;
-            parse_balance_response(response).await
+            let response = http.get(&url).send().await.map_err(MoyasarError::from)?;
+            decode_json_response(response).await
         })
         .await
     }
-}
-
-async fn parse_balance_response(
-    response: reqwest::Response,
-) -> Result<MerchantBalance, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<MerchantBalance>(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
-        message: format!("failed to decode MerchantBalance response: {err}"),
-    })
 }
 
 #[cfg(test)]

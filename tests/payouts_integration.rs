@@ -219,3 +219,78 @@ fn payouts_negative_validations_enforce_sa_iban_16_digit_seq_and_20_purposes() {
     assert!(PayoutAccountId::new("pa_../bad").is_err());
     assert!(PayoutId::new("po_../bad").is_err());
 }
+
+#[tokio::test]
+async fn payouts_debug_redaction_422_and_malformed_200_decode_error() {
+    let bank = BankDestination {
+        iban: "SA4420000001234567891234".to_string(),
+        name: "Some CS LLC".to_string(),
+        mobile: "+966551234567".to_string(),
+        country: "SA".to_string(),
+        city: "Riyadh".to_string(),
+    };
+    let bank_dbg = format!("{bank:?}");
+    assert!(bank_dbg.contains("[REDACTED]"));
+    assert!(!bank_dbg.contains("SA4420000001234567891234"));
+    assert!(!bank_dbg.contains("+966551234567"));
+
+    let wallet = WalletDestination {
+        mobile: "0551234567".to_string(),
+    };
+    let wallet_dbg = format!("{wallet:?}");
+    assert!(wallet_dbg.contains("[REDACTED]"));
+    assert!(!wallet_dbg.contains("0551234567"));
+
+    let props = PayoutAccountProperties {
+        iban: Some("SA4420000001234567891234".to_string()),
+        name: Some("Some CS LLC".to_string()),
+        bank_name: Some("Riyad Bank".to_string()),
+        extra: BTreeMap::new(),
+    };
+    let props_dbg = format!("{props:?}");
+    assert!(props_dbg.contains("[REDACTED]"));
+    assert!(!props_dbg.contains("SA4420000001234567891234"));
+
+    let (server_422, client_422) = common::start_secret_client().await;
+    let err_json = common::api_error_body(
+        "invalid_request_error",
+        "Validation failed",
+        Some("iban"),
+    );
+    common::mount_json_endpoint(&server_422, ("POST", "/v1/payout_accounts"), 422, err_json).await;
+    let acct_params = CreatePayoutAccountParams::new(
+        PayoutAccountType::Bank,
+        props,
+        "super_secret_val".into(),
+    )
+    .unwrap();
+    let err_422 = client_422
+        .payout_accounts()
+        .create(&acct_params)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err_422,
+        MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            ..
+        }
+    ));
+
+    let (server_bad, client_bad) = common::start_secret_client().await;
+    common::mount_raw_endpoint(
+        &server_bad,
+        ("GET", "/v1/payout_accounts/pa_acct_001"),
+        200,
+        "not-valid-json",
+    )
+    .await;
+    let acct_id = PayoutAccountId::new("pa_acct_001").unwrap();
+    let decode_err = client_bad
+        .payout_accounts()
+        .retrieve(&acct_id)
+        .await
+        .unwrap_err();
+    let msg = decode_err.to_string();
+    assert!(msg.contains("failed to decode JSON response"));
+}

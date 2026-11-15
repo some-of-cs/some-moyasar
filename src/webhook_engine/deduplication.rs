@@ -6,14 +6,19 @@
 //! [`WebhookDeduplicator`] backed by Redis (`SET NX EX`) or PostgreSQL
 //! (`INSERT ... ON CONFLICT DO NOTHING`).
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::future::{Future, ready};
 use std::pin::Pin;
 use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use uuid::Uuid;
 
 use super::event_types::WebhookError;
+use super::timestamp::REPLAY_TOLERANCE;
+
+/// Default maximum number of webhook event IDs retained in [`InMemoryDeduplicator`].
+pub const DEFAULT_MAX_DEDUP_ENTRIES: usize = 100_000;
 
 /// Asynchronous idempotency store for deduplicating inbound Moyasar webhook events.
 ///
@@ -70,22 +75,80 @@ impl WebhookDeduplicator for NoopDeduplicator {
     }
 }
 
-/// Thread-safe in-memory [`WebhookDeduplicator`] backed by a `Mutex<HashSet<Uuid>>`.
+/// Thread-safe in-memory [`WebhookDeduplicator`] with TTL expiration and bounded capacity.
 ///
 /// Keyed by `event.id` ([`Uuid`]) to guarantee that concurrent webhook deliveries
-/// for the same event ID result in at most one `Ok(true)` outcome.
-#[derive(Debug, Default)]
+/// for the same event ID result in at most one `Ok(true)` outcome while bounding
+/// memory consumption under high-volume unique webhook replay floods.
+#[derive(Debug)]
 pub struct InMemoryDeduplicator {
-    seen: Mutex<HashSet<Uuid>>,
+    seen: Mutex<HashMap<Uuid, Instant>>,
+    ttl: Duration,
+    max_entries: usize,
+}
+
+impl Default for InMemoryDeduplicator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InMemoryDeduplicator {
-    /// Creates an empty [`InMemoryDeduplicator`].
+    /// Creates an empty [`InMemoryDeduplicator`] with [`REPLAY_TOLERANCE`] TTL and
+    /// [`DEFAULT_MAX_DEDUP_ENTRIES`] capacity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use uuid::Uuid;
+    /// use some_moyasar::webhook_engine::deduplication::{
+    ///     InMemoryDeduplicator, WebhookDeduplicator,
+    /// };
+    ///
+    /// let dedup = InMemoryDeduplicator::new();
+    /// let event_id = Uuid::nil();
+    /// assert!(futures::executor::block_on(dedup.check_and_record(event_id)).unwrap());
+    /// assert!(!futures::executor::block_on(dedup.check_and_record(event_id)).unwrap());
+    /// ```
     #[must_use]
     pub fn new() -> Self {
+        Self::with_capacity_limit(REPLAY_TOLERANCE, DEFAULT_MAX_DEDUP_ENTRIES)
+    }
+
+    /// Creates an [`InMemoryDeduplicator`] with an explicit entry `ttl` and `max_entries` cap.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use uuid::Uuid;
+    /// use some_moyasar::webhook_engine::deduplication::{
+    ///     InMemoryDeduplicator, WebhookDeduplicator,
+    /// };
+    ///
+    /// let dedup = InMemoryDeduplicator::with_capacity_limit(Duration::from_secs(60), 2);
+    /// assert_eq!(dedup.max_entries(), 2);
+    /// assert!(futures::executor::block_on(dedup.check_and_record(Uuid::new_v4())).unwrap());
+    /// ```
+    #[must_use]
+    pub fn with_capacity_limit(ttl: Duration, max_entries: usize) -> Self {
         Self {
-            seen: Mutex::new(HashSet::new()),
+            seen: Mutex::new(HashMap::new()),
+            ttl,
+            max_entries: max_entries.max(1),
         }
+    }
+
+    /// Returns the configured maximum number of retained event IDs.
+    #[must_use]
+    pub const fn max_entries(&self) -> usize {
+        self.max_entries
+    }
+
+    /// Returns the configured TTL duration for retained event IDs.
+    #[must_use]
+    pub const fn ttl(&self) -> Duration {
+        self.ttl
     }
 
     /// Returns the number of recorded event IDs currently stored.
@@ -112,14 +175,34 @@ impl InMemoryDeduplicator {
     }
 }
 
+fn purge_expired_locked(seen: &mut HashMap<Uuid, Instant>, now: Instant, ttl: Duration) {
+    seen.retain(|_, &mut recorded_at| now.saturating_duration_since(recorded_at) < ttl);
+}
+
+fn evict_oldest_locked(seen: &mut HashMap<Uuid, Instant>) {
+    if let Some(oldest_id) = seen.iter().min_by_key(|(_, ts)| *ts).map(|(id, _)| *id) {
+        seen.remove(&oldest_id);
+    }
+}
+
 impl WebhookDeduplicator for InMemoryDeduplicator {
     fn check_and_record(
         &self,
         event_id: Uuid,
     ) -> Pin<Box<dyn Future<Output = Result<bool, WebhookError>> + Send + '_>> {
         let is_fresh = {
+            let now = Instant::now();
             let mut guard = self.seen.lock().unwrap_or_else(PoisonError::into_inner);
-            guard.insert(event_id)
+            purge_expired_locked(&mut guard, now, self.ttl);
+            if guard.contains_key(&event_id) {
+                false
+            } else {
+                if guard.len() >= self.max_entries {
+                    evict_oldest_locked(&mut guard);
+                }
+                guard.insert(event_id, now);
+                true
+            }
         };
         Box::pin(ready(Ok(is_fresh)))
     }
@@ -198,5 +281,23 @@ mod tests {
 
         assert_eq!(fresh_count, 1);
         assert_eq!(deduplicator.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn in_memory_deduplicator_evicts_oldest_when_capacity_exceeded() {
+        let dedup = InMemoryDeduplicator::with_capacity_limit(Duration::from_secs(60), 3);
+        let id1 = Uuid::from_u128(1);
+        let id2 = Uuid::from_u128(2);
+        let id3 = Uuid::from_u128(3);
+        let id4 = Uuid::from_u128(4);
+
+        assert!(dedup.check_and_record(id1).await.unwrap());
+        assert!(dedup.check_and_record(id2).await.unwrap());
+        assert!(dedup.check_and_record(id3).await.unwrap());
+        assert_eq!(dedup.len(), 3);
+
+        assert!(dedup.check_and_record(id4).await.unwrap());
+        assert_eq!(dedup.len(), 3);
+        assert!(dedup.check_and_record(id1).await.unwrap());
     }
 }

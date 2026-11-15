@@ -68,7 +68,7 @@ pub use crate::resources::settlements::{
     ListInternalTransactionsParams, ListSettlementLinesParams, ListSettlementsParams,
     ListTransferLinesParams, ListTransfersParams, MerchantBalance, Settlement, SettlementId,
     SettlementLine, SettlementRecipientType, SettlementsService, Transfer, TransferId,
-    TransferLine, TransfersService,
+    TransferLine, TransfersService, reconcile_settlement,
 };
 
 #[cfg(feature = "payouts")]
@@ -78,26 +78,31 @@ pub use crate::resources::payouts::{
     ListPayoutsParams, PAYOUT_SEQUENCE_NUMBER_LEN, ParsePayoutPurposeError, Payout, PayoutAccount,
     PayoutAccountId, PayoutAccountProperties, PayoutAccountType, PayoutAccountsService,
     PayoutChannel, PayoutDestination, PayoutId, PayoutPurpose, PayoutStatus, PayoutsService,
-    WalletDestination, validate_sa_iban, validate_sa_mobile, validate_sequence_number,
+    PurposeCode, WalletDestination, validate_sa_iban, validate_sa_mobile, validate_saudi_iban,
+    validate_sequence_number,
 };
 
 #[cfg(feature = "sources")]
 pub use crate::resources::sources::{
     ApplePayMerchantSession, ApplePayService, BinLookupParams, InitiateApplePayParams,
-    IssuerCardType as SourceIssuerCardType, IssuerMetadata, SourcesService,
+    IssuerCardType as SourceIssuerCardType, IssuerMetadata, SourcesService, validate_apple_pay_url,
+    validate_bin,
 };
 
 #[cfg(feature = "webhooks-api")]
 pub use crate::resources::webhooks_api::{
     CreateWebhookParams, ListWebhookAttemptsParams, WebhookAttempt, WebhookEndpoint, WebhookSecret,
-    WebhooksService, validate_https_url, validate_webhook_url,
+    WebhooksService, validate_https_url, validate_webhook_callback_url, validate_webhook_url,
 };
+
+#[cfg(all(feature = "webhooks-api", not(feature = "webhook-engine")))]
+pub use crate::resources::webhooks_api::WebhookEventType;
 
 #[cfg(feature = "webhook-engine")]
 pub use crate::webhook_engine::{
-    ConstantTimeSecretVerifier, DOMAIN_SEPARATION_KEY, InMemoryDeduplicator, MAX_FUTURE_SKEW,
-    NoopDeduplicator, REPLAY_TOLERANCE, WebhookDeduplicator, WebhookError, WebhookEvent,
-    WebhookEventType, validate_timestamp_at,
+    ConstantTimeSecretVerifier, DEFAULT_MAX_DEDUP_ENTRIES, DOMAIN_SEPARATION_KEY,
+    InMemoryDeduplicator, MAX_FUTURE_SKEW, NoopDeduplicator, REPLAY_TOLERANCE, WebhookDeduplicator,
+    WebhookError, WebhookEvent, WebhookEventType, validate_timestamp_at, verify_signature,
 };
 
 #[cfg(feature = "stripe-compat")]
@@ -113,17 +118,17 @@ pub use crate::stripe_compat::{
 
 #[cfg(feature = "unified-gateway")]
 pub use crate::unified::{
-    PaymentCapability, PayoutCapability, PayoutEngine, UnifiedChargeResponse, UnifiedIntentRequest,
-    UnifiedIntentResponse, UnifiedPaymentGateway, UnifiedReversalResponse,
-    UnifiedTokenChargeRequest, UnifiedWebhookEvent, WEBHOOK_SECRET_TOKEN_HEADER,
-    WEBHOOK_SIGNATURE_HEADER, WebhookCapability, WebhookVerifier, compute_webhook_signature,
-    verify_webhook_signature,
+    MoyasarGatewayAdapter, PaymentCapability, PayoutCapability, PayoutEngine,
+    UnifiedChargeResponse, UnifiedIntentRequest, UnifiedIntentResponse, UnifiedPaymentGateway,
+    UnifiedReversalResponse, UnifiedTokenChargeRequest, UnifiedWebhookEvent,
+    WEBHOOK_SECRET_TOKEN_HEADER, WEBHOOK_SIGNATURE_HEADER, WebhookCapability, WebhookVerifier,
+    compute_webhook_signature, verify_webhook_signature,
 };
 
 #[cfg(any(test, feature = "test-utils"))]
 pub use crate::test_utils::{
     ALL_WEBHOOK_EVENT_STRINGS, FIXTURE_TIMESTAMP, MoyasarMockServer, SADAD_SANDBOX_BILLER,
     STCPAY_SANDBOX_INSUFFICIENT_FUNDS, STCPAY_SANDBOX_REJECTED, STCPAY_SANDBOX_SUCCESS,
-    all_webhook_event_fixtures, iso8583_error_fixture, sadad_sandbox_fixture,
-    stcpay_sandbox_fixture, webhook_event_fixture, webhook_event_fixture_at,
+    WebhookFixtureBuilder, all_webhook_event_fixtures, iso8583_error_fixture,
+    sadad_sandbox_fixture, stcpay_sandbox_fixture, webhook_event_fixture, webhook_event_fixture_at,
 };

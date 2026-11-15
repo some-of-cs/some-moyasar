@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::kernel::types::{Amount, Currency};
 use crate::resources::settlements::models::SettlementId;
 use crate::resources::settlements::service::SettlementsService;
@@ -144,27 +144,16 @@ impl<'a, K: SecretAuthKey> SettlementsService<'a, K> {
         let retries = self.client().config().max_network_retries;
 
         execute_with_retry(retries, || async {
-            let response = http.get(&url).query(&pairs).send().await?;
-            parse_lines_response(response).await
+            let response = http
+                .get(&url)
+                .query(&pairs)
+                .send()
+                .await
+                .map_err(MoyasarError::from)?;
+            decode_json_response(response).await
         })
         .await
     }
-}
-
-async fn parse_lines_response(
-    response: reqwest::Response,
-) -> Result<PaginatedList<SettlementLine>, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<PaginatedList<SettlementLine>>(&body).map_err(|err| {
-        MoyasarError::ServerError {
-            status: status.as_u16(),
-            message: format!("failed to decode PaginatedList<SettlementLine>: {err}"),
-        }
-    })
 }
 
 #[cfg(test)]

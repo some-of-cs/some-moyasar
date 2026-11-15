@@ -443,3 +443,27 @@ fn test_utils_deterministic_fixtures_cover_all_12_events_stcpay_sadad_and_iso858
         serde_json::from_value(iso8583_error_fixture("51", "Insufficient funds")).unwrap();
     assert_eq!(iso_err.response_code, Some(ResponseCode::InsufficientFunds));
 }
+
+#[tokio::test]
+async fn deduplicator_bounded_eviction_and_verifier_missing_env_secret_guard() {
+    let ttl = std::time::Duration::from_secs(60);
+    let dedup = InMemoryDeduplicator::with_capacity_limit(ttl, 3);
+    let id1 = Uuid::from_u128(101);
+    let id2 = Uuid::from_u128(102);
+    let id3 = Uuid::from_u128(103);
+    let id4 = Uuid::from_u128(104);
+
+    assert!(dedup.check_and_record(id1).await.unwrap());
+    assert!(dedup.check_and_record(id2).await.unwrap());
+    assert!(dedup.check_and_record(id3).await.unwrap());
+    assert_eq!(dedup.len(), 3);
+
+    assert!(dedup.check_and_record(id4).await.unwrap());
+    assert_eq!(dedup.len(), 3);
+    assert!(!dedup.check_and_record(id4).await.unwrap());
+    assert!(dedup.check_and_record(id1).await.unwrap());
+
+    let secret_ref = "$MISSING_MOYASAR_WEBHOOK_SECRET_XYZ";
+    let res = ConstantTimeSecretVerifier::from_secret(secret_ref);
+    assert!(matches!(res, Err(MoyasarError::InvalidWebhookSecret)));
+}

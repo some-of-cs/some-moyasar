@@ -9,7 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use crate::kernel::error::{ApiErrorType, MoyasarError};
-use crate::kernel::types::{Currency, is_valid_id_char};
+use crate::kernel::types::{Currency, is_valid_path_segment};
 
 /// Strongly typed, non-empty identifier for a Moyasar payout account.
 ///
@@ -28,7 +28,7 @@ use crate::kernel::types::{Currency, is_valid_id_char};
 pub struct PayoutAccountId(String);
 
 pub(crate) fn has_unsafe_path_chars(raw: &str) -> bool {
-    raw.contains("..") || !raw.chars().all(is_valid_id_char)
+    !is_valid_path_segment(raw)
 }
 
 impl PayoutAccountId {
@@ -96,7 +96,7 @@ pub enum PayoutAccountType {
 }
 
 /// Account-type-specific properties returned for a Moyasar payout account.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PayoutAccountProperties {
     /// International Bank Account Number, when applicable.
     #[serde(default)]
@@ -110,6 +110,17 @@ pub struct PayoutAccountProperties {
     /// Forward-compatible map of additional provider-specific properties.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+impl fmt::Debug for PayoutAccountProperties {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PayoutAccountProperties")
+            .field("iban", &"[REDACTED]")
+            .field("name", &self.name)
+            .field("bank_name", &self.bank_name)
+            .field("extra", &self.extra)
+            .finish()
+    }
 }
 
 /// Moyasar Payout Account resource returned by `/v1/payout_accounts` endpoints.

@@ -7,9 +7,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::kernel::auth::SecretAuthKey;
-use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::error::MoyasarError;
 use crate::kernel::metadata::Metadata;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::resources::payouts::destinations::PayoutDestination;
 use crate::resources::payouts::models::PayoutAccountId;
 use crate::resources::payouts::payout_model::Payout;
@@ -151,30 +151,17 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
                 .send()
                 .await
                 .map_err(MoyasarError::from)?;
-            parse_payout_response(response).await
+            decode_json_response(response).await
         })
         .await
     }
-}
-
-async fn parse_payout_response(response: reqwest::Response) -> Result<Payout, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<Payout>(&body).map_err(|err| MoyasarError::Api {
-        error_type: ApiErrorType::Unknown,
-        message: format!("failed to decode Payout response: {err}"),
-        errors: Vec::new(),
-        response_code: None,
-    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
+    use crate::kernel::error::ApiErrorType;
     use crate::kernel::client::MoyasarClient;
     use serde_json::json;
     use wiremock::matchers::{body_partial_json, method, path};
@@ -362,6 +349,6 @@ mod tests {
             }
         ));
         let msg = err.to_string();
-        assert!(msg.contains("failed to decode Payout response:"));
+        assert!(msg.contains("failed to decode JSON response:"));
     }
 }
