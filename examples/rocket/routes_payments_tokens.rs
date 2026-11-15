@@ -15,6 +15,21 @@ use some_moyasar::prelude::{
 use crate::responder::MoyasarResponder as AppError;
 use crate::state::RocketAppState;
 
+/// Path parameter wrapper for resource identifiers (`<id>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RouteId<'r>(
+    /// Raw path segment string slice.
+    pub &'r str,
+);
+
+impl<'r> rocket::request::FromParam<'r> for RouteId<'r> {
+    type Error = std::convert::Infallible;
+
+    fn from_param(param: &'r str) -> Result<Self, Self::Error> {
+        Ok(Self(param))
+    }
+}
+
 /// Serializable payment summary returned by Rocket payment routes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PaymentResponse {
@@ -108,9 +123,9 @@ impl From<CardAuthentication> for CardAuthResponse {
 #[rocket::get("/payments/<id>")]
 pub async fn retrieve_payment(
     state: &State<RocketAppState>,
-    id: &str,
+    id: RouteId<'_>,
 ) -> Result<Json<PaymentResponse>, AppError> {
-    let payment_id = PaymentId::new(id)?;
+    let payment_id = PaymentId::new(id.0)?;
     let payment = state.client.payments().retrieve(&payment_id).await?;
     Ok(Json(PaymentResponse::from(payment)))
 }
@@ -119,9 +134,9 @@ pub async fn retrieve_payment(
 #[rocket::post("/payments/<id>/void")]
 pub async fn void_payment(
     state: &State<RocketAppState>,
-    id: &str,
+    id: RouteId<'_>,
 ) -> Result<Json<PaymentResponse>, AppError> {
-    let payment = state.client.payments().void(id).await?;
+    let payment = state.client.payments().void(id.0).await?;
     Ok(Json(PaymentResponse::from(payment)))
 }
 
@@ -129,9 +144,9 @@ pub async fn void_payment(
 #[rocket::post("/payments/<id>/capture")]
 pub async fn capture_payment(
     state: &State<RocketAppState>,
-    id: &str,
+    id: RouteId<'_>,
 ) -> Result<Json<PaymentResponse>, AppError> {
-    let payment = state.client.payments().capture(id, None).await?;
+    let payment = state.client.payments().capture(id.0, None).await?;
     Ok(Json(PaymentResponse::from(payment)))
 }
 
@@ -139,9 +154,9 @@ pub async fn capture_payment(
 #[rocket::post("/payments/<id>/refund")]
 pub async fn refund_payment(
     state: &State<RocketAppState>,
-    id: &str,
+    id: RouteId<'_>,
 ) -> Result<Json<PaymentResponse>, AppError> {
-    let payment = state.client.payments().refund(id, None).await?;
+    let payment = state.client.payments().refund(id.0, None).await?;
     Ok(Json(PaymentResponse::from(payment)))
 }
 
@@ -163,9 +178,9 @@ pub async fn create_payment_intent(
 #[rocket::get("/payment_intents/<id>")]
 pub async fn retrieve_payment_intent(
     state: &State<RocketAppState>,
-    id: &str,
+    id: RouteId<'_>,
 ) -> Result<Json<PaymentIntentResponse>, AppError> {
-    let intent_id = IntentId::new(id)?;
+    let intent_id = IntentId::new(id.0)?;
     let intent = state.client.payment_intents().retrieve(&intent_id).await?;
     Ok(Json(PaymentIntentResponse::from(intent)))
 }
@@ -174,9 +189,9 @@ pub async fn retrieve_payment_intent(
 #[rocket::post("/payment_intents/<id>/cancel")]
 pub async fn cancel_payment_intent(
     state: &State<RocketAppState>,
-    id: &str,
+    id: RouteId<'_>,
 ) -> Result<Json<PaymentIntentResponse>, AppError> {
-    let intent_id = IntentId::new(id)?;
+    let intent_id = IntentId::new(id.0)?;
     let intent = state.client.payment_intents().cancel(&intent_id).await?;
     Ok(Json(PaymentIntentResponse::from(intent)))
 }
@@ -185,17 +200,20 @@ pub async fn cancel_payment_intent(
 #[rocket::get("/tokens/<id>")]
 pub async fn retrieve_token(
     state: &State<RocketAppState>,
-    id: &str,
+    id: RouteId<'_>,
 ) -> Result<Json<Token>, AppError> {
-    let token_id = TokenId::new(id)?;
+    let token_id = TokenId::new(id.0)?;
     let token = state.client.tokens().retrieve(&token_id).await?;
     Ok(Json(token))
 }
 
 /// Deletes a saved card token (`DELETE /tokens/<id>`), returning `204 No Content`.
 #[rocket::delete("/tokens/<id>")]
-pub async fn delete_token(state: &State<RocketAppState>, id: &str) -> Result<Status, AppError> {
-    let token_id = TokenId::new(id)?;
+pub async fn delete_token(
+    state: &State<RocketAppState>,
+    id: RouteId<'_>,
+) -> Result<Status, AppError> {
+    let token_id = TokenId::new(id.0)?;
     state.client.tokens().delete(&token_id).await?;
     Ok(Status::NoContent)
 }
@@ -204,9 +222,9 @@ pub async fn delete_token(state: &State<RocketAppState>, id: &str) -> Result<Sta
 #[rocket::get("/card_auths/<id>")]
 pub async fn retrieve_card_auth(
     state: &State<RocketAppState>,
-    id: &str,
+    id: RouteId<'_>,
 ) -> Result<Json<CardAuthResponse>, AppError> {
-    let auth_id = CardAuthId::new(id)?;
+    let auth_id = CardAuthId::new(id.0)?;
     let auth = state.client.card_auths().retrieve(&auth_id).await?;
     Ok(Json(CardAuthResponse::from(auth)))
 }
