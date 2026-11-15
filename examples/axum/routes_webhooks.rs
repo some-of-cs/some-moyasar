@@ -26,28 +26,22 @@ fn error_response(status: StatusCode, message: &str) -> Response {
 }
 
 /// Verifies the raw webhook payload signature and validates its replay timestamp.
-fn verify_and_validate_webhook(state: &AppState, body: &[u8]) -> Result<WebhookEvent, Response> {
+fn verify_and_validate_webhook(
+    state: &AppState,
+    body: &[u8],
+) -> Result<WebhookEvent, (StatusCode, &'static str)> {
     let event = match state.verifier.verify_and_construct(body) {
         Ok(event) => event,
         Err(WebhookError::InvalidJson(_)) => {
-            return Err(error_response(
-                StatusCode::BAD_REQUEST,
-                "invalid webhook payload",
-            ));
+            return Err((StatusCode::BAD_REQUEST, "invalid webhook payload"));
         }
         Err(_) => {
-            return Err(error_response(
-                StatusCode::UNAUTHORIZED,
-                "unauthorized webhook",
-            ));
+            return Err((StatusCode::UNAUTHORIZED, "unauthorized webhook"));
         }
     };
 
     if validate_timestamp_at(event.created_at, Utc::now(), state.verifier.tolerance()).is_err() {
-        return Err(error_response(
-            StatusCode::UNAUTHORIZED,
-            "stale or invalid webhook timestamp",
-        ));
+        return Err((StatusCode::UNAUTHORIZED, "stale or invalid webhook timestamp"));
     }
 
     Ok(event)
@@ -61,7 +55,7 @@ fn verify_and_validate_webhook(state: &AppState, body: &[u8]) -> Result<WebhookE
 async fn handle_moyasar_webhook(State(state): State<AppState>, body: Bytes) -> Response {
     let event = match verify_and_validate_webhook(&state, &body) {
         Ok(event) => event,
-        Err(resp) => return resp,
+        Err((status, msg)) => return error_response(status, msg),
     };
 
     let is_fresh = match state.deduplicator.check_and_record(event.id).await {
