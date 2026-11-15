@@ -33,7 +33,7 @@ async fn post_payment_action(client: &Client, path: &str) -> PaymentResponse {
 }
 
 /// Builds a deterministic Moyasar `Payment` JSON fixture for mock responses.
-fn sample_payment_json(id: &str, status: &str) -> Value {
+fn sample_payment_json(id: &str, status: PaymentStatus) -> Value {
     json!({
         "id": id,
         "status": status,
@@ -53,7 +53,7 @@ fn sample_payment_json(id: &str, status: &str) -> Value {
 }
 
 /// Builds a deterministic Moyasar `PaymentIntent` JSON fixture for mock responses.
-fn sample_intent_json(id: &str, status: &str) -> Value {
+fn sample_intent_json(id: &str, status: PaymentIntentStatus) -> Value {
     json!({
         "id": id,
         "status": status,
@@ -93,8 +93,8 @@ fn sample_card_auth_json(id: &str) -> Value {
 #[tokio::test]
 async fn retrieves_and_voids_payment() {
     let (server, client) = spawn_test_client().await;
-    let auth_body = sample_payment_json("pay_01", "authorized");
-    let void_body = sample_payment_json("pay_01", "voided");
+    let auth_body = sample_payment_json("pay_01", PaymentStatus::Authorized);
+    let void_body = sample_payment_json("pay_01", PaymentStatus::Voided);
     let void_api = "/v1/payments/pay_01/void";
 
     mount_ok_get(&server, "/v1/payments/pay_01", auth_body).await;
@@ -117,8 +117,8 @@ async fn retrieves_and_voids_payment() {
 #[tokio::test]
 async fn captures_and_refunds_payment() {
     let (server, client) = spawn_test_client().await;
-    let cap_body = sample_payment_json("pay_02", "captured");
-    let ref_body = sample_payment_json("pay_02", "refunded");
+    let cap_body = sample_payment_json("pay_02", PaymentStatus::Captured);
+    let ref_body = sample_payment_json("pay_02", PaymentStatus::Refunded);
     let cap_api = "/v1/payments/pay_02/capture";
     let ref_api = "/v1/payments/pay_02/refund";
 
@@ -140,8 +140,9 @@ async fn creates_retrieves_and_cancels_payment_intent() {
     let (server, client) = spawn_test_client().await;
     let get_api = "/v1/payment_intents/pi_01";
     let cancel_api = "/v1/payment_intents/pi_01/cancel";
-    let created_body = sample_intent_json("pi_01", "created");
-    let canceled_body = sample_intent_json("pi_01", "canceled");
+    let init_body = sample_intent_json("pi_01", PaymentIntentStatus::Created);
+    let created_body = sample_intent_json("pi_01", PaymentIntentStatus::Created);
+    let canceled_body = sample_intent_json("pi_01", PaymentIntentStatus::Canceled);
 
     mount_json_endpoint(
         &server,
@@ -149,7 +150,7 @@ async fn creates_retrieves_and_cancels_payment_intent() {
         "/v1/payment_intents",
         MockResponseSpec {
             status: 201,
-            body: sample_intent_json("pi_01", "created"),
+            body: init_body,
         },
     )
     .await;
