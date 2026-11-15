@@ -4,7 +4,7 @@ use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use serde_json::{Value, json};
 use some_moyasar::prelude::*;
 use uuid::Uuid;
-use wiremock::matchers::{body_json, body_partial_json, method, path};
+use wiremock::matchers::{body_json, body_partial_json, body_string, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 fn sample_module8_payment_json(id: &str, status: &str, refunded: u64, created_at: &str) -> Value {
@@ -72,26 +72,40 @@ async fn mount_refund_and_void_mocks(server: &wiremock::MockServer, pay_id: &str
         sample_module8_payment_json(pay_id, "paid", 0, recent),
     )
     .await;
-    for (body, refunded) in [(json!({ "amount": 5000 }), 5000), (json!({}), 29900)] {
-        Mock::given(method("POST"))
-            .and(path(&refund_path))
-            .and(body_json(body))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
-                    pay_id, "refunded", refunded, recent,
-                )),
-            )
-            .expect(1)
-            .mount(server)
-            .await;
-    }
-    common::mount_json_endpoint(
-        server,
-        ("POST", &void_path),
-        422,
-        common::api_error_body("invalid_request_error", "Already settled", None),
-    )
-    .await;
+    Mock::given(method("POST"))
+        .and(path(&refund_path))
+        .and(body_json(json!({ "amount": 5000 })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
+                pay_id, "refunded", 5000, recent,
+            )),
+        )
+        .expect(1)
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(&refund_path))
+        .and(body_string(""))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
+                pay_id, "refunded", 29900, recent,
+            )),
+        )
+        .expect(1)
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(&void_path))
+        .respond_with(
+            ResponseTemplate::new(422).set_body_json(common::api_error_body(
+                "invalid_request_error",
+                "Already settled",
+                None,
+            )),
+        )
+        .expect(1)
+        .mount(server)
+        .await;
 }
 
 #[tokio::test]
