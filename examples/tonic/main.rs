@@ -10,7 +10,10 @@ use some_moyasar::kernel::auth::SecretKey;
 use some_moyasar::kernel::client::MoyasarClient;
 
 pub mod proto;
+pub mod proto_services;
 pub mod service;
+pub mod service_payments_tokens;
+pub mod service_payouts_ledger_sources;
 pub mod status_mapper;
 
 use proto::MoyasarPaymentGatewayServer;

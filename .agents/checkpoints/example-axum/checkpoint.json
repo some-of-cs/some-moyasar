@@ -1,0 +1,55 @@
+{
+  "moduleId": "example-axum",
+  "title": "Axum Framework Integration & E2E Test Suite",
+  "baseBranch": "main",
+  "moduleBranch": "feat/example-axum",
+  "items": {
+    "us-axum-1.0": {
+      "status": "In Progress",
+      "branch": "feat/us-axum-1.0-handlers",
+      "prNumber": null,
+      "unitCount": 4
+    },
+    "us-axum-1.0/unit-1": {
+      "status": "Todo",
+      "branch": "feat/us-axum-1.0/unit-1-state-error",
+      "prNumber": null
+    },
+    "us-axum-1.0/unit-2": {
+      "status": "Todo",
+      "branch": "feat/us-axum-1.0/unit-2-payments-routes",
+      "prNumber": null
+    },
+    "us-axum-1.0/unit-3": {
+      "status": "Todo",
+      "branch": "feat/us-axum-1.0/unit-3-intents-routes",
+      "prNumber": null
+    },
+    "us-axum-1.0/unit-4": {
+      "status": "Todo",
+      "branch": "feat/us-axum-1.0/unit-4-webhooks-main",
+      "prNumber": null
+    },
+    "us-axum-2.0": {
+      "status": "In Progress",
+      "branch": "feat/us-axum-2.0-e2e-tests",
+      "prNumber": null,
+      "unitCount": 3
+    },
+    "us-axum-2.0/unit-1": {
+      "status": "Todo",
+      "branch": "feat/us-axum-2.0/unit-1-payments-e2e",
+      "prNumber": null
+    },
+    "us-axum-2.0/unit-2": {
+      "status": "Todo",
+      "branch": "feat/us-axum-2.0/unit-2-intents-e2e",
+      "prNumber": null
+    },
+    "us-axum-2.0/unit-3": {
+      "status": "Todo",
+      "branch": "feat/us-axum-2.0/unit-3-webhooks-e2e",
+      "prNumber": null
+    }
+  }
+}

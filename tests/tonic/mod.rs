@@ -2,11 +2,19 @@
 
 #[path = "../../examples/tonic/proto.rs"]
 pub mod proto;
+#[path = "../../examples/tonic/proto_services.rs"]
+pub mod proto_services;
 #[path = "../../examples/tonic/service.rs"]
 pub mod service;
+#[path = "../../examples/tonic/service_payments_tokens.rs"]
+pub mod service_payments_tokens;
+#[path = "../../examples/tonic/service_payouts_ledger_sources.rs"]
+pub mod service_payouts_ledger_sources;
 #[path = "../../examples/tonic/status_mapper.rs"]
 pub mod status_mapper;
 
+mod payments_tokens_rpc_test;
+mod payouts_ledger_sources_rpc_test;
 mod unified_rpc_test;
 mod webhook_rpc_test;
 
