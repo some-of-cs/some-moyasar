@@ -19,8 +19,8 @@ pub use auth::{
     serialize_opt_secret, serialize_secret,
 };
 pub use client::{
-    ClientInner, DEFAULT_BASE_URL, MoyasarClient, MoyasarClientBuilder, MoyasarClientConfig,
-    validate_https_url as validate_client_base_url,
+    ClientInner, DEFAULT_BASE_URL, IntoClientKey, IntoPublishableClientKey, MoyasarClient,
+    MoyasarClientBuilder, MoyasarClientConfig, validate_https_url as validate_client_base_url,
 };
 #[cfg(feature = "env-keys")]
 pub use env::resolve_env_secret;

@@ -328,11 +328,38 @@ impl MoyasarClient<SecretKey> {
     }
 }
 
-/// Computes the lowercase hex-encoded HMAC-SHA256 signature of `payload` keyed by `secret`.
+#[cfg(feature = "env-keys")]
+fn resolve_signing_secret(secret: &str) -> Option<zeroize::Zeroizing<String>> {
+    let trimmed = secret.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with('$') {
+        let resolved = crate::kernel::env::resolve_env_secret(trimmed).ok()?;
+        if resolved.trim().is_empty() {
+            return None;
+        }
+        return Some(zeroize::Zeroizing::new(resolved));
+    }
+    Some(zeroize::Zeroizing::new(secret.to_owned()))
+}
+
+#[cfg(not(feature = "env-keys"))]
+fn resolve_signing_secret(secret: &str) -> Option<zeroize::Zeroizing<String>> {
+    if secret.trim().is_empty() {
+        return None;
+    }
+    Some(zeroize::Zeroizing::new(secret.to_owned()))
+}
+
+/// Computes the lowercase hex-encoded HMAC-SHA256 signature of `payload` keyed by `secret`
+/// (resolving `"$VAR_NAME"` or `"${VAR_NAME}"` behind the scenes when `env-keys` is enabled).
 #[must_use]
 pub fn compute_webhook_signature(payload: &[u8], secret: &str) -> String {
-    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-        .expect("HMAC-SHA256 accepts keys of any size");
+    let resolved = resolve_signing_secret(secret);
+    let key_bytes = resolved.as_ref().map_or(secret.as_bytes(), |s| s.as_bytes());
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(key_bytes).expect("HMAC-SHA256 accepts keys of any size");
     mac.update(payload);
     let bytes = mac.finalize().into_bytes();
     let mut hex = String::with_capacity(64);
@@ -353,12 +380,15 @@ pub fn verify_webhook_signature(
     signature_header: &str,
     secret: &str,
 ) -> Result<(), MoyasarError> {
+    let Some(resolved) = resolve_signing_secret(secret) else {
+        return Err(MoyasarError::InvalidWebhookSignature);
+    };
     let trimmed = signature_header.trim();
     let candidate = trimmed
         .strip_prefix("sha256=")
         .unwrap_or(trimmed)
         .to_ascii_lowercase();
-    let mut expected = compute_webhook_signature(payload, secret);
+    let mut expected = compute_webhook_signature(payload, resolved.as_str());
     let matched = candidate.as_bytes().ct_eq(expected.as_bytes()).unwrap_u8() == 1;
     expected.zeroize();
     if !matched {

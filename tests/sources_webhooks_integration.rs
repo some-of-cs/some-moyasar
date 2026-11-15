@@ -126,14 +126,14 @@ async fn webhooks_api_create_list_retrieve_and_available_events_lifecycle() {
     assert!(matches!(
         CreateWebhookParams::new(
             "http://insecure.example.com/webhook",
-            WebhookSecret::new("whsec_top_secret"),
+            "whsec_top_secret",
         ),
         Err(MoyasarError::InvalidWebhookUrl)
     ));
 
     let create_params = CreateWebhookParams::new(
         "https://merchant.example.com/webhooks/moyasar",
-        WebhookSecret::new("whsec_top_secret"),
+        "whsec_top_secret",
     )
     .unwrap()
     .http_method("post")
