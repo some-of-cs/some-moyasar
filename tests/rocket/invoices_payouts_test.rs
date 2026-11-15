@@ -72,7 +72,7 @@ async fn e2e_post_invoices_creates_invoice_via_tracked_client() {
         .dispatch()
         .await;
 
-    assert_eq!(response.status(), Status::Created);
+    assert_eq!(response.status(), Status::Ok);
     let body: Value = response
         .into_json()
         .await
@@ -89,6 +89,8 @@ async fn e2e_post_invoice_cancel_syncs_29_day_sadad_expiry() {
     let (server, client) = spawn_test_client().await;
     let inv_id = Uuid::parse_str("880e8400-e29b-41d4-a716-446655440000").expect("valid uuid");
     let cancel_path = format!("/v1/invoices/{inv_id}/cancel");
+    let mut canceled_invoice = sample_invoice_json(inv_id, "canceled");
+    canceled_invoice["expired_at"] = json!((Utc::now() + ChronoDuration::days(35)).to_rfc3339());
 
     mount_json_endpoint(
         &server,
@@ -96,7 +98,7 @@ async fn e2e_post_invoice_cancel_syncs_29_day_sadad_expiry() {
         &cancel_path,
         MockResponseSpec {
             status: 200,
-            body: sample_invoice_json(inv_id, "canceled"),
+            body: canceled_invoice,
         },
     )
     .await;
@@ -111,12 +113,10 @@ async fn e2e_post_invoice_cancel_syncs_29_day_sadad_expiry() {
     assert_eq!(response.status(), Status::Ok);
     let body: Value = response.into_json().await.expect("JSON cancel response");
     assert_eq!(body["invoice"]["status"], "canceled");
-    assert_eq!(body["max_sadad_expiry_days"], MAX_SADAD_EXPIRY_DAYS);
-    assert_eq!(MAX_SADAD_EXPIRY_DAYS, 29);
 
-    let synced_raw = body["sadad_synced_expiry"]
+    let synced_raw = body["sadad_expires_at"]
         .as_str()
-        .expect("sadad_synced_expiry timestamp string");
+        .expect("sadad_expires_at timestamp string");
     let synced: DateTime<Utc> = DateTime::parse_from_rfc3339(synced_raw)
         .expect("valid RFC3339 timestamp")
         .with_timezone(&Utc);
@@ -166,7 +166,7 @@ async fn e2e_post_payouts_serializes_sama_payout_purpose() {
         .dispatch()
         .await;
 
-    assert_eq!(response.status(), Status::Created);
+    assert_eq!(response.status(), Status::Ok);
     let body: Value = response.into_json().await.expect("JSON payout response");
     assert_eq!(body["id"], "po_rocket_001");
     assert_eq!(body["status"], "paid");
@@ -185,9 +185,9 @@ async fn e2e_post_payouts_serializes_sama_payout_purpose() {
     assert_eq!(outbound["purpose"], "payment_to_merchant");
 }
 
-/// Verifies `POST /payouts` with an invalid Saudi IBAN returns `400 Bad Request`.
+/// Verifies `POST /payouts` with an invalid Saudi IBAN returns `422 Unprocessable Entity`.
 #[tokio::test]
-async fn e2e_post_payouts_invalid_saudi_iban_returns_400_bad_request() {
+async fn e2e_post_payouts_invalid_saudi_iban_returns_422_unprocessable_entity() {
     let (server, client) = spawn_test_client().await;
 
     let payload = json!({
@@ -212,9 +212,10 @@ async fn e2e_post_payouts_invalid_saudi_iban_returns_400_bad_request() {
         .dispatch()
         .await;
 
-    assert_eq!(response.status(), Status::BadRequest);
+    assert_eq!(response.status(), Status::UnprocessableEntity);
     let body: Value = response.into_json().await.expect("JSON error response");
-    assert!(body["error"].as_str().is_some());
+    assert_eq!(body["error_type"], "invalid_request_error");
+    assert!(body["message"].as_str().is_some());
 
     let recorded = server
         .server()

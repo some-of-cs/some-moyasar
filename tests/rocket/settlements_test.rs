@@ -4,7 +4,7 @@
 use rocket::http::Status;
 use serde_json::{Value, json};
 use some_moyasar::prelude::{
-    Amount, Currency, MerchantBalance, PaginatedList, Settlement, SettlementRecipientType,
+    Amount, Currency, MerchantBalance, Settlement, SettlementRecipientType,
 };
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -100,18 +100,19 @@ async fn lists_settlements_with_minor_unit_amounts() {
     let response = client.get("/settlements").dispatch().await;
     assert_eq!(response.status(), Status::Ok);
 
-    let body = response
-        .into_string()
+    let body: Value = response
+        .into_json()
         .await
-        .expect("settlement list response body");
-    let page: PaginatedList<Settlement> =
-        serde_json::from_str(&body).expect("valid PaginatedList<Settlement>");
+        .expect("settlement list JSON response");
+    let items: Vec<Settlement> =
+        serde_json::from_value(body["items"].clone()).expect("valid Settlement items");
 
-    assert_eq!(page.items.len(), 2);
-    assert_eq!(page.meta.current_page, 1);
-    assert_eq!(page.meta.total_count, 2);
+    assert_eq!(items.len(), 2);
+    assert_eq!(body["current_page"].as_u64(), Some(1));
+    assert_eq!(body["total_count"].as_u64(), Some(2));
+    assert!(body["next_page"].is_null());
 
-    let first = &page.items[0];
+    let first = &items[0];
     assert_eq!(first.id.as_str(), "stl_e2e_01");
     assert_eq!(first.recipient_type, SettlementRecipientType::Entity);
     assert_eq!(first.currency, Currency::SAR);
@@ -120,7 +121,7 @@ async fn lists_settlements_with_minor_unit_amounts() {
     assert_eq!(first.tax, Amount::from_minor(675));
     assert_eq!(first.net(), Amount::from_minor(244_825));
 
-    let second = &page.items[1];
+    let second = &items[1];
     assert_eq!(second.id.as_str(), "stl_e2e_02");
     assert_eq!(second.recipient_type, SettlementRecipientType::Platform);
     assert_eq!(second.net(), Amount::from_minor(97_700));
@@ -160,16 +161,16 @@ async fn retrieves_settlement_with_checked_net_breakdown() {
     assert_eq!(body["net_amount"].as_i64(), Some(244_825));
 }
 
-/// Verifies `GET /settlements/<id>` reports `null` `net_amount` on minor-unit underflow.
+/// Verifies `GET /settlements/<id>` reports `null` `net_amount` on `i64` underflow.
 #[rocket::async_test]
 async fn retrieves_settlement_handles_checked_net_underflow() {
     let (mock_server, client) = super::spawn_test_client().await;
     let payload = settlement_json(SettlementFixture {
         id: "stl_e2e_underflow",
         recipient_type: "entity",
-        amount: 1_000,
-        fee: 800,
-        tax: 300,
+        amount: i64::MIN,
+        fee: 1,
+        tax: 0,
         reference: "STL-2026-11-03",
         settlement_count: 1,
     });

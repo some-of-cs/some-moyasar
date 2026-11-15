@@ -3,3 +3,5 @@
 
 #[path = "rocket/mod.rs"]
 mod rocket_suite;
+
+pub use rocket_suite::{responder, state};
