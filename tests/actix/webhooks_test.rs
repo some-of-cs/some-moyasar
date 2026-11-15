@@ -34,23 +34,6 @@ fn build_webhook_payload(
     })
 }
 
-/// Sends a `POST /v1/webhooks` JSON request to the initialized Actix-Web service.
-async fn post_webhook_json<S, B, E>(app: &S, payload: &Value) -> actix_web::dev::ServiceResponse<B>
-where
-    S: actix_web::dev::Service<
-            actix_http::Request,
-            Response = actix_web::dev::ServiceResponse<B>,
-            Error = E,
-        >,
-    E: std::fmt::Debug,
-{
-    let req = test::TestRequest::post()
-        .uri("/v1/webhooks")
-        .set_json(payload)
-        .to_request();
-    test::call_service(app, req).await
-}
-
 /// Mounts `WebhooksService` management endpoints on `mock_server`.
 async fn mount_webhook_management_mocks(mock_server: &some_moyasar::test_utils::MoyasarMockServer) {
     let endpoint_json = json!({
@@ -116,7 +99,11 @@ async fn webhook_valid_payment_faild_alias_normalizes_and_processes() {
         TEST_WEBHOOK_SECRET,
         Utc::now(),
     );
-    let resp = post_webhook_json(&app, &payload).await;
+    let req = test::TestRequest::post()
+        .uri("/v1/webhooks")
+        .set_json(&payload)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body: Value = test::read_body_json(resp).await;
@@ -143,12 +130,20 @@ async fn webhook_duplicate_event_id_returns_duplicate() {
     let event_id = Uuid::new_v4();
     let payload = build_webhook_payload(event_id, "payment_paid", TEST_WEBHOOK_SECRET, Utc::now());
 
-    let first_resp = post_webhook_json(&app, &payload).await;
+    let first_req = test::TestRequest::post()
+        .uri("/v1/webhooks")
+        .set_json(&payload)
+        .to_request();
+    let first_resp = test::call_service(&app, first_req).await;
     assert_eq!(first_resp.status(), StatusCode::OK);
     let first_body: Value = test::read_body_json(first_resp).await;
     assert_eq!(first_body["status"], "processed");
 
-    let second_resp = post_webhook_json(&app, &payload).await;
+    let second_req = test::TestRequest::post()
+        .uri("/v1/webhooks")
+        .set_json(&payload)
+        .to_request();
+    let second_resp = test::call_service(&app, second_req).await;
     assert_eq!(second_resp.status(), StatusCode::OK);
     let second_body: Value = test::read_body_json(second_resp).await;
     assert_eq!(second_body["status"], "duplicate");
@@ -172,7 +167,11 @@ async fn webhook_wrong_secret_returns_unauthorized() {
         "whsec_invalid_secret_token",
         Utc::now(),
     );
-    let resp = post_webhook_json(&app, &payload).await;
+    let req = test::TestRequest::post()
+        .uri("/v1/webhooks")
+        .set_json(&payload)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
@@ -196,7 +195,11 @@ async fn webhook_stale_timestamp_beyond_replay_tolerance_returns_bad_request() {
         TEST_WEBHOOK_SECRET,
         stale_timestamp,
     );
-    let resp = post_webhook_json(&app, &payload).await;
+    let req = test::TestRequest::post()
+        .uri("/v1/webhooks")
+        .set_json(&payload)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 

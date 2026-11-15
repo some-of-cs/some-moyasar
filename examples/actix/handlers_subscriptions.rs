@@ -159,7 +159,12 @@ pub async fn charge_subscription_cycle(
         SubscriptionCycleChargeParams::new(&sub_id, body.cycle_index, body.amount, &token_id)
             .currency(body.currency.unwrap_or(Currency::SAR));
     let payment = state.client.subscriptions().charge_cycle(params).await?;
-    Ok(HttpResponse::Created().json(payment))
+    Ok(HttpResponse::Created().json(json!({
+        "id": payment.id,
+        "status": payment.status,
+        "amount": payment.amount,
+        "currency": payment.currency,
+    })))
 }
 
 /// Refunds the unused portion of a subscription cycle (`POST /v1/subscriptions/{sub_id}/refund`).

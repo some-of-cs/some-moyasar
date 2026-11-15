@@ -8,8 +8,8 @@ use some_moyasar::prelude::{
     Amount, CardAuthId, CardAuthentication, CreateCardAuthParams, CreateInvoiceParams,
     CreatePaymentIntentParams, CreatePaymentParams, CreateTokenParams, Currency,
     CustomerChargeParams, FulfillIntentParams, FulfillPaymentSourceRequest, IntentId, ListParams,
-    MoyasarError, PaymentId, PaymentIntent, PaymentSourceRequest, RefundCreateParams, TokenId,
-    TokenSource, inject_customer_metadata,
+    MoyasarError, Payment, PaymentId, PaymentIntent, PaymentSourceRequest, RefundCreateParams,
+    TokenId, TokenSource, inject_customer_metadata,
 };
 use uuid::Uuid;
 
@@ -99,7 +99,7 @@ pub struct FulfillIntentInput {
 #[derive(Debug, Deserialize)]
 pub struct CreateInvoiceInput {
     /// Invoice amount in integer minor units.
-    pub amount: u64,
+    pub amount: i64,
     /// ISO 4217 currency code.
     pub currency: Currency,
     /// Optional invoice description.
@@ -110,7 +110,7 @@ pub struct CreateInvoiceInput {
 #[derive(Debug, Deserialize)]
 pub struct CreateCardAuthInput {
     /// Authentication amount in integer minor units.
-    pub amount: u64,
+    pub amount: i64,
     /// ISO 4217 currency code.
     pub currency: Currency,
     /// HTTPS callback URL for 3DS completion.
@@ -192,6 +192,20 @@ fn build_payment_params(body: &CreatePaymentInput) -> Result<CreatePaymentParams
     builder.build()
 }
 
+fn payment_to_json(payment: &Payment) -> Value {
+    json!({
+        "id": payment.id,
+        "status": payment.status,
+        "amount": payment.amount,
+        "amount_format": payment.amount_format,
+        "currency": payment.currency,
+        "description": payment.description,
+        "metadata": payment.metadata,
+        "created_at": payment.created_at,
+        "updated_at": payment.updated_at,
+    })
+}
+
 fn intent_to_json(intent: &PaymentIntent) -> Value {
     json!({
         "id": intent.id,
@@ -220,14 +234,15 @@ pub async fn create_payment(
 ) -> Result<HttpResponse, AppError> {
     let req = build_payment_params(&body)?;
     let payment = state.client.payments().create(&req).await?;
-    Ok(HttpResponse::Created().json(payment))
+    Ok(HttpResponse::Created().json(payment_to_json(&payment)))
 }
 
 /// Handles `GET /v1/payments` by listing payments via `PaymentsService::list`.
 pub async fn list_payments(state: web::Data<ActixAppState>) -> Result<HttpResponse, AppError> {
     let page = state.client.payments().list(&ListParams::new()).await?;
+    let items: Vec<Value> = page.items.iter().map(payment_to_json).collect();
     Ok(HttpResponse::Ok().json(json!({
-        "items": page.items,
+        "items": items,
         "total_count": page.meta.total_count,
     })))
 }
@@ -239,7 +254,7 @@ pub async fn get_payment(
 ) -> Result<HttpResponse, AppError> {
     let id = PaymentId::new(path.into_inner())?;
     let payment = state.client.payments().retrieve(&id).await?;
-    Ok(HttpResponse::Ok().json(payment))
+    Ok(HttpResponse::Ok().json(payment_to_json(&payment)))
 }
 
 /// Handles `POST /v1/payments/{id}/refund` via `RefundsService::create`.
@@ -289,7 +304,7 @@ pub async fn charge_customer(
         .customers(state.vault.as_ref())
         .charge(&params)
         .await?;
-    Ok(HttpResponse::Created().json(payment))
+    Ok(HttpResponse::Created().json(payment_to_json(&payment)))
 }
 
 /// Handles `POST /v1/tokens` via `TokensService::create` using the publishable client.
