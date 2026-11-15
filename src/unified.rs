@@ -336,7 +336,8 @@ fn resolve_signing_secret(secret: &str) -> Option<zeroize::Zeroizing<String>> {
     }
     if trimmed.starts_with('$') {
         let resolved = crate::kernel::env::resolve_env_secret(trimmed).ok()?;
-        if resolved.trim().is_empty() {
+        let inner = resolved.trim();
+        if inner.is_empty() || inner.starts_with('$') {
             return None;
         }
         return Some(zeroize::Zeroizing::new(resolved));
@@ -346,7 +347,8 @@ fn resolve_signing_secret(secret: &str) -> Option<zeroize::Zeroizing<String>> {
 
 #[cfg(not(feature = "env-keys"))]
 fn resolve_signing_secret(secret: &str) -> Option<zeroize::Zeroizing<String>> {
-    if secret.trim().is_empty() {
+    let trimmed = secret.trim();
+    if trimmed.is_empty() || trimmed.starts_with('$') {
         return None;
     }
     Some(zeroize::Zeroizing::new(secret.to_owned()))

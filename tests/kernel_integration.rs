@@ -306,7 +306,7 @@ fn non_json_error_fallback_truncates_at_max_error_body_chars() {
     match err {
         MoyasarError::ServerError { status, message } => {
             assert_eq!(status, 502);
-            assert!(message.ends_with("...[truncated]"));
+            assert_eq!(message, format!("{}...", "x".repeat(MAX_ERROR_BODY_CHARS)));
             assert!(message.len() < oversized_html.len());
         }
         other => panic!("expected ServerError, got {other:?}"),

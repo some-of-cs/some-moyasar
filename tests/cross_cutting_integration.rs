@@ -77,20 +77,40 @@ async fn stripe_compat_refunds_service_partial_void_fallback_and_over_refund_gua
         sample_module8_payment_json(pay_id, "paid", 0, &recent),
     )
     .await;
-    common::mount_json_endpoint(
-        &server,
-        ("POST", &refund_path),
-        200,
-        sample_module8_payment_json(pay_id, "refunded", 5000, &recent),
-    )
-    .await;
-    common::mount_json_endpoint(
-        &server,
-        ("POST", &void_path),
-        422,
-        common::api_error_body("invalid_request_error", "Already settled", None),
-    )
-    .await;
+    Mock::given(method("POST"))
+        .and(path(&refund_path))
+        .and(body_json(json!({ "amount": 5000 })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
+                pay_id, "refunded", 5000, &recent,
+            )),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(&refund_path))
+        .and(body_json(json!({ "amount": 29900 })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
+                pay_id, "refunded", 29900, &recent,
+            )),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(&void_path))
+        .respond_with(
+            ResponseTemplate::new(422).set_body_json(common::api_error_body(
+                "invalid_request_error",
+                "Already settled",
+                None,
+            )),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
 
     let partial = client
         .refunds()
@@ -107,6 +127,7 @@ async fn stripe_compat_refunds_service_partial_void_fallback_and_over_refund_gua
         .await
         .unwrap();
     assert_eq!(fallback.status, PaymentStatus::Refunded);
+    assert_eq!(fallback.refunded_amount, 29900);
 
     assert!(
         client

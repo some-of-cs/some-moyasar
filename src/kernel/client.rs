@@ -306,7 +306,8 @@ fn resolve_client_webhook_secret(raw: String) -> Result<SecretString, ()> {
     }
     if trimmed.starts_with('$') {
         let mut resolved = crate::kernel::env::resolve_env_secret(trimmed).map_err(|_| ())?;
-        if resolved.trim().is_empty() {
+        let inner = resolved.trim();
+        if inner.is_empty() || inner.starts_with('$') {
             resolved.zeroize();
             return Err(());
         }
@@ -319,7 +320,8 @@ fn resolve_client_webhook_secret(raw: String) -> Result<SecretString, ()> {
 
 #[cfg(not(feature = "env-keys"))]
 fn resolve_client_webhook_secret(raw: String) -> Result<SecretString, ()> {
-    if raw.trim().is_empty() {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.starts_with('$') {
         return Err(());
     }
     Ok(SecretString::from(raw))

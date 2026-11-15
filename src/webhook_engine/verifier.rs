@@ -87,7 +87,8 @@ fn resolve_verifier_secret(raw: &str) -> Option<Zeroizing<String>> {
     }
     if trimmed.starts_with('$') {
         let resolved = crate::kernel::env::resolve_env_secret(trimmed).ok()?;
-        if resolved.trim().is_empty() {
+        let inner = resolved.trim();
+        if inner.is_empty() || inner.starts_with('$') {
             return None;
         }
         return Some(Zeroizing::new(resolved));
@@ -97,7 +98,8 @@ fn resolve_verifier_secret(raw: &str) -> Option<Zeroizing<String>> {
 
 #[cfg(not(feature = "env-keys"))]
 fn resolve_verifier_secret(raw: &str) -> Option<Zeroizing<String>> {
-    if raw.trim().is_empty() {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.starts_with('$') {
         return None;
     }
     Some(Zeroizing::new(raw.to_owned()))
