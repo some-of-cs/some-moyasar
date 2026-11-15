@@ -30,7 +30,7 @@ fn build_webhook_payload(event_id: Uuid, secret_token: &str) -> String {
 /// Verifies that `POST /webhooks/moyasar` accepts a payload with a valid `secret_token` (`200 OK`).
 #[rocket::async_test]
 async fn webhook_valid_secret_accepted() {
-    let (client, _mock_server) = super::spawn_test_client().await;
+    let (_mock_server, client) = super::spawn_test_client().await;
     let event_id = Uuid::new_v4();
     let payload = build_webhook_payload(event_id, TEST_WEBHOOK_SECRET);
 
@@ -56,7 +56,7 @@ async fn webhook_valid_secret_accepted() {
 /// Verifies that `POST /webhooks/moyasar` rejects a mismatched `secret_token` (`401 Unauthorized`).
 #[rocket::async_test]
 async fn webhook_invalid_secret_rejected() {
-    let (client, _mock_server) = super::spawn_test_client().await;
+    let (_mock_server, client) = super::spawn_test_client().await;
     let event_id = Uuid::new_v4();
     let payload = build_webhook_payload(event_id, "whsec_invalid_mismatched_secret");
 
@@ -73,7 +73,7 @@ async fn webhook_invalid_secret_rejected() {
 /// Verifies that replaying the same `event.id` to `POST /webhooks/moyasar` is rejected (`400`/`409`).
 #[rocket::async_test]
 async fn webhook_replay_same_event_id_rejected() {
-    let (client, _mock_server) = super::spawn_test_client().await;
+    let (_mock_server, client) = super::spawn_test_client().await;
     let event_id = Uuid::new_v4();
     let payload = build_webhook_payload(event_id, TEST_WEBHOOK_SECRET);
 
