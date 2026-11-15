@@ -1,5 +1,6 @@
 //! Custom Rocket responder mapping [`MoyasarError`] into redacted JSON responses.
 
+use std::fmt;
 use std::io::Cursor;
 
 use rocket::http::{ContentType, Status};
@@ -10,8 +11,17 @@ use some_moyasar::prelude::{ApiErrorType, FieldError, MoyasarError};
 
 /// Rocket [`Responder`] wrapper around [`MoyasarError`] that emits status-coded,
 /// redacted JSON error payloads.
-#[derive(Debug)]
 pub struct MoyasarResponder(pub MoyasarError);
+
+impl fmt::Debug for MoyasarResponder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MoyasarResponder")
+            .field("error_type", &error_type_str(&self.0))
+            .field("message", &error_message(&self.0))
+            .field("errors", &field_errors(&self.0))
+            .finish()
+    }
+}
 
 impl From<MoyasarError> for MoyasarResponder {
     fn from(err: MoyasarError) -> Self {
@@ -38,7 +48,7 @@ struct ErrorBody<'a> {
     errors: Vec<FieldErrorBody<'a>>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct FieldErrorBody<'a> {
     field: &'a str,
     message: String,
@@ -245,5 +255,26 @@ mod tests {
         assert_eq!(parsed["message"], "rejected [REDACTED] for [REDACTED] and [REDACTED]");
         assert_eq!(parsed["errors"][0]["field"], "iban");
         assert_eq!(parsed["errors"][0]["message"], "invalid [REDACTED] with [REDACTED]");
+    }
+
+    #[test]
+    fn debug_formatting_redacts_secrets_iban_and_pan() {
+        let err = MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            message: "leaked sk_live_abc123 and 4111-1111-1111-1111".into(),
+            errors: vec![FieldError {
+                field: "iban".into(),
+                message: "SA0380000000608010167519 with whsec_test_999".into(),
+            }],
+            response_code: None,
+        };
+
+        let debug_out = format!("{:?}", MoyasarResponder(err));
+        assert!(!debug_out.contains("sk_live_"));
+        assert!(!debug_out.contains("whsec_"));
+        assert!(!debug_out.contains("SA0380000000608010167519"));
+        assert!(!debug_out.contains("4111-1111-1111-1111"));
+        assert!(debug_out.contains("MoyasarResponder"));
+        assert!(debug_out.contains("[REDACTED]"));
     }
 }
