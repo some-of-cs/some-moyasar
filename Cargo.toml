@@ -52,8 +52,21 @@ zeroize = { version = "1.8", features = ["derive"] }
 [dev-dependencies]
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6"
+tonic = "0.12"
+prost = "0.13"
+tokio-stream = { version = "0.1", features = ["net"] }
 
 [[test]]
 name = "cross_cutting_integration"
 path = "tests/cross_cutting_integration.rs"
 required-features = ["unified-gateway", "stripe-compat", "test-utils"]
+
+[[example]]
+name = "tonic_grpc_server"
+path = "examples/tonic/main.rs"
+required-features = ["full"]
+
+[[test]]
+name = "tonic_integration"
+path = "tests/tonic_integration.rs"
+required-features = ["unified-gateway", "test-utils"]

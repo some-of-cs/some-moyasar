@@ -1,0 +1,1 @@
+//! `MoyasarGrpcService` implementation.

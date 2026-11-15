@@ -1,0 +1,25 @@
+{
+  "module_id": "example-tonic",
+  "branch": "feat/example-tonic",
+  "base": "main",
+  "status": "in_progress",
+  "stories": {
+    "US-TONIC-1.0": {
+      "branch": "feat/us-tonic-1.0-grpc-server",
+      "status": "in_progress",
+      "units": [
+        "unit-1-proto-status",
+        "unit-2-grpc-service",
+        "unit-3-server-main"
+      ]
+    },
+    "US-TONIC-2.0": {
+      "branch": "feat/us-tonic-2.0-grpc-e2e",
+      "status": "in_progress",
+      "units": [
+        "unit-1-unified-rpc-e2e",
+        "unit-2-webhook-rpc-e2e"
+      ]
+    }
+  }
+}
