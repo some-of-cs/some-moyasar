@@ -2,8 +2,6 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use std::sync::Arc;
-
 use some_moyasar::prelude::{
     ConstantTimeSecretVerifier, InMemoryDeduplicator, MoyasarClient,
 };
@@ -35,7 +33,7 @@ async fn main() -> Result<(), Box<rocket::Error>> {
         .expect("MOYASAR_SECRET_KEY must be set to a valid Moyasar secret key");
     let webhook_verifier =
         ConstantTimeSecretVerifier::with_default_tolerance("$MOYASAR_WEBHOOK_SECRET");
-    let deduplicator = Arc::new(InMemoryDeduplicator::new());
+    let deduplicator = InMemoryDeduplicator::new();
 
     let state = RocketAppState {
         client,
