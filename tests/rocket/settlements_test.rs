@@ -161,16 +161,16 @@ async fn retrieves_settlement_with_checked_net_breakdown() {
     assert_eq!(body["net_amount"].as_i64(), Some(244_825));
 }
 
-/// Verifies `GET /settlements/<id>` reports `null` `net_amount` on minor-unit underflow.
+/// Verifies `GET /settlements/<id>` reports `null` `net_amount` on `i64` underflow.
 #[rocket::async_test]
 async fn retrieves_settlement_handles_checked_net_underflow() {
     let (mock_server, client) = super::spawn_test_client().await;
     let payload = settlement_json(SettlementFixture {
         id: "stl_e2e_underflow",
         recipient_type: "entity",
-        amount: 1_000,
-        fee: 800,
-        tax: 300,
+        amount: i64::MIN,
+        fee: 1,
+        tax: 0,
         reference: "STL-2026-11-03",
         settlement_count: 1,
     });
