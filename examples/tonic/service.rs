@@ -10,12 +10,12 @@ use some_moyasar::prelude::{
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::proto::{
+use super::proto::{
     ChargeTokenRpcRequest, ChargeTokenRpcResponse, CreateIntentRpcRequest, CreateIntentRpcResponse,
     MoyasarPaymentGateway, RefundOrVoidRpcRequest, RefundOrVoidRpcResponse,
     VerifyWebhookRpcRequest, VerifyWebhookRpcResponse,
 };
-use crate::status_mapper::to_tonic_status;
+use super::status_mapper::to_tonic_status;
 
 /// Tonic gRPC service adapter over [`MoyasarClient<SecretKey>`] and [`UnifiedPaymentGateway`].
 #[derive(Debug, Clone)]

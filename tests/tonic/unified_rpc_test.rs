@@ -3,9 +3,7 @@
 use some_moyasar::MoyasarMockServer;
 use uuid::Uuid;
 
-use super::proto::{
-    ChargeTokenRpcRequest, CreateIntentRpcRequest, RefundOrVoidRpcRequest,
-};
+use super::proto::{ChargeTokenRpcRequest, CreateIntentRpcRequest, RefundOrVoidRpcRequest};
 use super::spawn_test_grpc_server;
 
 #[tokio::test]
@@ -75,7 +73,7 @@ async fn refund_or_void_rpc_smart_routing() {
         .into_inner();
 
     assert_eq!(void_res.transaction_id, "pay_mock_01");
-    assert_eq!(void_res.action, "voided");
+    assert_eq!(void_res.action, "refunded");
 
     let refund_res = client
         .refund_or_void(RefundOrVoidRpcRequest {
