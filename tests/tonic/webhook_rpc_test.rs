@@ -5,19 +5,14 @@ use std::fmt::Write as _;
 use chrono::Utc;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-use some_moyasar::prelude::{ApiErrorType, MoyasarClient, MoyasarError, SecretKey};
-use tokio::net::TcpListener;
-use tokio_stream::wrappers::TcpListenerStream;
-use tonic::transport::{Channel, Server};
+use some_moyasar::MoyasarMockServer;
+use some_moyasar::prelude::{ApiErrorType, MoyasarError};
 use uuid::Uuid;
 
-use super::proto::moyasar_gateway_client::MoyasarGatewayClient;
-use super::proto::moyasar_gateway_server::MoyasarGatewayServer;
 use super::proto::VerifyWebhookRpcRequest;
-use super::service::MoyasarGrpcService;
+use super::spawn_test_grpc_server;
 use super::status_mapper::to_tonic_status;
 
-const TEST_API_KEY: &str = "sk_test_tonic_e2e_key_1234";
 const TEST_WEBHOOK_SECRET: &str = "whsec_tonic_e2e_secret_1234";
 
 /// Computes the lowercase hex-encoded HMAC-SHA256 signature for a payload.
@@ -51,36 +46,10 @@ fn sample_webhook_payload(event_id: Uuid, secret_token: &str) -> Vec<u8> {
     .into_bytes()
 }
 
-/// Spawns an in-process loopback Tonic gRPC server and returns a connected client.
-async fn spawn_webhook_test_client() -> MoyasarGatewayClient<Channel> {
-    let key = SecretKey::new(TEST_API_KEY).expect("valid test secret key");
-    let client = MoyasarClient::builder(key)
-        .webhook_secret(TEST_WEBHOOK_SECRET)
-        .build()
-        .expect("valid MoyasarClient");
-    let service = MoyasarGrpcService::new(client);
-
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind loopback listener");
-    let addr = listener.local_addr().expect("resolve loopback address");
-    let incoming = TcpListenerStream::new(listener);
-
-    tokio::spawn(async move {
-        let _ = Server::builder()
-            .add_service(MoyasarGatewayServer::new(service))
-            .serve_with_incoming(incoming)
-            .await;
-    });
-
-    MoyasarGatewayClient::connect(format!("http://{addr}"))
-        .await
-        .expect("connect to loopback gRPC server")
-}
-
 #[tokio::test]
 async fn verify_webhook_valid_hmac_succeeds() {
-    let mut client = spawn_webhook_test_client().await;
+    let mock = MoyasarMockServer::start().await;
+    let (mut client, shutdown_tx) = spawn_test_grpc_server(&mock, TEST_WEBHOOK_SECRET).await;
     let event_id = Uuid::new_v4();
     let raw_body = sample_webhook_payload(event_id, TEST_WEBHOOK_SECRET);
     let signature = compute_hmac_hex(&raw_body, TEST_WEBHOOK_SECRET);
@@ -99,11 +68,13 @@ async fn verify_webhook_valid_hmac_succeeds() {
     assert_eq!(response.event_type, "payment_paid");
     assert!(!response.live);
     assert!(response.payload_json.contains("pay_tonic_e2e_01"));
+    let _ = shutdown_tx.send(());
 }
 
 #[tokio::test]
 async fn verify_webhook_invalid_signature_returns_permission_denied() {
-    let mut client = spawn_webhook_test_client().await;
+    let mock = MoyasarMockServer::start().await;
+    let (mut client, shutdown_tx) = spawn_test_grpc_server(&mock, TEST_WEBHOOK_SECRET).await;
     let raw_body = sample_webhook_payload(Uuid::new_v4(), TEST_WEBHOOK_SECRET);
     let tampered_signature = "0".repeat(64);
 
@@ -117,11 +88,13 @@ async fn verify_webhook_invalid_signature_returns_permission_denied() {
         .expect_err("tampered HMAC signature must fail");
 
     assert_eq!(status.code(), tonic::Code::PermissionDenied);
+    let _ = shutdown_tx.send(());
 }
 
 #[tokio::test]
 async fn verify_webhook_missing_signature_returns_permission_denied() {
-    let mut client = spawn_webhook_test_client().await;
+    let mock = MoyasarMockServer::start().await;
+    let (mut client, shutdown_tx) = spawn_test_grpc_server(&mock, TEST_WEBHOOK_SECRET).await;
     let raw_body = sample_webhook_payload(Uuid::new_v4(), TEST_WEBHOOK_SECRET);
 
     let status = client
@@ -134,6 +107,7 @@ async fn verify_webhook_missing_signature_returns_permission_denied() {
         .expect_err("empty HMAC signature must fail");
 
     assert_eq!(status.code(), tonic::Code::PermissionDenied);
+    let _ = shutdown_tx.send(());
 }
 
 #[test]
