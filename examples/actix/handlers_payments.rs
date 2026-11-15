@@ -337,8 +337,7 @@ pub async fn create_payment_intent(
     state: web::Data<ActixAppState>,
     body: web::Json<CreateIntentInput>,
 ) -> Result<HttpResponse, AppError> {
-    let mut params =
-        CreatePaymentIntentParams::new(body.amount, body.currency, &body.callback_url);
+    let mut params = CreatePaymentIntentParams::new(body.amount, body.currency, &body.callback_url);
     if let Some(ref desc) = body.description {
         params = params.description(desc);
     }
@@ -377,7 +376,11 @@ pub async fn fulfill_payment_intent(
         token: body.token_id.clone(),
     };
     let params = FulfillIntentParams::new(&body.client_secret, source)?;
-    let fulfilled = state.pub_client.payment_intents().fulfill(&id, params).await?;
+    let fulfilled = state
+        .pub_client
+        .payment_intents()
+        .fulfill(&id, params)
+        .await?;
     Ok(HttpResponse::Ok().json(json!({
         "id": fulfilled.id,
         "status": fulfilled.status,

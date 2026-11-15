@@ -136,9 +136,7 @@ async fn mount_payout_mocks(mock_server: &some_moyasar::test_utils::MoyasarMockS
 }
 
 /// Mounts settlement, balance, transfer, internal transaction, and source mocks on `mock_server`.
-async fn mount_ledger_and_source_mocks(
-    mock_server: &some_moyasar::test_utils::MoyasarMockServer,
-) {
+async fn mount_ledger_and_source_mocks(mock_server: &some_moyasar::test_utils::MoyasarMockServer) {
     mount_json_endpoint(
         mock_server,
         ("GET", "/v1/settlements"),

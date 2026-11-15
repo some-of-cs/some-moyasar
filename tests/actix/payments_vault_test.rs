@@ -7,9 +7,7 @@ use some_moyasar::prelude::{CustomerVault, FIXTURE_TIMESTAMP, TokenId};
 use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-use super::{
-    build_test_harness, configure_test_routes, mount_json_endpoint, paginated_envelope,
-};
+use super::{build_test_harness, configure_test_routes, mount_json_endpoint, paginated_envelope};
 
 /// Builds a mock payment JSON payload with the given `id` and `status`.
 fn payment_fixture(id: &str, status: &str, refunded: u64) -> Value {
@@ -120,7 +118,10 @@ async fn mount_intent_invoice_and_auth_mocks(
     .await;
     mount_json_endpoint(
         mock_server,
-        ("PUT", "/v1/invoices/00000000-0000-0000-0000-000000000001/cancel"),
+        (
+            "PUT",
+            "/v1/invoices/00000000-0000-0000-0000-000000000001/cancel",
+        ),
         200,
         inv_json,
     )
@@ -188,9 +189,11 @@ async fn create_payment_injects_customer_id_metadata() {
             "currency": "SAR",
             "metadata": { "customer_id": "cus_actix_1" }
         })))
-        .respond_with(
-            ResponseTemplate::new(201).set_body_json(payment_fixture("pay_mock_01", "paid", 0)),
-        )
+        .respond_with(ResponseTemplate::new(201).set_body_json(payment_fixture(
+            "pay_mock_01",
+            "paid",
+            0,
+        )))
         .with_priority(1)
         .expect(1)
         .mount(mock_server.server())

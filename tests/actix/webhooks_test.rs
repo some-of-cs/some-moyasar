@@ -52,9 +52,7 @@ where
 }
 
 /// Mounts `WebhooksService` management endpoints on `mock_server`.
-async fn mount_webhook_management_mocks(
-    mock_server: &some_moyasar::test_utils::MoyasarMockServer,
-) {
+async fn mount_webhook_management_mocks(mock_server: &some_moyasar::test_utils::MoyasarMockServer) {
     let endpoint_json = json!({
         "id": "00000000-0000-0000-0000-000000000011",
         "http_method": "post",

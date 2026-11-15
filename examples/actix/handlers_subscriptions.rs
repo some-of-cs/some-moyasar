@@ -125,10 +125,7 @@ fn configure_subscription_and_payout_routes(cfg: &mut web::ServiceConfig) {
         "/v1/subscriptions/{sub_id}/refund",
         web::post().to(refund_subscription_cycle),
     )
-    .route(
-        "/v1/payout_accounts",
-        web::post().to(create_payout_account),
-    )
+    .route("/v1/payout_accounts", web::post().to(create_payout_account))
     .route("/v1/payout_accounts", web::get().to(list_payout_accounts))
     .route("/v1/payouts", web::post().to(create_payout))
     .route("/v1/payouts/{id}", web::get().to(get_payout));
@@ -147,10 +144,7 @@ fn configure_ledger_and_source_routes(cfg: &mut web::ServiceConfig) {
         )
         .route("/v1/sources/issuer", web::post().to(lookup_bin_issuer))
         .route("/v1/applepay/initiate", web::post().to(initiate_apple_pay))
-        .route(
-            "/v1/unified/intents",
-            web::post().to(create_unified_intent),
-        );
+        .route("/v1/unified/intents", web::post().to(create_unified_intent));
 }
 
 /// Charges a subscription billing cycle off-session (`POST /v1/subscriptions/{sub_id}/charge`).
@@ -334,7 +328,11 @@ pub async fn initiate_apple_pay(
         &body.domain_name,
         &body.publishable_api_key,
     )?;
-    let session = state.pub_client.apple_pay().initiate_session(&params).await?;
+    let session = state
+        .pub_client
+        .apple_pay()
+        .initiate_session(&params)
+        .await?;
     Ok(HttpResponse::Ok().json(session))
 }
 
@@ -343,8 +341,7 @@ pub async fn create_unified_intent(
     state: web::Data<ActixAppState>,
     body: web::Json<UnifiedIntentInput>,
 ) -> Result<HttpResponse, AppError> {
-    let mut req =
-        UnifiedIntentRequest::new(body.amount_minor, &body.currency, &body.callback_url);
+    let mut req = UnifiedIntentRequest::new(body.amount_minor, &body.currency, &body.callback_url);
     if let Some(ref desc) = body.description {
         req = req.description(desc);
     }
