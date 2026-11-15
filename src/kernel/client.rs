@@ -4,7 +4,7 @@ use core::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::SecretString;
 
 use crate::kernel::auth::{AuthKey, AuthMode, PublishableKey, SecretKey};
 use crate::kernel::error::MoyasarError;
