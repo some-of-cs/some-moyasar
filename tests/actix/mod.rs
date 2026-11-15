@@ -1,7 +1,5 @@
 //! Actix-Web integration test harness wired to `MoyasarMockServer`.
 
-#[path = "../../examples/actix/state.rs"]
-pub mod state;
 #[path = "../../examples/actix/error.rs"]
 pub mod error;
 #[path = "../../examples/actix/handlers_payments.rs"]
@@ -10,43 +8,27 @@ pub mod handlers_payments;
 pub mod handlers_subscriptions;
 #[path = "../../examples/actix/handlers_webhooks.rs"]
 pub mod handlers_webhooks;
+#[path = "../../examples/actix/state.rs"]
+pub mod state;
 
 mod payments_vault_test;
 mod subscriptions_test;
 mod webhooks_test;
 
 use actix_web::web;
+use serde_json::{Value, json};
 use some_moyasar::prelude::{MoyasarClient, MoyasarMockServer, SecretKey};
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, ResponseTemplate};
 
 /// Test webhook secret used by the Actix-Web E2E test harness.
 const TEST_WEBHOOK_SECRET: &str = "whsec_actix_test_secret";
 
 /// Registers all Actix-Web example routes on the given [`web::ServiceConfig`].
 pub fn configure_test_routes(cfg: &mut web::ServiceConfig) {
-    cfg.route(
-        "/v1/payments",
-        web::post().to(handlers_payments::create_payment),
-    )
-    .route(
-        "/v1/payments/{id}",
-        web::get().to(handlers_payments::get_payment),
-    )
-    .route(
-        "/v1/customers/{customer_id}/tokens",
-        web::post().to(handlers_payments::attach_customer_token),
-    )
-    .route(
-        "/v1/subscriptions/{sub_id}/charge",
-        web::post().to(handlers_subscriptions::charge_subscription_cycle),
-    )
-    .route(
-        "/v1/subscriptions/{sub_id}/refund",
-        web::post().to(handlers_subscriptions::refund_subscription_cycle),
-    )
-    .route(
-        "/v1/webhooks",
-        web::post().to(handlers_webhooks::handle_webhook),
-    );
+    handlers_payments::configure(cfg);
+    handlers_subscriptions::configure(cfg);
+    handlers_webhooks::configure(cfg);
 }
 
 /// Starts a hermetic [`MoyasarMockServer`] with default routes and builds shared [`state::ActixAppState`].
@@ -60,4 +42,33 @@ pub async fn build_test_harness() -> (MoyasarMockServer, web::Data<state::ActixA
         .expect("loopback mock server URL should build MoyasarClient");
     let app_state = web::Data::new(state::ActixAppState::new(client, TEST_WEBHOOK_SECRET));
     (server, app_state)
+}
+
+/// Mounts a JSON responder on `mock_server` for `(http_method, endpoint_path)`.
+pub async fn mount_json_endpoint(
+    mock_server: &MoyasarMockServer,
+    endpoint: (&str, &str),
+    status: u16,
+    body: Value,
+) {
+    Mock::given(method(endpoint.0))
+        .and(path(endpoint.1))
+        .respond_with(ResponseTemplate::new(status).set_body_json(body))
+        .with_priority(1)
+        .mount(mock_server.server())
+        .await;
+}
+
+/// Wraps a JSON array of `items` in the Moyasar `PaginatedList` wire envelope.
+pub fn paginated_envelope(items: Value) -> Value {
+    json!({
+        "items": items,
+        "meta": {
+            "current_page": 1,
+            "next_page": null,
+            "prev_page": null,
+            "total_pages": 1,
+            "total_count": 1
+        }
+    })
 }
