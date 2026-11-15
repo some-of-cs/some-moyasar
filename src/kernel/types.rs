@@ -169,7 +169,7 @@ pub enum RecipientType {
 /// Returns `true` when `c` is a safe resource identifier character (ASCII graphic and not `/?#\%`).
 #[must_use]
 pub fn is_valid_id_char(c: char) -> bool {
-    c.is_ascii_graphic() && !"/?#\%".contains(c)
+    c.is_ascii_graphic() && !"/?#\\%".contains(c)
 }
 
 /// Returns `true` when `segment` is a non-empty, URL-safe path segment without `.` or `..` traversal.

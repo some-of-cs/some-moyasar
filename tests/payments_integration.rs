@@ -492,5 +492,8 @@ fn reversal_mada_sadad_and_split_overflow_exact_boundaries() {
     let s_max = PaymentSplitRequest::new(u64::MAX, SplitRecipientType::Entity, Uuid::nil());
     let s_one = PaymentSplitRequest::new(1, SplitRecipientType::Entity, Uuid::nil());
     let err_splits = validate_splits(&[s_max, s_one], u64::MAX);
-    assert!(matches!(err_splits, Err(MoyasarError::SplitTotalExceedsAmount)));
+    assert!(matches!(
+        err_splits,
+        Err(MoyasarError::SplitTotalExceedsAmount)
+    ));
 }
