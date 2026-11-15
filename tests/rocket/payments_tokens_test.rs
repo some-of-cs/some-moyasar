@@ -1,6 +1,7 @@
 //! E2E Rocket integration tests for payments, payment intents, tokens, and card auths.
 
 use rocket::http::{ContentType, Status};
+use rocket::local::asynchronous::Client;
 use serde_json::{Value, json};
 use some_moyasar::prelude::{
     CardAuthStatus, Currency, MoyasarMockServer, PaymentIntentStatus, PaymentStatus, Token,
@@ -12,17 +13,27 @@ use super::routes_payments_tokens::{
 };
 use super::{MockResponseSpec, mount_json_endpoint, spawn_test_client};
 
-/// Mounts a `200 OK` JSON responder on the mock server for `http_method` and `path`.
-async fn mount_ok(server: &MoyasarMockServer, http_method: &str, path: &str, body: Value) {
-    let spec = MockResponseSpec {
-        status: 200,
-        body,
-    };
-    mount_json_endpoint(server, http_method, path, spec).await;
+/// Mounts a `200 OK` `GET` JSON responder on the mock server.
+async fn mount_ok_get(server: &MoyasarMockServer, path: &str, body: Value) {
+    let spec = MockResponseSpec { status: 200, body };
+    mount_json_endpoint(server, "GET", path, spec).await;
+}
+
+/// Mounts a `200 OK` `POST` JSON responder on the mock server.
+async fn mount_ok_post(server: &MoyasarMockServer, path: &str, body: Value) {
+    let spec = MockResponseSpec { status: 200, body };
+    mount_json_endpoint(server, "POST", path, spec).await;
+}
+
+/// Dispatches a `POST` request to `path` and deserializes the [`PaymentResponse`] JSON body.
+async fn post_payment_action(client: &Client, path: &str) -> PaymentResponse {
+    let response = client.post(path).dispatch().await;
+    assert_eq!(response.status(), Status::Ok);
+    response.into_json().await.expect("valid PaymentResponse")
 }
 
 /// Builds a deterministic Moyasar `Payment` JSON fixture for mock responses.
-fn sample_payment_json(id: &str, status: &str, captured: u64, refunded: u64) -> Value {
+fn sample_payment_json(id: &str, status: &str) -> Value {
     json!({
         "id": id,
         "status": status,
@@ -30,9 +41,9 @@ fn sample_payment_json(id: &str, status: &str, captured: u64, refunded: u64) -> 
         "amount_format": "150.00 SAR",
         "fee": 350,
         "fee_format": "3.50 SAR",
-        "refunded": refunded,
-        "refunded_format": "0.00 SAR",
-        "captured": captured,
+        "refunded": 15_000,
+        "refunded_format": "150.00 SAR",
+        "captured": 15_000,
         "captured_format": "150.00 SAR",
         "currency": "SAR",
         "source": { "type": "creditcard", "company": "mada" },
@@ -82,12 +93,12 @@ fn sample_card_auth_json(id: &str) -> Value {
 #[tokio::test]
 async fn retrieves_and_voids_payment() {
     let (server, client) = spawn_test_client().await;
-    let auth_body = sample_payment_json("pay_01", "authorized", 0, 0);
-    let void_body = sample_payment_json("pay_01", "voided", 0, 0);
+    let auth_body = sample_payment_json("pay_01", "authorized");
+    let void_body = sample_payment_json("pay_01", "voided");
     let void_api = "/v1/payments/pay_01/void";
 
-    mount_ok(&server, "GET", "/v1/payments/pay_01", auth_body).await;
-    mount_ok(&server, "POST", void_api, void_body).await;
+    mount_ok_get(&server, "/v1/payments/pay_01", auth_body).await;
+    mount_ok_post(&server, void_api, void_body).await;
 
     let get_resp = client.get("/payments/pay_01").dispatch().await;
     assert_eq!(get_resp.status(), Status::Ok);
@@ -95,33 +106,31 @@ async fn retrieves_and_voids_payment() {
     assert_eq!(fetched.status, PaymentStatus::Authorized);
     assert_eq!(fetched.amount, 15_000);
 
-    let void_resp = client.post("/payments/pay_01/void").dispatch().await;
-    assert_eq!(void_resp.status(), Status::Ok);
-    let voided: PaymentResponse = void_resp.into_json().await.expect("valid void");
+    let voided = post_payment_action(&client, "/payments/pay_01/void").await;
     assert_eq!(voided.status, PaymentStatus::Voided);
+
+    let bad_resp = client.get("/payments/invalid_id").dispatch().await;
+    assert_eq!(bad_resp.status(), Status::BadRequest);
 }
 
 /// Verifies `POST /payments/<id>/capture` and `POST /payments/<id>/refund` over Rocket.
 #[tokio::test]
 async fn captures_and_refunds_payment() {
     let (server, client) = spawn_test_client().await;
-    let cap_body = sample_payment_json("pay_02", "captured", 15_000, 0);
-    let ref_body = sample_payment_json("pay_02", "refunded", 15_000, 15_000);
+    let cap_body = sample_payment_json("pay_02", "captured");
+    let ref_body = sample_payment_json("pay_02", "refunded");
     let cap_api = "/v1/payments/pay_02/capture";
     let ref_api = "/v1/payments/pay_02/refund";
 
-    mount_ok(&server, "POST", cap_api, cap_body).await;
-    mount_ok(&server, "POST", ref_api, ref_body).await;
+    mount_ok_post(&server, cap_api, cap_body).await;
+    mount_ok_post(&server, ref_api, ref_body).await;
 
-    let cap_resp = client.post("/payments/pay_02/capture").dispatch().await;
-    assert_eq!(cap_resp.status(), Status::Ok);
-    let captured: PaymentResponse = cap_resp.into_json().await.expect("valid capture");
+    let captured = post_payment_action(&client, "/payments/pay_02/capture").await;
     assert_eq!(captured.status, PaymentStatus::Captured);
     assert_eq!(captured.captured, 15_000);
 
-    let ref_resp = client.post("/payments/pay_02/refund").dispatch().await;
-    assert_eq!(ref_resp.status(), Status::Ok);
-    let refunded: PaymentResponse = ref_resp.into_json().await.expect("valid refund");
+    let refunded = post_payment_action(&client, "/payments/pay_02/refund").await;
+    assert_eq!(refunded.status, PaymentStatus::Refunded);
     assert_eq!(refunded.refunded, 15_000);
 }
 
@@ -131,6 +140,8 @@ async fn creates_retrieves_and_cancels_payment_intent() {
     let (server, client) = spawn_test_client().await;
     let get_api = "/v1/payment_intents/pi_01";
     let cancel_api = "/v1/payment_intents/pi_01/cancel";
+    let created_body = sample_intent_json("pi_01", "created");
+    let canceled_body = sample_intent_json("pi_01", "canceled");
 
     mount_json_endpoint(
         &server,
@@ -142,8 +153,8 @@ async fn creates_retrieves_and_cancels_payment_intent() {
         },
     )
     .await;
-    mount_ok(&server, "GET", get_api, sample_intent_json("pi_01", "created")).await;
-    mount_ok(&server, "POST", cancel_api, sample_intent_json("pi_01", "canceled")).await;
+    mount_ok_get(&server, get_api, created_body).await;
+    mount_ok_post(&server, cancel_api, canceled_body).await;
 
     let req_body = CreateIntentRequest {
         amount: 25_000,
@@ -178,7 +189,7 @@ async fn retrieves_and_deletes_token() {
     let (server, client) = spawn_test_client().await;
     let tok_body = sample_token_json("token_01");
 
-    mount_ok(&server, "GET", "/v1/tokens/token_01", tok_body).await;
+    mount_ok_get(&server, "/v1/tokens/token_01", tok_body).await;
     mount_json_endpoint(
         &server,
         "DELETE",
@@ -207,7 +218,7 @@ async fn retrieves_card_authentication_and_rejects_bad_prefix() {
     let (server, client) = spawn_test_client().await;
     let ca_body = sample_card_auth_json("ca_01");
 
-    mount_ok(&server, "GET", "/v1/card_auths/ca_01", ca_body).await;
+    mount_ok_get(&server, "/v1/card_auths/ca_01", ca_body).await;
 
     let ok_resp = client.get("/card_auths/ca_01").dispatch().await;
     assert_eq!(ok_resp.status(), Status::Ok);
