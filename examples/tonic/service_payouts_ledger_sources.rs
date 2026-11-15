@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use some_moyasar::kernel::{Currency, MoyasarClient, PublishableKey, SecretKey};
+use some_moyasar::kernel::{Currency, MoyasarClient, MoyasarError, PublishableKey, SecretKey};
 use some_moyasar::resources::payouts::accounts_list::ListPayoutAccountsParams;
 use some_moyasar::resources::payouts::destinations::{BankDestination, PayoutDestination};
 use some_moyasar::resources::payouts::models::PayoutAccountId;
@@ -64,6 +64,11 @@ impl MoyasarPlatformResourcesService {
     }
 }
 
+/// Maps a [`Result<T, MoyasarError>`] into a gRPC [`Result<T, Status>`].
+fn map_sdk<T>(result: Result<T, MoyasarError>) -> Result<T, Status> {
+    result.map_err(|err| to_tonic_status(&err))
+}
+
 /// Validates that a signed proto minor-unit amount is non-negative and converts it to `u64`.
 fn parse_non_negative_amount(amount_minor: i64) -> Result<u64, Status> {
     u64::try_from(amount_minor)
@@ -76,9 +81,27 @@ fn to_json_string<T: serde::Serialize>(value: &T) -> Result<String, Status> {
         .map_err(|err| Status::internal(format!("failed to serialize response JSON: {err}")))
 }
 
+/// Builds a [`Response<JsonPayloadRpcResponse>`] from `id` and a serializable `value`.
+fn ok_json_response<T: serde::Serialize>(
+    id: String,
+    value: &T,
+) -> Result<Response<JsonPayloadRpcResponse>, Status> {
+    Ok(Response::new(JsonPayloadRpcResponse {
+        id,
+        json: to_json_string(value)?,
+    }))
+}
+
+/// Builds a [`Response<JsonPayloadRpcResponse>`] with a `count:<len>` identifier for a slice.
+fn ok_count_json_response<T: serde::Serialize>(
+    items: &[T],
+) -> Result<Response<JsonPayloadRpcResponse>, Status> {
+    ok_json_response(format!("count:{}", items.len()), &items)
+}
+
 /// Parses a three-letter ISO 4217 [`Currency`] code, mapping errors via [`to_tonic_status`].
 fn parse_currency(raw: &str) -> Result<Currency, Status> {
-    raw.parse::<Currency>().map_err(|err| to_tonic_status(&err))
+    map_sdk(raw.parse::<Currency>())
 }
 
 /// Parses a caller-supplied UUID `given_id`, returning `INVALID_ARGUMENT` if malformed.
@@ -88,7 +111,7 @@ fn parse_given_id(raw: &str) -> Result<Uuid, Status> {
 
 /// Validates and builds [`CreatePayoutParams`] for a Saudi bank IBAN transfer in Riyadh.
 fn build_payout_params(req: CreatePayoutRpcRequest) -> Result<CreatePayoutParams, Status> {
-    let source_id = PayoutAccountId::new(req.source_id).map_err(|err| to_tonic_status(&err))?;
+    let source_id = map_sdk(PayoutAccountId::new(req.source_id))?;
     let amount = parse_non_negative_amount(req.amount_minor)?;
     let bank = BankDestination {
         iban: req.iban,
@@ -106,245 +129,143 @@ fn build_payout_params(req: CreatePayoutRpcRequest) -> Result<CreatePayoutParams
         comment: None,
         metadata: None,
     };
-    params.validate().map_err(|err| to_tonic_status(&err))?;
+    map_sdk(params.validate())?;
     Ok(params)
 }
 
-#[tonic::async_trait]
-impl MoyasarPlatformResources for MoyasarPlatformResourcesService {
+macro_rules! impl_platform_resources {
+    ($(
+        $(#[$doc:meta])*
+        $method:ident($this:ident, $req:ident : $req_ty:ty) => $body:block;
+    )+) => {
+        #[tonic::async_trait]
+        impl MoyasarPlatformResources for MoyasarPlatformResourcesService {
+            $(
+                $(#[$doc])*
+                async fn $method(
+                    &self,
+                    request: Request<$req_ty>,
+                ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
+                    let $this = self;
+                    let $req = request.into_inner();
+                    $body
+                }
+            )+
+        }
+    };
+}
+
+impl_platform_resources! {
     /// Lists registered payout accounts via [`MoyasarClient::payout_accounts`].
-    async fn list_payout_accounts(
-        &self,
-        request: Request<ListPageRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let req = request.into_inner();
+    list_payout_accounts(this, req: ListPageRpcRequest) => {
         let params = ListPayoutAccountsParams {
             page: req.page,
             per: None,
         };
-        let list = self
-            .client
-            .payout_accounts()
-            .list(&params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(JsonPayloadRpcResponse {
-            id: format!("count:{}", list.items.len()),
-            json: to_json_string(&list.items)?,
-        }))
-    }
-
+        let list = map_sdk(this.client.payout_accounts().list(&params).await)?;
+        ok_count_json_response(&list.items)
+    };
     /// Initiates a bank IBAN payout transfer via [`MoyasarClient::payouts`].
-    async fn create_payout(
-        &self,
-        request: Request<CreatePayoutRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let params = build_payout_params(request.into_inner())?;
-        let payout = self
-            .client
-            .payouts()
-            .create(&params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(JsonPayloadRpcResponse {
-            id: payout.id.as_str().to_owned(),
-            json: to_json_string(&payout)?,
-        }))
-    }
-
+    create_payout(this, req: CreatePayoutRpcRequest) => {
+        let params = build_payout_params(req)?;
+        let payout = map_sdk(this.client.payouts().create(&params).await)?;
+        ok_json_response(payout.id.as_str().to_owned(), &payout)
+    };
     /// Fetches current merchant settlement balances via [`MoyasarClient::settlements`].
-    async fn fetch_settlement_balance(
-        &self,
-        _request: Request<ListPageRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let balance = self
-            .client
-            .settlements()
-            .fetch_balance()
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(JsonPayloadRpcResponse {
-            id: balance.currency.as_str().to_owned(),
-            json: to_json_string(&balance)?,
-        }))
-    }
-
+    fetch_settlement_balance(this, _req: ListPageRpcRequest) => {
+        let balance = map_sdk(this.client.settlements().fetch_balance().await)?;
+        ok_json_response(balance.currency.as_str().to_owned(), &balance)
+    };
     /// Retrieves a single settlement by ID via [`MoyasarClient::settlements`].
-    async fn retrieve_settlement(
-        &self,
-        request: Request<RetrieveIdRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let req = request.into_inner();
+    retrieve_settlement(this, req: RetrieveIdRpcRequest) => {
         let settlement_id = SettlementId::new(req.id);
-        settlement_id
-            .validate()
-            .map_err(|err| to_tonic_status(&err))?;
-        let settlement = self
-            .client
-            .settlements()
-            .retrieve(&settlement_id)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(JsonPayloadRpcResponse {
-            id: settlement.id.as_str().to_owned(),
-            json: to_json_string(&settlement)?,
-        }))
-    }
-
+        map_sdk(settlement_id.validate())?;
+        let settlement = map_sdk(this.client.settlements().retrieve(&settlement_id).await)?;
+        ok_json_response(settlement.id.as_str().to_owned(), &settlement)
+    };
     /// Lists aggregation transfers via [`MoyasarClient::transfers`].
-    async fn list_transfers(
-        &self,
-        request: Request<ListPageRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let req = request.into_inner();
+    list_transfers(this, req: ListPageRpcRequest) => {
         let params = ListTransfersParams {
             page: req.page,
             ..Default::default()
         };
-        let list = self
-            .client
-            .transfers()
-            .list(&params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(JsonPayloadRpcResponse {
-            id: format!("count:{}", list.items.len()),
-            json: to_json_string(&list.items)?,
-        }))
-    }
-
+        let list = map_sdk(this.client.transfers().list(&params).await)?;
+        ok_count_json_response(&list.items)
+    };
     /// Lists internal ledger transactions via [`MoyasarClient::internal_transactions`].
-    async fn list_internal_transactions(
-        &self,
-        _request: Request<ListPageRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let list = self
-            .client
-            .internal_transactions()
-            .list(&ListInternalTransactionsParams::new())
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(JsonPayloadRpcResponse {
-            id: format!("count:{}", list.items.len()),
-            json: to_json_string(&list.items)?,
-        }))
-    }
-
+    list_internal_transactions(this, _req: ListPageRpcRequest) => {
+        let params = ListInternalTransactionsParams::new();
+        let list = map_sdk(this.client.internal_transactions().list(&params).await)?;
+        ok_count_json_response(&list.items)
+    };
     /// Looks up card BIN/IIN issuer metadata via [`MoyasarClient::sources`].
-    async fn lookup_issuer(
-        &self,
-        request: Request<BinLookupRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let req = request.into_inner();
-        let params = BinLookupParams::new(req.first_digits).map_err(|err| to_tonic_status(&err))?;
-        let issuer = self
-            .client
-            .sources()
-            .get_issuer(&params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
+    lookup_issuer(this, req: BinLookupRpcRequest) => {
+        let params = map_sdk(BinLookupParams::new(req.first_digits))?;
+        let issuer = map_sdk(this.client.sources().get_issuer(&params).await)?;
         Ok(Response::new(JsonPayloadRpcResponse {
-            id: issuer.first_digits.clone(),
+            id: issuer.first_digits,
             json: format!("{:?}", issuer.issuer_card_type),
         }))
-    }
-
+    };
     /// Initiates a signed Apple Pay merchant session via [`MoyasarClient::apple_pay`].
-    async fn initiate_apple_pay_session(
-        &self,
-        request: Request<ApplePaySessionRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let req = request.into_inner();
-        let params = InitiateApplePayParams::new(
+    initiate_apple_pay_session(this, req: ApplePaySessionRpcRequest) => {
+        let params = map_sdk(InitiateApplePayParams::new(
             req.validation_url,
             req.display_name,
             req.domain_name,
             DEFAULT_TONIC_PUBLISHABLE_KEY,
-        )
-        .map_err(|err| to_tonic_status(&err))?;
-        let session = self
-            .publishable_client
-            .apple_pay()
-            .initiate_session(&params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(JsonPayloadRpcResponse {
-            id: session.merchant_identifier.clone(),
-            json: to_json_string(&session)?,
-        }))
-    }
-
+        ))?;
+        let session = map_sdk(
+            this.publishable_client
+                .apple_pay()
+                .initiate_session(&params)
+                .await,
+        )?;
+        ok_json_response(session.merchant_identifier.clone(), &session)
+    };
     /// Registers a webhook endpoint via [`MoyasarClient::webhooks`], redacting `shared_secret`.
-    async fn manage_webhook_endpoint(
-        &self,
-        request: Request<CreateWebhookEndpointRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let req = request.into_inner();
+    manage_webhook_endpoint(this, req: CreateWebhookEndpointRpcRequest) => {
         let secret = WebhookSecret::new(req.shared_secret);
-        let params =
-            CreateWebhookParams::new(req.url, secret).map_err(|err| to_tonic_status(&err))?;
-        let ep = self
-            .client
-            .webhooks()
-            .create(&params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
+        let params = map_sdk(CreateWebhookParams::new(req.url, secret))?;
+        let ep = map_sdk(this.client.webhooks().create(&params).await)?;
         Ok(Response::new(JsonPayloadRpcResponse {
             id: ep.id.to_string(),
             json: ep.url,
         }))
-    }
-
+    };
     /// Attaches a vaulted token to a customer, charges the customer, and runs subscription cycle 1.
-    async fn charge_customer_and_subscription(
-        &self,
-        request: Request<CustomerChargeRpcRequest>,
-    ) -> Result<Response<JsonPayloadRpcResponse>, Status> {
-        let req = request.into_inner();
-        let token_id = TokenId::new(req.token_id).map_err(|err| to_tonic_status(&err))?;
+    charge_customer_and_subscription(this, req: CustomerChargeRpcRequest) => {
+        let token_id = map_sdk(TokenId::new(req.token_id))?;
         let amount = parse_non_negative_amount(req.amount_minor)?;
         let currency = parse_currency(&req.currency)?;
         let given_id = parse_given_id(&req.given_id)?;
 
-        self.client
-            .customers(self.vault.as_ref())
-            .attach_token(&req.customer_id, token_id.clone())
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
+        map_sdk(
+            this.client
+                .customers(this.vault.as_ref())
+                .attach_token(&req.customer_id, token_id.clone())
+                .await,
+        )?;
 
         let cust_params =
             CustomerChargeParams::new(&req.customer_id, amount, currency).given_id(given_id);
-        let cust_payment = self
-            .client
-            .customers(self.vault.as_ref())
-            .charge(&cust_params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
+        let cust_payment = map_sdk(
+            this.client
+                .customers(this.vault.as_ref())
+                .charge(&cust_params)
+                .await,
+        )?;
 
         let sub_params =
             SubscriptionCycleChargeParams::new(DEFAULT_SUBSCRIPTION_ID, 1, amount, &token_id)
                 .currency(currency);
-        let sub_payment = self
-            .client
-            .subscriptions()
-            .charge_cycle(&sub_params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
+        let sub_payment = map_sdk(this.client.subscriptions().charge_cycle(&sub_params).await)?;
 
         Ok(Response::new(JsonPayloadRpcResponse {
             id: sub_payment.id,
             json: cust_payment.id,
         }))
-    }
+    };
 }
 
 #[cfg(test)]
@@ -376,6 +297,11 @@ mod tests {
             Code::InvalidArgument
         );
         assert_eq!(to_json_string(&[1_u32, 2]).expect("json"), "[1,2]");
+        let count_resp = ok_count_json_response(&[1_u32, 2])
+            .expect("count response")
+            .into_inner();
+        assert_eq!(count_resp.id, "count:2");
+        assert_eq!(count_resp.json, "[1,2]");
     }
 
     #[test]

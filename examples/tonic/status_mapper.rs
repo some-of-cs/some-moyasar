@@ -14,53 +14,53 @@ impl From<GrpcError> for tonic::Status {
     }
 }
 
-const API_ERROR_CODE_MAP: &[(ApiErrorType, tonic::Code)] = &[
+/// Static lookup table mapping [`ApiErrorType`] variants to canonical gRPC status codes and safe messages.
+pub const API_ERROR_MAP: &[(ApiErrorType, tonic::Code, &str)] = &[
     (
         ApiErrorType::AuthenticationError,
         tonic::Code::Unauthenticated,
+        "upstream authentication error",
     ),
-    (ApiErrorType::RecordNotFound, tonic::Code::NotFound),
+    (
+        ApiErrorType::RecordNotFound,
+        tonic::Code::NotFound,
+        "requested resource not found",
+    ),
     (
         ApiErrorType::InvalidRequestError,
         tonic::Code::InvalidArgument,
+        "invalid request parameters",
     ),
     (
         ApiErrorType::IntentNotCancelable,
         tonic::Code::InvalidArgument,
+        "payment intent is not cancelable",
     ),
-    (ApiErrorType::ApiError, tonic::Code::Unavailable),
-    (ApiErrorType::Unknown, tonic::Code::Unknown),
+    (
+        ApiErrorType::ApiError,
+        tonic::Code::Unavailable,
+        "upstream gateway error",
+    ),
+    (
+        ApiErrorType::Unknown,
+        tonic::Code::Unknown,
+        "unexpected gateway error",
+    ),
 ];
 
-const SECRET_PREFIXES: &[&str] = &["sk_live_", "sk_test_", "pk_live_", "pk_test_", "Bearer "];
-
-fn api_error_type_to_code(error_type: &ApiErrorType) -> tonic::Code {
-    API_ERROR_CODE_MAP
+fn map_api_error_type(error_type: &ApiErrorType) -> (tonic::Code, String) {
+    API_ERROR_MAP
         .iter()
-        .find(|(kind, _)| kind == error_type)
-        .map_or(tonic::Code::Unknown, |(_, code)| *code)
-}
-
-fn sanitize_message(message: &str) -> String {
-    if SECRET_PREFIXES
-        .iter()
-        .any(|prefix| message.contains(prefix))
-    {
-        return "upstream authentication or validation error".to_owned();
-    }
-    message.to_owned()
+        .find(|(kind, _, _)| kind == error_type)
+        .map_or_else(
+            || (tonic::Code::Unknown, "unexpected gateway error".to_owned()),
+            |(_, code, message)| (*code, (*message).to_owned()),
+        )
 }
 
 fn map_non_validation_error(err: &MoyasarError) -> Option<(tonic::Code, String)> {
     match err {
-        MoyasarError::Api {
-            error_type,
-            message,
-            ..
-        } => Some((
-            api_error_type_to_code(error_type),
-            sanitize_message(message),
-        )),
+        MoyasarError::Api { error_type, .. } => Some(map_api_error_type(error_type)),
         MoyasarError::Timeout => Some((tonic::Code::DeadlineExceeded, err.to_string())),
         MoyasarError::ServerError { status, .. } => Some((
             tonic::Code::Unavailable,
@@ -102,33 +102,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn maps_api_error_types_to_expected_grpc_codes() {
-        let cases = [
-            (
-                ApiErrorType::AuthenticationError,
-                tonic::Code::Unauthenticated,
-            ),
-            (ApiErrorType::RecordNotFound, tonic::Code::NotFound),
-            (
-                ApiErrorType::InvalidRequestError,
-                tonic::Code::InvalidArgument,
-            ),
-            (
-                ApiErrorType::IntentNotCancelable,
-                tonic::Code::InvalidArgument,
-            ),
-            (ApiErrorType::ApiError, tonic::Code::Unavailable),
-            (ApiErrorType::Unknown, tonic::Code::Unknown),
-        ];
-        for (error_type, expected) in cases {
+    fn maps_api_error_types_to_expected_grpc_codes_and_canonical_messages() {
+        for (error_type, expected_code, expected_msg) in API_ERROR_MAP {
             let err = MoyasarError::Api {
-                error_type,
-                message: "gateway message".into(),
+                error_type: error_type.clone(),
+                message: "raw upstream gateway error detail".into(),
                 errors: Vec::new(),
                 response_code: None,
             };
-            assert_eq!(to_tonic_status(&err).code(), expected);
+            let status = to_tonic_status(&err);
+            assert_eq!(status.code(), *expected_code);
+            assert_eq!(status.message(), *expected_msg);
         }
+    }
+
+    #[test]
+    fn raw_non_json_upstream_4xx_body_is_never_exposed_in_status_message() {
+        let raw_upstream_body =
+            "<html><body>403 Forbidden: nginx/1.24 internal upstream trace id=99182</body></html>";
+        let err = MoyasarError::Api {
+            error_type: ApiErrorType::InvalidRequestError,
+            message: raw_upstream_body.to_owned(),
+            errors: vec![raw_upstream_body.to_owned()],
+            response_code: Some("400".to_owned()),
+        };
+        let status = to_tonic_status(&err);
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        assert_eq!(status.message(), "invalid request parameters");
+        assert!(!status.message().contains("nginx"));
+        assert!(!status.message().contains("Forbidden"));
+        assert!(!status.message().contains(raw_upstream_body));
     }
 
     #[test]
@@ -173,6 +176,7 @@ mod tests {
         })
         .into();
         assert_eq!(status.code(), tonic::Code::Unauthenticated);
+        assert_eq!(status.message(), "upstream authentication error");
         assert!(!status.message().contains("sk_live_"));
     }
 }

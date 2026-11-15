@@ -82,21 +82,25 @@ async fn mount_json_mock(
         .await;
 }
 
-/// Builds a deterministic pagination metadata JSON object.
-fn meta_json() -> Value {
+/// Wraps a single fixture `item` in a paginated list envelope keyed by `key`.
+fn ledger_list_fixture_json(key: &str, item: Value) -> Value {
     json!({
-        "current_page": 1,
-        "next_page": null,
-        "prev_page": null,
-        "total_pages": 1,
-        "total_count": 1
+        key: [item],
+        "meta": {
+            "current_page": 1,
+            "next_page": null,
+            "prev_page": null,
+            "total_pages": 1,
+            "total_count": 1
+        }
     })
 }
 
-/// Builds a deterministic `PayoutAccount` list JSON payload.
-fn payout_accounts_list_json() -> Value {
-    json!({
-        "payout_accounts": [{
+/// Mounts all payout, settlement, transfer, and internal transaction mocks on `mock.server()`.
+async fn mount_payouts_and_ledger_mocks(mock: &MoyasarMockServer) {
+    let payout_accounts = ledger_list_fixture_json(
+        "payout_accounts",
+        json!({
             "id": "pa_mock_01",
             "account_type": "bank",
             "currency": "SAR",
@@ -107,26 +111,17 @@ fn payout_accounts_list_json() -> Value {
             },
             "credentials": "secret_upstream_cred",
             "created_at": FIXTURE_TIMESTAMP
-        }],
-        "meta": meta_json()
-    })
-}
-
-/// Builds a deterministic `Payout` JSON payload.
-fn payout_json() -> Value {
-    json!({
+        }),
+    );
+    let payout = json!({
         "id": "pout_mock_01",
         "channel": "sarie",
         "status": "queued",
         "amount": 50000,
         "message": "Disbursement processed",
         "failure_reason": null
-    })
-}
-
-/// Builds a deterministic `SettlementBalance` JSON payload.
-fn settlement_balance_json() -> Value {
-    json!({
+    });
+    let balance = json!({
         "currency": "SAR",
         "available": 120000,
         "pending": 30000,
@@ -134,12 +129,8 @@ fn settlement_balance_json() -> Value {
         "available_format": "1,200.00 SAR",
         "pending_format": "300.00 SAR",
         "reserved_format": "50.00 SAR"
-    })
-}
-
-/// Builds a deterministic `Settlement` JSON payload.
-fn settlement_json() -> Value {
-    json!({
+    });
+    let settlement = json!({
         "id": "set_mock_01",
         "recipient_type": "entity",
         "currency": "SAR",
@@ -150,13 +141,10 @@ fn settlement_json() -> Value {
         "reference": "SET-REF-01",
         "settlement_count": 4,
         "created_at": FIXTURE_TIMESTAMP
-    })
-}
-
-/// Builds a deterministic `Transfer` list JSON payload.
-fn transfers_list_json() -> Value {
-    json!({
-        "transfers": [{
+    });
+    let transfers = ledger_list_fixture_json(
+        "transfers",
+        json!({
             "id": "tr_mock_01",
             "recipient_type": "entity",
             "recipient_id": TEST_ENTITY_UUID,
@@ -166,15 +154,11 @@ fn transfers_list_json() -> Value {
             "currency": "SAR",
             "reference": "TR-REF-01",
             "created_at": FIXTURE_TIMESTAMP
-        }],
-        "meta": meta_json()
-    })
-}
-
-/// Builds a deterministic `InternalTransaction` list JSON payload.
-fn internal_txns_list_json() -> Value {
-    json!({
-        "internal_transactions": [{
+        }),
+    );
+    let internal_txns = ledger_list_fixture_json(
+        "internal_transactions",
+        json!({
             "id": "itx_mock_01",
             "recipient_type": "entity",
             "recipient_id": TEST_ENTITY_UUID,
@@ -184,43 +168,15 @@ fn internal_txns_list_json() -> Value {
             "settled_at": FIXTURE_TIMESTAMP,
             "created_at": FIXTURE_TIMESTAMP,
             "updated_at": FIXTURE_TIMESTAMP
-        }],
-        "meta": meta_json()
-    })
-}
+        }),
+    );
 
-/// Mounts all payout, settlement, transfer, and internal transaction mocks on `mock.server()`.
-async fn mount_payouts_and_ledger_mocks(mock: &MoyasarMockServer) {
-    mount_json_mock(
-        mock,
-        "GET",
-        "/v1/payout_accounts",
-        payout_accounts_list_json(),
-    )
-    .await;
-    mount_json_mock(mock, "POST", "/v1/payouts", payout_json()).await;
-    mount_json_mock(
-        mock,
-        "GET",
-        "/v1/settlements/balance",
-        settlement_balance_json(),
-    )
-    .await;
-    mount_json_mock(
-        mock,
-        "GET",
-        "/v1/settlements/set_mock_01",
-        settlement_json(),
-    )
-    .await;
-    mount_json_mock(mock, "GET", "/v1/transfers", transfers_list_json()).await;
-    mount_json_mock(
-        mock,
-        "GET",
-        "/v1/internal_transactions",
-        internal_txns_list_json(),
-    )
-    .await;
+    mount_json_mock(mock, "GET", "/v1/payout_accounts", payout_accounts).await;
+    mount_json_mock(mock, "POST", "/v1/payouts", payout).await;
+    mount_json_mock(mock, "GET", "/v1/settlements/balance", balance).await;
+    mount_json_mock(mock, "GET", "/v1/settlements/set_mock_01", settlement).await;
+    mount_json_mock(mock, "GET", "/v1/transfers", transfers).await;
+    mount_json_mock(mock, "GET", "/v1/internal_transactions", internal_txns).await;
 }
 
 /// Mounts BIN issuer, Apple Pay session, and webhook endpoint mocks on `mock.server()`.

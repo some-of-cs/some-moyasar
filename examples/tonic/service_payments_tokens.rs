@@ -4,8 +4,9 @@
 #![allow(dead_code)]
 
 use some_moyasar::prelude::{
-    Amount, CardAuthId, CreateInvoiceParams, Currency, IntentId, Invoice, MoyasarClient, PaymentId,
-    PaymentIntent, PaymentIntentStatus, RefundCreateParams, SecretKey, TokenId,
+    Amount, CardAuthId, CreateInvoiceParams, Currency, IntentId, Invoice, MoyasarClient,
+    MoyasarError, PaymentId, PaymentIntent, PaymentIntentStatus, RefundCreateParams, SecretKey,
+    TokenId,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -47,6 +48,11 @@ impl MoyasarCoreResourcesService {
     }
 }
 
+/// Maps a [`Result<T, MoyasarError>`] into a gRPC [`Result<T, Status>`].
+fn map_sdk<T>(result: Result<T, MoyasarError>) -> Result<T, Status> {
+    result.map_err(|err| to_tonic_status(&err))
+}
+
 /// Validates that a signed proto minor-unit amount is non-negative and converts it to `u64`.
 fn parse_non_negative_amount(amount_minor: i64) -> Result<u64, Status> {
     u64::try_from(amount_minor)
@@ -77,16 +83,6 @@ fn map_intent_response(intent: &PaymentIntent) -> Result<IntentJsonRpcResponse, 
     })
 }
 
-/// Extracts and validates an [`IntentId`] from a gRPC request.
-fn parse_intent_id(request: Request<RetrieveIdRpcRequest>) -> Result<IntentId, Status> {
-    IntentId::new(request.into_inner().id).map_err(|err| to_tonic_status(&err))
-}
-
-/// Extracts and validates a [`TokenId`] from a gRPC request.
-fn parse_token_id(request: Request<RetrieveIdRpcRequest>) -> Result<TokenId, Status> {
-    TokenId::new(request.into_inner().id).map_err(|err| to_tonic_status(&err))
-}
-
 /// Builds [`RefundCreateParams`] with unsettled-void preference and optional partial amount.
 fn build_refund_params(req: SmartRefundRpcRequest) -> Result<RefundCreateParams, Status> {
     let mut params = RefundCreateParams::new(req.payment_id).prefer_void_if_unsettled(true);
@@ -98,7 +94,7 @@ fn build_refund_params(req: SmartRefundRpcRequest) -> Result<RefundCreateParams,
 
 /// Parses a three-letter ISO 4217 [`Currency`] code, mapping errors to [`Status`].
 fn parse_currency(raw: &str) -> Result<Currency, Status> {
-    raw.parse::<Currency>().map_err(|err| to_tonic_status(&err))
+    map_sdk(raw.parse::<Currency>())
 }
 
 /// Builds [`CreateInvoiceParams`] from a [`CreateInvoiceRpcRequest`].
@@ -129,169 +125,107 @@ fn parse_invoice_uuid(raw: &str) -> Result<Uuid, Status> {
     Uuid::parse_str(raw).map_err(|_| Status::invalid_argument("invoice id must be a valid UUID"))
 }
 
-#[tonic::async_trait]
-impl MoyasarCoreResources for MoyasarCoreResourcesService {
-    /// Retrieves a payment by ID via [`MoyasarClient::payments`].
-    async fn retrieve_payment(
-        &self,
-        request: Request<RetrieveIdRpcRequest>,
-    ) -> Result<Response<PaymentJsonRpcResponse>, Status> {
-        let id = PaymentId::new(request.into_inner().id).map_err(|err| to_tonic_status(&err))?;
-        let p = self
-            .client()
-            .payments()
-            .retrieve(&id)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
+macro_rules! impl_core_resources {
+    ($(
+        $(#[$doc:meta])*
+        $method:ident($this:ident, $req:ident : $req_ty:ty) -> $res_ty:ty => $body:block;
+    )+) => {
+        #[tonic::async_trait]
+        impl MoyasarCoreResources for MoyasarCoreResourcesService {
+            $(
+                $(#[$doc])*
+                async fn $method(
+                    &self,
+                    request: Request<$req_ty>,
+                ) -> Result<Response<$res_ty>, Status> {
+                    let $this = self;
+                    let $req = request.into_inner();
+                    let payload = $body;
+                    Ok(Response::new(payload))
+                }
+            )+
+        }
+    };
+}
 
-        Ok(Response::new(PaymentJsonRpcResponse {
+impl_core_resources! {
+    /// Retrieves a payment by ID via [`MoyasarClient::payments`].
+    retrieve_payment(this, req: RetrieveIdRpcRequest) -> PaymentJsonRpcResponse => {
+        let id = map_sdk(PaymentId::new(req.id))?;
+        let p = map_sdk(this.client().payments().retrieve(&id).await)?;
+        PaymentJsonRpcResponse {
             id: p.id,
             status: p.status.as_str().to_owned(),
             amount_minor: to_proto_amount(p.amount)?,
             currency: p.currency.as_str().to_owned(),
-        }))
-    }
-
+        }
+    };
     /// Refunds a captured payment or voids an unsettled payment via [`MoyasarClient::refunds`].
-    async fn smart_refund(
-        &self,
-        request: Request<SmartRefundRpcRequest>,
-    ) -> Result<Response<SmartRefundRpcResponse>, Status> {
-        let params = build_refund_params(request.into_inner())?;
-        let receipt = self
-            .client()
-            .refunds()
-            .create(params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(SmartRefundRpcResponse {
+    smart_refund(this, req: SmartRefundRpcRequest) -> SmartRefundRpcResponse => {
+        let params = build_refund_params(req)?;
+        let receipt = map_sdk(this.client().refunds().create(params).await)?;
+        SmartRefundRpcResponse {
             payment_id: receipt.payment_id,
             action: receipt.status.as_str().to_owned(),
             amount_minor: to_proto_amount(receipt.refunded_amount)?,
-        }))
-    }
-
+        }
+    };
     /// Retrieves a payment intent by ID via [`MoyasarClient::payment_intents`].
-    async fn retrieve_intent(
-        &self,
-        request: Request<RetrieveIdRpcRequest>,
-    ) -> Result<Response<IntentJsonRpcResponse>, Status> {
-        let id = parse_intent_id(request)?;
-        let intent = self
-            .client()
-            .payment_intents()
-            .retrieve(&id)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-        Ok(Response::new(map_intent_response(&intent)?))
-    }
-
+    retrieve_intent(this, req: RetrieveIdRpcRequest) -> IntentJsonRpcResponse => {
+        let id = map_sdk(IntentId::new(req.id))?;
+        let intent = map_sdk(this.client().payment_intents().retrieve(&id).await)?;
+        map_intent_response(&intent)?
+    };
     /// Cancels an active payment intent by ID via [`MoyasarClient::payment_intents`].
-    async fn cancel_intent(
-        &self,
-        request: Request<RetrieveIdRpcRequest>,
-    ) -> Result<Response<IntentJsonRpcResponse>, Status> {
-        let id = parse_intent_id(request)?;
-        let intent = self
-            .client()
-            .payment_intents()
-            .cancel(&id)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-        Ok(Response::new(map_intent_response(&intent)?))
-    }
-
+    cancel_intent(this, req: RetrieveIdRpcRequest) -> IntentJsonRpcResponse => {
+        let id = map_sdk(IntentId::new(req.id))?;
+        let intent = map_sdk(this.client().payment_intents().cancel(&id).await)?;
+        map_intent_response(&intent)?
+    };
     /// Retrieves a vaulted card token by ID via [`MoyasarClient::tokens`].
-    async fn retrieve_token(
-        &self,
-        request: Request<RetrieveIdRpcRequest>,
-    ) -> Result<Response<TokenRpcResponse>, Status> {
-        let id = parse_token_id(request)?;
-        let t = self
-            .client()
-            .tokens()
-            .retrieve(&id)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(TokenRpcResponse {
+    retrieve_token(this, req: RetrieveIdRpcRequest) -> TokenRpcResponse => {
+        let id = map_sdk(TokenId::new(req.id))?;
+        let t = map_sdk(this.client().tokens().retrieve(&id).await)?;
+        TokenRpcResponse {
             id: t.id.as_str().to_owned(),
             status: t.status.as_str().to_owned(),
             brand: t.company.unwrap_or_default(),
             deleted: false,
-        }))
-    }
-
+        }
+    };
     /// Deletes a vaulted card token by ID via [`MoyasarClient::tokens`].
-    async fn delete_token(
-        &self,
-        request: Request<RetrieveIdRpcRequest>,
-    ) -> Result<Response<TokenRpcResponse>, Status> {
-        let id = parse_token_id(request)?;
-        self.client()
-            .tokens()
-            .delete(&id)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(TokenRpcResponse {
+    delete_token(this, req: RetrieveIdRpcRequest) -> TokenRpcResponse => {
+        let id = map_sdk(TokenId::new(req.id))?;
+        map_sdk(this.client().tokens().delete(&id).await)?;
+        TokenRpcResponse {
             id: id.as_str().to_owned(),
             status: "deleted".to_owned(),
             brand: String::new(),
             deleted: true,
-        }))
-    }
-
+        }
+    };
     /// Creates a hosted e-invoice in minor currency units via [`MoyasarClient::invoices`].
-    async fn create_invoice(
-        &self,
-        request: Request<CreateInvoiceRpcRequest>,
-    ) -> Result<Response<InvoiceRpcResponse>, Status> {
-        let params = build_invoice_params(request.into_inner())?;
-        let inv = self
-            .client()
-            .invoices()
-            .create(&params)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-        Ok(Response::new(map_invoice_response(inv)))
-    }
-
+    create_invoice(this, req: CreateInvoiceRpcRequest) -> InvoiceRpcResponse => {
+        let params = build_invoice_params(req)?;
+        let inv = map_sdk(this.client().invoices().create(&params).await)?;
+        map_invoice_response(inv)
+    };
     /// Cancels an active hosted e-invoice by UUID via [`MoyasarClient::invoices`].
-    async fn cancel_invoice(
-        &self,
-        request: Request<RetrieveIdRpcRequest>,
-    ) -> Result<Response<InvoiceRpcResponse>, Status> {
-        let uuid = parse_invoice_uuid(&request.into_inner().id)?;
-        let inv = self
-            .client()
-            .invoices()
-            .cancel(uuid)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-        Ok(Response::new(map_invoice_response(inv)))
-    }
-
+    cancel_invoice(this, req: RetrieveIdRpcRequest) -> InvoiceRpcResponse => {
+        let uuid = parse_invoice_uuid(&req.id)?;
+        let inv = map_sdk(this.client().invoices().cancel(uuid).await)?;
+        map_invoice_response(inv)
+    };
     /// Retrieves a standalone 3DS card authentication session by ID, redacting CAVV values.
-    async fn retrieve_card_auth(
-        &self,
-        request: Request<RetrieveIdRpcRequest>,
-    ) -> Result<Response<CardAuthRpcResponse>, Status> {
-        let id = CardAuthId::new(request.into_inner().id).map_err(|err| to_tonic_status(&err))?;
-        let auth = self
-            .client()
-            .card_auths()
-            .retrieve(&id)
-            .await
-            .map_err(|err| to_tonic_status(&err))?;
-
-        Ok(Response::new(CardAuthRpcResponse {
+    retrieve_card_auth(this, req: RetrieveIdRpcRequest) -> CardAuthRpcResponse => {
+        let id = map_sdk(CardAuthId::new(req.id))?;
+        let auth = map_sdk(this.client().card_auths().retrieve(&id).await)?;
+        CardAuthRpcResponse {
             id: auth.id.as_str().to_owned(),
             status: auth.status.as_str().to_owned(),
             transaction_url: auth.transaction_url,
-        }))
-    }
+        }
+    };
 }
 
 #[cfg(test)]
