@@ -291,7 +291,7 @@ mod tests {
         let http = reqwest::Client::new();
         let err = execute_with_retry(0, || async {
             let resp = http.get(&url).query(&query_pairs).send().await?;
-            parse_list_response(resp).await
+            decode_json_response::<PaginatedList<InternalTransaction>>(resp).await
         })
         .await
         .expect_err("401 must map to MoyasarError::Api");

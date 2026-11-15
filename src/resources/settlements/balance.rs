@@ -247,7 +247,7 @@ mod tests {
         let url = format!("{}/v1/settlements/balance", server.uri());
         let balance = execute_with_retry(1, || async {
             let resp = http.get(&url).send().await?;
-            parse_balance_response(resp).await
+            decode_json_response::<MerchantBalance>(resp).await
         })
         .await
         .expect("fetches merchant balance");
@@ -272,7 +272,7 @@ mod tests {
         let err_url = format!("{}/v1/settlements/balance", err_server.uri());
         let err = execute_with_retry(1, || async {
             let resp = http.get(&err_url).send().await?;
-            parse_balance_response(resp).await
+            decode_json_response::<MerchantBalance>(resp).await
         })
         .await
         .expect_err("401 maps to ApiErrorType::AuthenticationError");

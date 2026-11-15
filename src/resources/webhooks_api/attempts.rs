@@ -248,7 +248,7 @@ mod tests {
                 .send()
                 .await
                 .map_err(MoyasarError::from)?;
-            parse_attempts_list_response(resp).await
+            decode_json_response::<PaginatedList<WebhookAttempt>>(resp).await
         })
         .await
         .expect("lists webhook attempts");
@@ -279,7 +279,7 @@ mod tests {
         let http = reqwest::Client::new();
         let err = execute_with_retry(1, || async {
             let resp = http.get(&url).send().await.map_err(MoyasarError::from)?;
-            parse_attempts_list_response(resp).await
+            decode_json_response::<PaginatedList<WebhookAttempt>>(resp).await
         })
         .await
         .expect_err("401 maps to AuthenticationError");
@@ -321,7 +321,7 @@ mod tests {
         let ok_url = format!("{}/v1/webhooks/attempts/{attempt_id}", server.uri());
         let attempt = execute_with_retry(1, || async {
             let resp = http.get(&ok_url).send().await.map_err(MoyasarError::from)?;
-            parse_attempt_response(resp).await
+            decode_json_response::<WebhookAttempt>(resp).await
         })
         .await
         .expect("retrieves webhook attempt");
@@ -351,7 +351,7 @@ mod tests {
                 .send()
                 .await
                 .map_err(MoyasarError::from)?;
-            parse_attempt_response(resp).await
+            decode_json_response::<WebhookAttempt>(resp).await
         })
         .await
         .expect_err("404 maps to RecordNotFound");

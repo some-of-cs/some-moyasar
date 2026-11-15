@@ -291,7 +291,7 @@ mod tests {
         let http = reqwest::Client::new();
         let page = execute_with_retry(1, || async {
             let resp = http.get(&url).query(&pairs).send().await?;
-            parse_lines_response(resp).await
+            decode_json_response::<PaginatedList<SettlementLine>>(resp).await
         })
         .await
         .expect("parses paginated lines");
@@ -316,7 +316,7 @@ mod tests {
         let empty_pairs = ListSettlementLinesParams::new().to_query_pairs();
         let err = execute_with_retry(1, || async {
             let resp = http.get(&missing_url).query(&empty_pairs).send().await?;
-            parse_lines_response(resp).await
+            decode_json_response::<PaginatedList<SettlementLine>>(resp).await
         })
         .await
         .expect_err("404 maps to RecordNotFound");
