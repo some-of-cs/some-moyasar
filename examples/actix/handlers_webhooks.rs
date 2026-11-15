@@ -4,7 +4,7 @@ use actix_web::{HttpResponse, web};
 use serde_json::json;
 use some_moyasar::prelude::{WebhookDeduplicator, WebhookError};
 
-use crate::state::ActixAppState;
+use super::state::ActixAppState;
 
 /// Maps a [`WebhookError`] produced during signature or payload verification
 /// into a redacted [`HttpResponse`] without leaking secrets or raw payloads.
