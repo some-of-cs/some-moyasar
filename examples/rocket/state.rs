@@ -18,8 +18,7 @@ pub struct RocketAppState {
     /// In-memory customer token vault for Stripe-compatible customer charges.
     pub customer_vault: InMemoryCustomerVault,
     /// Constant-time Double-HMAC verifier for inbound webhook secret tokens.
-    pub webhook_verifier: ConstantTimeSecretVerifier,
-    /// Thread-safe in-memory deduplicator for idempotent webhook processing.
+    pub webhook_verifier: ConstantTimeSecretVerifier,\n    /// Thread-safe in-memory deduplicator for idempotent webhook processing.
     pub deduplicator: InMemoryDeduplicator,
 }
 
@@ -31,13 +30,12 @@ impl RocketAppState {
         webhook_verifier: ConstantTimeSecretVerifier,
         deduplicator: InMemoryDeduplicator,
     ) -> Self {
-        let publishable_client =
-            MoyasarClient::publishable_builder("pk_test_rocket_default_key")
-                .base_url(client.base_url())
-                .timeout(client.timeout())
-                .max_network_retries(client.max_network_retries())
-                .build()
-                .expect("publishable client should build from validated secret client config");
+        let publishable_client = MoyasarClient::publishable_builder("pk_test_rocket_default_key")
+            .base_url(client.base_url())
+            .timeout(client.timeout())
+            .max_network_retries(client.max_network_retries())
+            .build()
+            .expect("publishable client should build from validated secret client config");
         Self {
             client,
             publishable_client,

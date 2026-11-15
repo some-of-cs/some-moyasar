@@ -15,7 +15,11 @@ use super::{MockResponseSpec, mount_json_endpoint, spawn_test_client};
 
 /// Builds a deterministic Moyasar payment JSON payload for mock responses.
 fn sample_payment_json(id: &str, status: &str, amount: u64, refunded: u64) -> Value {
-    let refunded_fmt = if refunded > 0 { "50.00 SAR" } else { "0.00 SAR" };
+    let refunded_fmt = if refunded > 0 {
+        "50.00 SAR"
+    } else {
+        "0.00 SAR"
+    };
     json!({
         "id": id,
         "status": status,
