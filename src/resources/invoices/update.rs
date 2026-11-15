@@ -8,9 +8,9 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::kernel::auth::SecretAuthKey;
-use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::error::MoyasarError;
 use crate::kernel::metadata::Metadata;
-use crate::kernel::transport::send_with_retry;
+use crate::kernel::transport::{decode_json_response, send_with_retry};
 use crate::resources::invoices::InvoicesService;
 use crate::resources::invoices::models::Invoice;
 
@@ -66,6 +66,22 @@ impl UpdateInvoiceParams {
     pub fn metadata(mut self, metadata: Metadata) -> Self {
         self.metadata = Some(metadata);
         self
+    }
+
+    /// Inserts or updates a single metadata key/value pair after limit validation.
+    pub fn metadata_entry(mut self, key: &str, value: &str) -> Result<Self, MoyasarError> {
+        let mut map = self.metadata.take().unwrap_or_default();
+        map.insert(key, value)?;
+        self.metadata = Some(map);
+        Ok(self)
+    }
+
+    /// Marks `key` to be unset on the server by serializing `"key": ""`.
+    pub fn unset_metadata(mut self, key: &str) -> Result<Self, MoyasarError> {
+        let mut map = self.metadata.take().unwrap_or_default();
+        map.unset(key)?;
+        self.metadata = Some(map);
+        Ok(self)
     }
 }
 
@@ -146,29 +162,16 @@ async fn send_update_request(
             .await
             .map_err(MoyasarError::from)?;
 
-        let status = response.status();
-        let body = response.text().await.map_err(MoyasarError::from)?;
-        if !status.is_success() {
-            return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-        }
-        deserialize_invoice(&body)
+        decode_json_response(response).await
     })
     .await
-}
-
-fn deserialize_invoice(body: &str) -> Result<Invoice, MoyasarError> {
-    serde_json::from_str::<Invoice>(body).map_err(|err| MoyasarError::Api {
-        error_type: ApiErrorType::Unknown,
-        message: format!("failed to deserialize invoice response: {err}"),
-        errors: Vec::new(),
-        response_code: None,
-    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
+    use crate::kernel::error::ApiErrorType;
     use crate::kernel::transport::{API_VERSION, MOYASAR_VERSION_HEADER, build_default_headers};
     use serde_json::json;
     use wiremock::matchers::{body_json, header, method, path};

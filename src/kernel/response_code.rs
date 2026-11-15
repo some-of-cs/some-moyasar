@@ -37,16 +37,19 @@ enum RawFieldErrors {
     Map(BTreeMap<String, FieldErrorValue>),
 }
 
+fn field_errors_for_entry(field: &str, val: FieldErrorValue) -> Vec<FieldError> {
+    val.into_messages()
+        .into_iter()
+        .map(|message| FieldError {
+            field: field.to_owned(),
+            message,
+        })
+        .collect()
+}
+
 fn flatten_error_map(map: BTreeMap<String, FieldErrorValue>) -> Vec<FieldError> {
     map.into_iter()
-        .flat_map(|(field, val)| {
-            val.into_messages()
-                .into_iter()
-                .map(move |message| FieldError {
-                    field: field.clone(),
-                    message,
-                })
-        })
+        .flat_map(|(field, val)| field_errors_for_entry(&field, val))
         .collect()
 }
 
@@ -65,6 +68,16 @@ where
 }
 
 /// Two-digit ISO 8583 acquirer response code.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::kernel::response_code::ResponseCode;
+///
+/// let code = ResponseCode::from("00");
+/// assert_eq!(code, ResponseCode::IssuerApproved);
+/// assert_eq!(code.to_string(), "00");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponseCode {
     /// `"00"` — Approved or completed successfully.

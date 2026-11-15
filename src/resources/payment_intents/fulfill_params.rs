@@ -85,7 +85,10 @@ impl fmt::Debug for PaymentSourceRequest {
                 .finish(),
             Self::Token { .. } => f.write_str("Token([REDACTED])"),
             Self::ApplePay { .. } => f.write_str("ApplePay([REDACTED])"),
-            Self::StcPay { mobile } => f.debug_struct("StcPay").field("mobile", mobile).finish(),
+            Self::StcPay { .. } => f
+                .debug_struct("StcPay")
+                .field("mobile", &"[REDACTED]")
+                .finish(),
         }
     }
 }

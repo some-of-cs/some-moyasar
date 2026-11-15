@@ -8,7 +8,7 @@
 use serde::Serialize;
 
 use crate::kernel::auth::SecretAuthKey;
-use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::error::MoyasarError;
 use crate::kernel::transport::execute_with_retry;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
@@ -34,26 +34,17 @@ pub const fn remaining_refundable_amount(payment: &Payment) -> u64 {
 ///
 /// Rejects zero amounts and amounts exceeding [`remaining_refundable_amount`].
 pub fn validate_refund_amount(payment: &Payment, amount: Option<u64>) -> Result<(), MoyasarError> {
-    if let Some(amt) = amount {
-        if amt == 0 {
-            return Err(MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                message: "refund amount must be greater than zero".to_owned(),
-                errors: Vec::new(),
-                response_code: None,
-            });
-        }
-        let refundable = remaining_refundable_amount(payment);
-        if amt > refundable {
-            return Err(MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                message: format!(
-                    "refund amount {amt} exceeds remaining refundable amount {refundable}"
-                ),
-                errors: Vec::new(),
-                response_code: None,
-            });
-        }
+    let Some(amt) = amount else {
+        return Ok(());
+    };
+    if amt == 0 {
+        let msg = "refund amount must be greater than zero";
+        return Err(MoyasarError::invalid_request(msg));
+    }
+    let refundable = remaining_refundable_amount(payment);
+    if amt > refundable {
+        let msg = format!("refund amount {amt} exceeds remaining refundable amount {refundable}");
+        return Err(MoyasarError::invalid_request(msg));
     }
     Ok(())
 }
@@ -83,12 +74,8 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
     pub async fn refund(&self, id: &str, amount: Option<u64>) -> Result<Payment, MoyasarError> {
         validate_payment_id(id)?;
         if let Some(0) = amount {
-            return Err(MoyasarError::Api {
-                error_type: ApiErrorType::InvalidRequestError,
-                message: "refund amount must be greater than zero".to_owned(),
-                errors: Vec::new(),
-                response_code: None,
-            });
+            let msg = "refund amount must be greater than zero";
+            return Err(MoyasarError::invalid_request(msg));
         }
 
         let url = format!(
@@ -129,6 +116,7 @@ mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
     use crate::kernel::client::MoyasarClient;
+    use crate::kernel::error::ApiErrorType;
     use crate::kernel::metadata::Metadata;
     use crate::kernel::types::Currency;
     use crate::resources::payments::models::PaymentStatus;

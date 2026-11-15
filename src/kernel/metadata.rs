@@ -15,6 +15,18 @@ pub const METADATA_KEY_MAX_LEN: usize = 40;
 pub const METADATA_VALUE_MAX_LEN: usize = 500;
 
 /// Validated key/value metadata map for Moyasar resources.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::kernel::metadata::Metadata;
+///
+/// let mut meta = Metadata::new();
+/// meta.insert("order_id", "ORD-1001").unwrap();
+/// assert_eq!(meta.get("order_id"), Some("ORD-1001"));
+/// meta.unset("order_id").unwrap();
+/// assert_eq!(meta.get("order_id"), Some(""));
+/// ```
 #[derive(Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Metadata(BTreeMap<String, String>);

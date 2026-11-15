@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::kernel::types::is_valid_prefixed_id;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
@@ -124,15 +124,7 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
 }
 
 async fn parse_retrieve_response(response: reqwest::Response) -> Result<Payment, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<Payment>(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
-        message: format!("failed to decode Payment response: {err}"),
-    })
+    decode_json_response(response).await
 }
 
 #[cfg(test)]
@@ -151,6 +143,8 @@ mod tests {
 
         for invalid in [
             "pay_",
+            "pay_.",
+            "pay_%2f",
             "ca_",
             "",
             "inv_01J9XYZ",

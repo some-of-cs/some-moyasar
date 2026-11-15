@@ -10,7 +10,7 @@ use zeroize::Zeroize;
 use crate::kernel::auth::AuthKey;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::kernel::types::Currency;
 use crate::resources::payment_intents::fulfill_params::FulfillIntentParams;
 use crate::resources::payment_intents::models::IntentId;
@@ -171,18 +171,7 @@ async fn fulfill_at_url(
 }
 
 async fn parse_fulfill_response(resp: reqwest::Response) -> Result<IntentPayment, MoyasarError> {
-    let status = resp.status().as_u16();
-    let text = resp.text().await?;
-    if (200..300).contains(&status) {
-        serde_json::from_str(&text).map_err(|e| MoyasarError::Api {
-            error_type: ApiErrorType::Unknown,
-            message: format!("failed to decode IntentPayment response: {e}"),
-            errors: Vec::new(),
-            response_code: None,
-        })
-    } else {
-        Err(MoyasarError::from_api_response(status, &text))
-    }
+    decode_json_response(resp).await
 }
 
 #[cfg(test)]

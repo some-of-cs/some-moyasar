@@ -22,6 +22,12 @@ pub struct InvoicesService<'a, K: AuthKey> {
 }
 
 impl<'a, K: AuthKey> InvoicesService<'a, K> {
+    /// Creates a new [`InvoicesService`] borrowing `client`.
+    #[must_use]
+    pub const fn new(client: &'a MoyasarClient<K>) -> Self {
+        Self { client }
+    }
+
     /// Returns a reference to the underlying [`MoyasarClient`].
     #[must_use]
     pub const fn client(&self) -> &'a MoyasarClient<K> {
@@ -33,6 +39,6 @@ impl<K: AuthKey> MoyasarClient<K> {
     /// Returns an [`InvoicesService`] handle for hosted invoice endpoints.
     #[must_use]
     pub const fn invoices(&self) -> InvoicesService<'_, K> {
-        InvoicesService { client: self }
+        InvoicesService::new(self)
     }
 }

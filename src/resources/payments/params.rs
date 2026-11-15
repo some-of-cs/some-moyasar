@@ -24,6 +24,12 @@ fn invalid_req_err(message: &str) -> MoyasarError {
     }
 }
 
+fn validate_positive_amount(amount: Option<u64>) -> Result<u64, MoyasarError> {
+    amount
+        .filter(|&a| a > 0)
+        .ok_or_else(|| invalid_req_err("amount must be strictly positive"))
+}
+
 /// Validated request payload for creating a payment via `POST /v1/payments`.
 ///
 /// Construct using [`CreatePaymentParams::builder()`].
@@ -183,10 +189,7 @@ impl CreatePaymentParamsBuilder {
 
     /// Validates required fields and builds [`CreatePaymentParams`].
     pub fn build(self) -> Result<CreatePaymentParams, MoyasarError> {
-        let amount = self
-            .amount
-            .filter(|&a| a > 0)
-            .ok_or_else(|| invalid_req_err("amount must be strictly positive"))?;
+        let amount = validate_positive_amount(self.amount)?;
         let currency = self
             .currency
             .ok_or_else(|| invalid_req_err("currency is required"))?;

@@ -16,6 +16,19 @@ const SAUDI_SUBSCRIBER_LEN: usize = 8;
 ///
 /// Normalizes Saudi mobile numbers from `05xxxxxxxx`, `+9665xxxxxxxx`, or
 /// `009665xxxxxxxx` into the canonical `05xxxxxxxx` format expected by Moyasar.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::source_stcpay::{
+///     StcPaySource, normalize_saudi_mobile,
+/// };
+///
+/// assert_eq!(normalize_saudi_mobile("+966512345678").unwrap(), "0512345678");
+/// let source = StcPaySource::new("00966512345678").unwrap().with_branch("RIYADH");
+/// assert_eq!(source.mobile, "0512345678");
+/// assert!(format!("{source:?}").contains("[REDACTED]"));
+/// ```
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StcPaySource {
     /// Customer Saudi mobile number normalized to `05xxxxxxxx`.

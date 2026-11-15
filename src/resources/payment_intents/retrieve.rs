@@ -2,7 +2,7 @@
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::resources::payment_intents::models::{IntentId, PaymentIntent};
 use crate::resources::payment_intents::service::PaymentIntentsService;
 
@@ -54,16 +54,7 @@ async fn retrieve_from_url(
 }
 
 async fn parse_retrieve_response(resp: reqwest::Response) -> Result<PaymentIntent, MoyasarError> {
-    let status = resp.status().as_u16();
-    let text = resp.text().await?;
-    if (200..300).contains(&status) {
-        serde_json::from_str(&text).map_err(|e| MoyasarError::ServerError {
-            status,
-            message: e.to_string(),
-        })
-    } else {
-        Err(MoyasarError::from_api_response(status, &text))
-    }
+    decode_json_response(resp).await
 }
 
 #[cfg(test)]

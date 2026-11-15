@@ -3,10 +3,11 @@
 use chrono::{DateTime, Duration, Utc};
 
 use crate::kernel::auth::{AuthKey, SecretAuthKey};
-use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::error::MoyasarError;
 use crate::resources::payments::models::{Payment, PaymentStatus};
 use crate::resources::payments::service::PaymentsService;
-use crate::resources::payments::void::VOID_WINDOW_SECS;
+
+use super::void::{VOID_WINDOW_SECS, is_void_fallback_eligible};
 
 pub use crate::resources::payments::capture::MADA_CAPTURE_WINDOW_DAYS;
 
@@ -34,19 +35,6 @@ pub struct ReversalPlan {
     pub strategy: ReversalStrategy,
     /// `true` when an `Authorized` payment is older than [`MADA_CAPTURE_WINDOW_DAYS`] (14 days).
     pub mada_hold_likely_expired: bool,
-}
-
-fn is_void_fallback_eligible(payment: &Payment, err: &MoyasarError) -> bool {
-    matches!(
-        payment.status,
-        PaymentStatus::Paid | PaymentStatus::Captured
-    ) && matches!(
-        err,
-        MoyasarError::Api {
-            error_type: ApiErrorType::InvalidRequestError | ApiErrorType::IntentNotCancelable,
-            ..
-        }
-    )
 }
 
 impl<K: AuthKey> PaymentsService<'_, K> {
@@ -124,6 +112,7 @@ mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
     use crate::kernel::client::MoyasarClient;
+    use crate::kernel::error::ApiErrorType;
     use crate::kernel::metadata::Metadata;
     use crate::kernel::types::Currency;
     use serde_json::json;
