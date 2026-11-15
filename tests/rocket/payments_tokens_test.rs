@@ -3,13 +3,23 @@
 use rocket::http::{ContentType, Status};
 use serde_json::{Value, json};
 use some_moyasar::prelude::{
-    CardAuthStatus, Currency, PaymentIntentStatus, PaymentStatus, Token, TokenStatus,
+    CardAuthStatus, Currency, MoyasarMockServer, PaymentIntentStatus, PaymentStatus, Token,
+    TokenStatus,
 };
 
 use super::routes_payments_tokens::{
     CardAuthResponse, CreateIntentRequest, PaymentIntentResponse, PaymentResponse,
 };
 use super::{MockResponseSpec, mount_json_endpoint, spawn_test_client};
+
+/// Mounts a `200 OK` JSON responder on the mock server for `http_method` and `path`.
+async fn mount_ok(server: &MoyasarMockServer, http_method: &str, path: &str, body: Value) {
+    let spec = MockResponseSpec {
+        status: 200,
+        body,
+    };
+    mount_json_endpoint(server, http_method, path, spec).await;
+}
 
 /// Builds a deterministic Moyasar `Payment` JSON fixture for mock responses.
 fn sample_payment_json(id: &str, status: &str, captured: u64, refunded: u64) -> Value {
@@ -72,28 +82,12 @@ fn sample_card_auth_json(id: &str) -> Value {
 #[tokio::test]
 async fn retrieves_and_voids_payment() {
     let (server, client) = spawn_test_client().await;
+    let auth_body = sample_payment_json("pay_01", "authorized", 0, 0);
+    let void_body = sample_payment_json("pay_01", "voided", 0, 0);
+    let void_api = "/v1/payments/pay_01/void";
 
-    mount_json_endpoint(
-        &server,
-        "GET",
-        "/v1/payments/pay_01",
-        MockResponseSpec {
-            status: 200,
-            body: sample_payment_json("pay_01", "authorized", 0, 0),
-        },
-    )
-    .await;
-
-    mount_json_endpoint(
-        &server,
-        "POST",
-        "/v1/payments/pay_01/void",
-        MockResponseSpec {
-            status: 200,
-            body: sample_payment_json("pay_01", "voided", 0, 0),
-        },
-    )
-    .await;
+    mount_ok(&server, "GET", "/v1/payments/pay_01", auth_body).await;
+    mount_ok(&server, "POST", void_api, void_body).await;
 
     let get_resp = client.get("/payments/pay_01").dispatch().await;
     assert_eq!(get_resp.status(), Status::Ok);
@@ -111,28 +105,13 @@ async fn retrieves_and_voids_payment() {
 #[tokio::test]
 async fn captures_and_refunds_payment() {
     let (server, client) = spawn_test_client().await;
+    let cap_body = sample_payment_json("pay_02", "captured", 15_000, 0);
+    let ref_body = sample_payment_json("pay_02", "refunded", 15_000, 15_000);
+    let cap_api = "/v1/payments/pay_02/capture";
+    let ref_api = "/v1/payments/pay_02/refund";
 
-    mount_json_endpoint(
-        &server,
-        "POST",
-        "/v1/payments/pay_02/capture",
-        MockResponseSpec {
-            status: 200,
-            body: sample_payment_json("pay_02", "captured", 15_000, 0),
-        },
-    )
-    .await;
-
-    mount_json_endpoint(
-        &server,
-        "POST",
-        "/v1/payments/pay_02/refund",
-        MockResponseSpec {
-            status: 200,
-            body: sample_payment_json("pay_02", "refunded", 15_000, 15_000),
-        },
-    )
-    .await;
+    mount_ok(&server, "POST", cap_api, cap_body).await;
+    mount_ok(&server, "POST", ref_api, ref_body).await;
 
     let cap_resp = client.post("/payments/pay_02/capture").dispatch().await;
     assert_eq!(cap_resp.status(), Status::Ok);
@@ -150,6 +129,8 @@ async fn captures_and_refunds_payment() {
 #[tokio::test]
 async fn creates_retrieves_and_cancels_payment_intent() {
     let (server, client) = spawn_test_client().await;
+    let get_api = "/v1/payment_intents/pi_01";
+    let cancel_api = "/v1/payment_intents/pi_01/cancel";
 
     mount_json_endpoint(
         &server,
@@ -161,28 +142,8 @@ async fn creates_retrieves_and_cancels_payment_intent() {
         },
     )
     .await;
-
-    mount_json_endpoint(
-        &server,
-        "GET",
-        "/v1/payment_intents/pi_01",
-        MockResponseSpec {
-            status: 200,
-            body: sample_intent_json("pi_01", "created"),
-        },
-    )
-    .await;
-
-    mount_json_endpoint(
-        &server,
-        "POST",
-        "/v1/payment_intents/pi_01/cancel",
-        MockResponseSpec {
-            status: 200,
-            body: sample_intent_json("pi_01", "canceled"),
-        },
-    )
-    .await;
+    mount_ok(&server, "GET", get_api, sample_intent_json("pi_01", "created")).await;
+    mount_ok(&server, "POST", cancel_api, sample_intent_json("pi_01", "canceled")).await;
 
     let req_body = CreateIntentRequest {
         amount: 25_000,
@@ -215,18 +176,9 @@ async fn creates_retrieves_and_cancels_payment_intent() {
 #[tokio::test]
 async fn retrieves_and_deletes_token() {
     let (server, client) = spawn_test_client().await;
+    let tok_body = sample_token_json("token_01");
 
-    mount_json_endpoint(
-        &server,
-        "GET",
-        "/v1/tokens/token_01",
-        MockResponseSpec {
-            status: 200,
-            body: sample_token_json("token_01"),
-        },
-    )
-    .await;
-
+    mount_ok(&server, "GET", "/v1/tokens/token_01", tok_body).await;
     mount_json_endpoint(
         &server,
         "DELETE",
@@ -253,17 +205,9 @@ async fn retrieves_and_deletes_token() {
 #[tokio::test]
 async fn retrieves_card_authentication_and_rejects_bad_prefix() {
     let (server, client) = spawn_test_client().await;
+    let ca_body = sample_card_auth_json("ca_01");
 
-    mount_json_endpoint(
-        &server,
-        "GET",
-        "/v1/card_auths/ca_01",
-        MockResponseSpec {
-            status: 200,
-            body: sample_card_auth_json("ca_01"),
-        },
-    )
-    .await;
+    mount_ok(&server, "GET", "/v1/card_auths/ca_01", ca_body).await;
 
     let ok_resp = client.get("/card_auths/ca_01").dispatch().await;
     assert_eq!(ok_resp.status(), Status::Ok);

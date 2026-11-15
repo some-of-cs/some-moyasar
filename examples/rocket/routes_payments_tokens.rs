@@ -152,11 +152,8 @@ pub async fn create_payment_intent(
     req: Json<CreateIntentRequest>,
 ) -> Result<status::Custom<Json<PaymentIntentResponse>>, AppError> {
     let payload = req.into_inner();
-    let params = CreatePaymentIntentParams::new(
-        payload.amount,
-        payload.currency,
-        payload.callback_url,
-    );
+    let params =
+        CreatePaymentIntentParams::new(payload.amount, payload.currency, payload.callback_url);
     let intent = state.client.payment_intents().create(params).await?;
     let body = Json(PaymentIntentResponse::from(intent));
     Ok(status::Custom(Status::Created, body))
