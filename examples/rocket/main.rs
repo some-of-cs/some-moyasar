@@ -8,7 +8,10 @@ use crate::state::RocketAppState;
 
 pub mod responder;
 pub mod routes_invoices_payouts;
+pub mod routes_ledger_sources;
+pub mod routes_payments_tokens;
 pub mod routes_settlements;
+pub mod routes_stripe_unified;
 pub mod routes_webhooks;
 pub mod state;
 
@@ -19,6 +22,9 @@ pub fn build_rocket(state: RocketAppState) -> rocket::Rocket<rocket::Build> {
     let mut routes = routes_invoices_payouts::routes();
     routes.extend(routes_settlements::routes());
     routes.extend(routes_webhooks::routes());
+    routes.extend(routes_payments_tokens::routes());
+    routes.extend(routes_ledger_sources::routes());
+    routes.extend(routes_stripe_unified::routes());
 
     rocket::build().manage(state).mount("/", routes)
 }
@@ -33,11 +39,7 @@ async fn main() -> Result<(), Box<rocket::Error>> {
         ConstantTimeSecretVerifier::with_default_tolerance("$MOYASAR_WEBHOOK_SECRET");
     let deduplicator = InMemoryDeduplicator::new();
 
-    let state = RocketAppState {
-        client,
-        webhook_verifier,
-        deduplicator,
-    };
+    let state = RocketAppState::new(client, webhook_verifier, deduplicator);
 
     build_rocket(state).launch().await.map_err(Box::new)?;
     Ok(())

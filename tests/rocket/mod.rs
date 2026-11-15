@@ -16,9 +16,18 @@ pub mod responder;
 /// Invoices and payouts Rocket routes from `examples/rocket/routes_invoices_payouts.rs`.
 #[path = "../../examples/rocket/routes_invoices_payouts.rs"]
 pub mod routes_invoices_payouts;
+/// Ledger transfers, internal transactions, sources, and Apple Pay routes from `examples/rocket/routes_ledger_sources.rs`.
+#[path = "../../examples/rocket/routes_ledger_sources.rs"]
+pub mod routes_ledger_sources;
+/// Payments, payment intents, tokens, and card auths routes from `examples/rocket/routes_payments_tokens.rs`.
+#[path = "../../examples/rocket/routes_payments_tokens.rs"]
+pub mod routes_payments_tokens;
 /// Settlements Rocket routes from `examples/rocket/routes_settlements.rs`.
 #[path = "../../examples/rocket/routes_settlements.rs"]
 pub mod routes_settlements;
+/// Stripe compatibility and unified gateway routes from `examples/rocket/routes_stripe_unified.rs`.
+#[path = "../../examples/rocket/routes_stripe_unified.rs"]
+pub mod routes_stripe_unified;
 /// Webhooks Rocket routes from `examples/rocket/routes_webhooks.rs`.
 #[path = "../../examples/rocket/routes_webhooks.rs"]
 pub mod routes_webhooks;
@@ -27,7 +36,10 @@ pub mod routes_webhooks;
 pub mod state;
 
 mod invoices_payouts_test;
+mod ledger_sources_test;
+mod payments_tokens_test;
 mod settlements_test;
+mod stripe_unified_test;
 mod webhooks_test;
 
 /// Deterministic HTTP status and JSON body specification for mock endpoints.
@@ -51,6 +63,9 @@ pub fn build_test_rocket(client: MoyasarClient<SecretKey>) -> Rocket<Build> {
         .mount("/", routes_invoices_payouts::routes())
         .mount("/", routes_settlements::routes())
         .mount("/", routes_webhooks::routes())
+        .mount("/", routes_payments_tokens::routes())
+        .mount("/", routes_ledger_sources::routes())
+        .mount("/", routes_stripe_unified::routes())
 }
 
 /// Spawns a [`MoyasarMockServer`] and a tracked Rocket [`Client`] wired to it.
