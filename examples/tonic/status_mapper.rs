@@ -13,10 +13,19 @@ impl From<GrpcError> for tonic::Status {
 }
 
 const API_ERROR_CODE_MAP: &[(ApiErrorType, tonic::Code)] = &[
-    (ApiErrorType::AuthenticationError, tonic::Code::Unauthenticated),
+    (
+        ApiErrorType::AuthenticationError,
+        tonic::Code::Unauthenticated,
+    ),
     (ApiErrorType::RecordNotFound, tonic::Code::NotFound),
-    (ApiErrorType::InvalidRequestError, tonic::Code::InvalidArgument),
-    (ApiErrorType::IntentNotCancelable, tonic::Code::InvalidArgument),
+    (
+        ApiErrorType::InvalidRequestError,
+        tonic::Code::InvalidArgument,
+    ),
+    (
+        ApiErrorType::IntentNotCancelable,
+        tonic::Code::InvalidArgument,
+    ),
     (ApiErrorType::ApiError, tonic::Code::Unavailable),
     (ApiErrorType::Unknown, tonic::Code::Unknown),
 ];
@@ -31,7 +40,10 @@ fn api_error_type_to_code(error_type: &ApiErrorType) -> tonic::Code {
 }
 
 fn sanitize_message(message: &str) -> String {
-    if SECRET_PREFIXES.iter().any(|prefix| message.contains(prefix)) {
+    if SECRET_PREFIXES
+        .iter()
+        .any(|prefix| message.contains(prefix))
+    {
         return "upstream authentication or validation error".to_owned();
     }
     message.to_owned()
@@ -43,15 +55,19 @@ fn map_non_validation_error(err: &MoyasarError) -> Option<(tonic::Code, String)>
             error_type,
             message,
             ..
-        } => Some((api_error_type_to_code(error_type), sanitize_message(message))),
+        } => Some((
+            api_error_type_to_code(error_type),
+            sanitize_message(message),
+        )),
         MoyasarError::Timeout => Some((tonic::Code::DeadlineExceeded, err.to_string())),
         MoyasarError::ServerError { status, .. } => Some((
             tonic::Code::Unavailable,
             format!("upstream server error (HTTP {status})"),
         )),
-        MoyasarError::Network(_) => {
-            Some((tonic::Code::Unavailable, "upstream network error".to_owned()))
-        }
+        MoyasarError::Network(_) => Some((
+            tonic::Code::Unavailable,
+            "upstream network error".to_owned(),
+        )),
         _ => None,
     }
 }
@@ -86,10 +102,19 @@ mod tests {
     #[test]
     fn maps_api_error_types_to_expected_grpc_codes() {
         let cases = [
-            (ApiErrorType::AuthenticationError, tonic::Code::Unauthenticated),
+            (
+                ApiErrorType::AuthenticationError,
+                tonic::Code::Unauthenticated,
+            ),
             (ApiErrorType::RecordNotFound, tonic::Code::NotFound),
-            (ApiErrorType::InvalidRequestError, tonic::Code::InvalidArgument),
-            (ApiErrorType::IntentNotCancelable, tonic::Code::InvalidArgument),
+            (
+                ApiErrorType::InvalidRequestError,
+                tonic::Code::InvalidArgument,
+            ),
+            (
+                ApiErrorType::IntentNotCancelable,
+                tonic::Code::InvalidArgument,
+            ),
             (ApiErrorType::ApiError, tonic::Code::Unavailable),
             (ApiErrorType::Unknown, tonic::Code::Unknown),
         ];
