@@ -135,11 +135,11 @@ async fn retrieve_payment(
 async fn refund_payment(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Json(payload): Json<RefundPaymentRequest>,
+    payload: Option<Json<RefundPaymentRequest>>,
 ) -> Result<Json<RefundReceipt>, AppError> {
     let payment_id = PaymentId::new(id)?;
     let mut params = RefundCreateParams::new(payment_id.as_str()).prefer_void_if_unsettled(true);
-    if let Some(amount) = payload.amount {
+    if let Some(amount) = payload.and_then(|Json(body)| body.amount) {
         params = params.amount(amount);
     }
     let receipt = state.client.refunds().create(params).await?;
