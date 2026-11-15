@@ -41,7 +41,7 @@ async fn send_webhook(app: Router, payload: &Value) -> Response {
 /// timestamp passes constant-time Double-HMAC verification and returns `200 OK`.
 #[tokio::test]
 async fn valid_double_hmac_webhook_returns_ok() {
-    let app = super::spawn_test_app().await;
+    let (_mock, app) = super::spawn_test_app().await;
     let fresh_ts = Utc::now().to_rfc3339();
     let payload = webhook_event_fixture_at("payment_paid", super::TEST_WEBHOOK_SECRET, &fresh_ts);
 
@@ -53,7 +53,7 @@ async fn valid_double_hmac_webhook_returns_ok() {
 /// `401 Unauthorized` by the constant-time Double-HMAC verifier.
 #[tokio::test]
 async fn wrong_secret_webhook_returns_unauthorized() {
-    let app = super::spawn_test_app().await;
+    let (_mock, app) = super::spawn_test_app().await;
     let fresh_ts = Utc::now().to_rfc3339();
     let payload = webhook_event_fixture_at("payment_paid", "whsec_wrong_secret_value", &fresh_ts);
 
@@ -65,7 +65,7 @@ async fn wrong_secret_webhook_returns_unauthorized() {
 /// [`REPLAY_TOLERANCE`] is rejected with `401 Unauthorized`.
 #[tokio::test]
 async fn stale_timestamp_webhook_returns_unauthorized() {
-    let app = super::spawn_test_app().await;
+    let (_mock, app) = super::spawn_test_app().await;
     let tolerance_secs = i64::try_from(REPLAY_TOLERANCE.as_secs()).unwrap_or(14_400);
     let stale_ts = (Utc::now() - TimeDelta::seconds(tolerance_secs + 60)).to_rfc3339();
     let payload = webhook_event_fixture_at("payment_paid", super::TEST_WEBHOOK_SECRET, &stale_ts);
@@ -78,7 +78,7 @@ async fn stale_timestamp_webhook_returns_unauthorized() {
 /// processed on the first request and suppressed cleanly on the second request.
 #[tokio::test]
 async fn duplicate_event_id_is_suppressed_cleanly() {
-    let app = super::spawn_test_app().await;
+    let (_mock, app) = super::spawn_test_app().await;
     let fresh_ts = Utc::now().to_rfc3339();
     let mut payload =
         webhook_event_fixture_at("payment_paid", super::TEST_WEBHOOK_SECRET, &fresh_ts);
