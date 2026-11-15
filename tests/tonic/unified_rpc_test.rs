@@ -3,9 +3,7 @@
 use some_moyasar::MoyasarMockServer;
 use uuid::Uuid;
 
-use super::proto::{
-    ChargeTokenRpcRequest, CreateIntentRpcRequest, RefundOrVoidRpcRequest,
-};
+use super::proto::{ChargeTokenRpcRequest, CreateIntentRpcRequest, RefundOrVoidRpcRequest};
 use super::spawn_test_grpc_server;
 
 #[tokio::test]

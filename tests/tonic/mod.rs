@@ -56,5 +56,8 @@ pub async fn spawn_test_grpc_server(
         .await
         .expect("connect to loopback gRPC server");
 
-    (proto::MoyasarPaymentGatewayClient::new(channel), shutdown_tx)
+    (
+        proto::MoyasarPaymentGatewayClient::new(channel),
+        shutdown_tx,
+    )
 }
