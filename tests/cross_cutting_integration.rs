@@ -61,56 +61,45 @@ where
 {
 }
 
+async fn mount_refund_and_void_mocks(server: &wiremock::MockServer, pay_id: &str, recent: &str) {
+    let get_path = format!("/v1/payments/{pay_id}");
+    let refund_path = format!("/v1/payments/{pay_id}/refund");
+    let void_path = format!("/v1/payments/{pay_id}/void");
+    common::mount_json_endpoint(
+        server,
+        ("GET", &get_path),
+        200,
+        sample_module8_payment_json(pay_id, "paid", 0, recent),
+    )
+    .await;
+    for (body, refunded) in [(json!({ "amount": 5000 }), 5000), (json!({}), 29900)] {
+        Mock::given(method("POST"))
+            .and(path(&refund_path))
+            .and(body_json(body))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
+                    pay_id, "refunded", refunded, recent,
+                )),
+            )
+            .expect(1)
+            .mount(server)
+            .await;
+    }
+    common::mount_json_endpoint(
+        server,
+        ("POST", &void_path),
+        422,
+        common::api_error_body("invalid_request_error", "Already settled", None),
+    )
+    .await;
+}
+
 #[tokio::test]
 async fn stripe_compat_refunds_service_partial_void_fallback_and_over_refund_guard() {
     let (server, client) = common::start_secret_client().await;
     let recent = (Utc::now() - ChronoDuration::minutes(20)).to_rfc3339();
     let pay_id = "pay_m8_ref_01";
-    let get_path = format!("/v1/payments/{pay_id}");
-    let refund_path = format!("/v1/payments/{pay_id}/refund");
-    let void_path = format!("/v1/payments/{pay_id}/void");
-
-    common::mount_json_endpoint(
-        &server,
-        ("GET", &get_path),
-        200,
-        sample_module8_payment_json(pay_id, "paid", 0, &recent),
-    )
-    .await;
-    Mock::given(method("POST"))
-        .and(path(&refund_path))
-        .and(body_json(json!({ "amount": 5000 })))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
-                pay_id, "refunded", 5000, &recent,
-            )),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-    Mock::given(method("POST"))
-        .and(path(&refund_path))
-        .and(body_json(json!({ "amount": 29900 })))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
-                pay_id, "refunded", 29900, &recent,
-            )),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-    Mock::given(method("POST"))
-        .and(path(&void_path))
-        .respond_with(
-            ResponseTemplate::new(422).set_body_json(common::api_error_body(
-                "invalid_request_error",
-                "Already settled",
-                None,
-            )),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
+    mount_refund_and_void_mocks(&server, pay_id, &recent).await;
 
     let partial = client
         .refunds()
