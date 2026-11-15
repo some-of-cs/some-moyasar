@@ -1,5 +1,7 @@
 //! Zero-`protoc` pure Rust Prost DTOs and Tonic service/client definitions for `moyasar.v1.MoyasarPaymentGateway`.
 
+#![allow(dead_code)]
+
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;

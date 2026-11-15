@@ -1,5 +1,7 @@
 //! Maps [`MoyasarError`] and [`ApiErrorType`] values to [`tonic::Status`] without orphan-rule conflicts.
 
+#![allow(dead_code)]
+
 use some_moyasar::prelude::{ApiErrorType, MoyasarError};
 
 /// Newtype wrapper enabling `From<GrpcError> for tonic::Status` without violating orphan rules (E0117).
