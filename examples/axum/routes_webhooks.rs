@@ -13,7 +13,7 @@ use serde_json::json;
 use some_moyasar::prelude::WebhookDeduplicator;
 use some_moyasar::webhook_engine::{WebhookError, WebhookEvent, validate_timestamp_at};
 
-use crate::state::AppState;
+use super::state::AppState;
 
 /// Builds the webhook [`Router`] mounted at `POST /webhooks/moyasar`.
 pub fn router() -> Router<AppState> {
