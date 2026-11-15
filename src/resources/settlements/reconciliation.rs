@@ -61,9 +61,9 @@ pub fn reconcile_settlement(
         let line_net = checked_line_net(line).ok_or_else(|| {
             MoyasarError::invalid_request("settlement line net calculation overflowed")
         })?;
-        sum = sum.checked_add(line_net).ok_or_else(|| {
-            MoyasarError::invalid_request("settlement lines sum overflowed i64")
-        })?;
+        sum = sum
+            .checked_add(line_net)
+            .ok_or_else(|| MoyasarError::invalid_request("settlement lines sum overflowed i64"))?;
     }
     if Amount::from_minor(sum) != expected_net {
         return Err(MoyasarError::invalid_request(

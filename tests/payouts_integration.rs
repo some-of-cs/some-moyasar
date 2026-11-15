@@ -252,18 +252,12 @@ async fn payouts_debug_redaction_422_and_malformed_200_decode_error() {
     assert!(!props_dbg.contains("SA4420000001234567891234"));
 
     let (server_422, client_422) = common::start_secret_client().await;
-    let err_json = common::api_error_body(
-        "invalid_request_error",
-        "Validation failed",
-        Some("iban"),
-    );
+    let err_json =
+        common::api_error_body("invalid_request_error", "Validation failed", Some("iban"));
     common::mount_json_endpoint(&server_422, ("POST", "/v1/payout_accounts"), 422, err_json).await;
-    let acct_params = CreatePayoutAccountParams::new(
-        PayoutAccountType::Bank,
-        props,
-        "super_secret_val".into(),
-    )
-    .unwrap();
+    let acct_params =
+        CreatePayoutAccountParams::new(PayoutAccountType::Bank, props, "super_secret_val".into())
+            .unwrap();
     let err_422 = client_422
         .payout_accounts()
         .create(&acct_params)

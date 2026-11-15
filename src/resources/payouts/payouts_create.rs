@@ -161,8 +161,8 @@ impl<'a, K: SecretAuthKey> PayoutsService<'a, K> {
 mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
-    use crate::kernel::error::ApiErrorType;
     use crate::kernel::client::MoyasarClient;
+    use crate::kernel::error::ApiErrorType;
     use serde_json::json;
     use wiremock::matchers::{body_partial_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
