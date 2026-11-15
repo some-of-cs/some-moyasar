@@ -15,30 +15,42 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::spawn_test_app;
 
-/// Builds a deterministic active Moyasar token JSON payload.
-fn active_token_json(id: &str) -> Value {
-    json!({
-        "id": id,
-        "status": "active",
-        "number": "411111XXXXXX1111",
-        "company": "visa",
-        "gateway_id": "gw_axum_test",
-        "created_at": FIXTURE_TIMESTAMP
-    })
+/// Seed parameters for building a mocked Moyasar token payment JSON fixture.
+#[derive(Clone, Copy)]
+struct PaymentSeed {
+    /// Moyasar payment ID (`pay_...`).
+    id: &'static str,
+    /// Whether the payment has been voided (`true`) or is newly paid (`false`).
+    is_voided: bool,
+    /// Payment amount in minor units.
+    amount: u64,
 }
 
-/// Builds a Moyasar token payment JSON payload for customer, subscription, and unified charge tests.
-fn token_payment_json(id: &str, status: &str, amount: u64, created_at: &str) -> Value {
-    let captured = if status == "voided" { 0_u64 } else { amount };
-    let captured_fmt = if status == "voided" {
+/// Configuration for mounting a saved-token lookup + payment charge mock pair.
+#[derive(Clone, Copy)]
+struct TokenChargeMock {
+    /// Saved card token ID (`token_...`).
+    token_id: &'static str,
+    /// Resulting payment fixture seed.
+    payment: PaymentSeed,
+    /// Expected `given_id` idempotency UUID on `POST /v1/payments`.
+    given_id: Uuid,
+}
+
+/// Builds a Moyasar token payment JSON payload for customer, subscription, and unified tests.
+fn token_payment_json(seed: PaymentSeed) -> Value {
+    let recent_ts = (Utc::now() - Duration::minutes(10)).to_rfc3339();
+    let status = if seed.is_voided { "voided" } else { "paid" };
+    let captured = if seed.is_voided { 0_u64 } else { seed.amount };
+    let captured_fmt = if seed.is_voided {
         "0.00 SAR"
     } else {
         "150.00 SAR"
     };
     json!({
-        "id": id,
+        "id": seed.id,
         "status": status,
-        "amount": amount,
+        "amount": seed.amount,
         "amount_format": "150.00 SAR",
         "fee": 0,
         "fee_format": "0.00 SAR",
@@ -49,34 +61,57 @@ fn token_payment_json(id: &str, status: &str, amount: u64, created_at: &str) -> 
         "currency": "SAR",
         "source": {"type": "token"},
         "metadata": {"customer_id": "cus_axum_101", "order_id": "ord_101"},
-        "voided_at": (status == "voided").then_some(created_at),
-        "created_at": created_at,
-        "updated_at": created_at
+        "voided_at": seed.is_voided.then_some(recent_ts.as_str()),
+        "created_at": recent_ts,
+        "updated_at": recent_ts
     })
 }
 
-/// Mounts a `GET /v1/tokens/{id}` mock returning an active saved card token.
-async fn mount_active_token_get(server: &MockServer, token_id: &str) {
-    let token_path = format!("/v1/tokens/{token_id}");
+/// Mounts both `GET /v1/tokens/{id}` and `POST /v1/payments` mocks for a token charge flow.
+async fn mount_token_charge(server: &MockServer, spec: TokenChargeMock) {
+    let token_path = format!("/v1/tokens/{}", spec.token_id);
+    let token_body = json!({
+        "id": spec.token_id,
+        "status": "active",
+        "number": "411111XXXXXX1111",
+        "company": "visa",
+        "gateway_id": "gw_axum_test",
+        "created_at": FIXTURE_TIMESTAMP
+    });
     Mock::given(method("GET"))
         .and(path(token_path))
-        .respond_with(ResponseTemplate::new(200).set_body_json(active_token_json(token_id)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(token_body))
+        .expect(1)
+        .mount(server)
+        .await;
+
+    let paid = token_payment_json(spec.payment);
+    Mock::given(method("POST"))
+        .and(path("/v1/payments"))
+        .and(body_partial_json(json!({
+            "amount": spec.payment.amount,
+            "currency": "SAR",
+            "given_id": spec.given_id,
+            "source": {"type": "token", "token": spec.token_id, "3ds": false}
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(paid))
         .expect(1)
         .mount(server)
         .await;
 }
 
 /// Mounts `GET /v1/payments/{id}` and `POST /v1/payments/{id}/void` mocks for same-window voiding.
-async fn mount_voidable_payment(
-    server: &MockServer,
-    payment_id: &str,
-    amount: u64,
-    created_at: &str,
-) {
-    let paid = token_payment_json(payment_id, "paid", amount, created_at);
-    let voided = token_payment_json(payment_id, "voided", amount, created_at);
-    let get_path = format!("/v1/payments/{payment_id}");
-    let void_path = format!("/v1/payments/{payment_id}/void");
+async fn mount_voidable_payment(server: &MockServer, seed: PaymentSeed) {
+    let paid = token_payment_json(PaymentSeed {
+        is_voided: false,
+        ..seed
+    });
+    let voided = token_payment_json(PaymentSeed {
+        is_voided: true,
+        ..seed
+    });
+    let get_path = format!("/v1/payments/{}", seed.id);
+    let void_path = format!("/v1/payments/{}/void", seed.id);
     Mock::given(method("GET"))
         .and(path(get_path))
         .respond_with(ResponseTemplate::new(200).set_body_json(paid))
@@ -91,13 +126,14 @@ async fn mount_voidable_payment(
         .await;
 }
 
-/// Sends a JSON HTTP request through the Axum router via `tower::ServiceExt::oneshot`.
-async fn dispatch_json(
+/// Sends a JSON HTTP request through the Axum router, asserts `expected` status, and parses JSON.
+async fn dispatch_expect(
     app: Router,
     http_method: Method,
     uri: &str,
     body: Value,
-) -> (StatusCode, Value) {
+    expected: StatusCode,
+) -> Value {
     let bytes = serde_json::to_vec(&body).expect("serialize request json");
     let req = Request::builder()
         .method(http_method)
@@ -106,12 +142,11 @@ async fn dispatch_json(
         .body(Body::from(bytes))
         .expect("build HTTP request");
     let resp = app.oneshot(req).await.expect("oneshot request succeeds");
-    let status = resp.status();
+    assert_eq!(resp.status(), expected);
     let out_bytes = to_bytes(resp.into_body(), usize::MAX)
         .await
         .expect("read response body");
-    let parsed = serde_json::from_slice(&out_bytes).expect("parse response json");
-    (status, parsed)
+    serde_json::from_slice(&out_bytes).expect("parse response json")
 }
 
 /// Verifies `CustomersService` (`POST /customers/{id}/tokens` + `POST /customers/{id}/charge`).
@@ -119,30 +154,35 @@ async fn dispatch_json(
 async fn e2e_customers_attach_token_and_charge() {
     let (mock, router) = spawn_test_app().await;
     let given_id = Uuid::new_v4();
-    let (attach_status, attach_body) = dispatch_json(
+    let attach_body = dispatch_expect(
         router.clone(),
         Method::POST,
         "/customers/cus_axum_101/tokens",
         json!({ "token_id": "token_cus_101" }),
+        StatusCode::CREATED,
     )
     .await;
-    assert_eq!(attach_status, StatusCode::CREATED);
     assert_eq!(attach_body["status"], "attached");
 
-    let upstream = token_payment_json("pay_cus_101", "paid", 15000, FIXTURE_TIMESTAMP);
+    let upstream = token_payment_json(PaymentSeed {
+        id: "pay_cus_101",
+        is_voided: false,
+        amount: 15000,
+    });
     Mock::given(method("POST"))
         .and(path("/v1/payments"))
         .and(body_partial_json(json!({
             "amount": 15000,
             "given_id": given_id,
-            "source": {"type": "token", "token": "token_cus_101", "3ds": false}
+            "source": {"type": "token", "token": "token_cus_101", "3ds": false},
+            "metadata": {"customer_id": "cus_axum_101", "order_id": "ord_101"}
         })))
         .respond_with(ResponseTemplate::new(201).set_body_json(upstream))
         .expect(1)
         .mount(mock.server())
         .await;
 
-    let (charge_status, charge_body) = dispatch_json(
+    let charge_body = dispatch_expect(
         router,
         Method::POST,
         "/customers/cus_axum_101/charge",
@@ -152,9 +192,9 @@ async fn e2e_customers_attach_token_and_charge() {
             "given_id": given_id,
             "metadata": { "order_id": "ord_101" }
         }),
+        StatusCode::CREATED,
     )
     .await;
-    assert_eq!(charge_status, StatusCode::CREATED);
     assert_eq!(charge_body["id"], "pay_cus_101");
     assert_eq!(charge_body["metadata"]["customer_id"], "cus_axum_101");
 }
@@ -163,25 +203,22 @@ async fn e2e_customers_attach_token_and_charge() {
 #[tokio::test]
 async fn e2e_subscriptions_charge_cycle() {
     let (mock, router) = spawn_test_app().await;
-    let recent_ts = (Utc::now() - Duration::minutes(15)).to_rfc3339();
-    let expected_given_id = derive_subscription_given_id("sub_axum_99", 2);
-    mount_active_token_get(mock.server(), "token_sub_01").await;
+    let payment = PaymentSeed {
+        id: "pay_sub_cycle_2",
+        is_voided: false,
+        amount: 29900,
+    };
+    mount_token_charge(
+        mock.server(),
+        TokenChargeMock {
+            token_id: "token_sub_01",
+            payment,
+            given_id: derive_subscription_given_id("sub_axum_99", 2),
+        },
+    )
+    .await;
 
-    let paid = token_payment_json("pay_sub_cycle_2", "paid", 29900, &recent_ts);
-    Mock::given(method("POST"))
-        .and(path("/v1/payments"))
-        .and(body_partial_json(json!({
-            "amount": 29900,
-            "currency": "SAR",
-            "given_id": expected_given_id,
-            "source": {"type": "token", "token": "token_sub_01", "3ds": false}
-        })))
-        .respond_with(ResponseTemplate::new(201).set_body_json(paid))
-        .expect(1)
-        .mount(mock.server())
-        .await;
-
-    let (charge_status, charge_body) = dispatch_json(
+    let charge_body = dispatch_expect(
         router,
         Method::POST,
         "/subscriptions/sub_axum_99/charge",
@@ -191,9 +228,9 @@ async fn e2e_subscriptions_charge_cycle() {
             "currency": "SAR",
             "token_id": "token_sub_01"
         }),
+        StatusCode::CREATED,
     )
     .await;
-    assert_eq!(charge_status, StatusCode::CREATED);
     assert_eq!(charge_body["id"], "pay_sub_cycle_2");
     assert_eq!(charge_body["amount"], 29900);
 }
@@ -202,12 +239,19 @@ async fn e2e_subscriptions_charge_cycle() {
 #[tokio::test]
 async fn e2e_subscriptions_refund_cycle() {
     let (mock, router) = spawn_test_app().await;
-    let recent_ts = (Utc::now() - Duration::minutes(15)).to_rfc3339();
-    mount_voidable_payment(mock.server(), "pay_sub_cycle_2", 29900, &recent_ts).await;
+    mount_voidable_payment(
+        mock.server(),
+        PaymentSeed {
+            id: "pay_sub_cycle_2",
+            is_voided: false,
+            amount: 29900,
+        },
+    )
+    .await;
 
     let start = Utc.with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap();
     let end = start + Duration::days(30);
-    let (refund_status, refund_body) = dispatch_json(
+    let refund_body = dispatch_expect(
         router,
         Method::POST,
         "/subscriptions/sub_axum_99/refund",
@@ -217,38 +261,37 @@ async fn e2e_subscriptions_refund_cycle() {
             "period_end": end.to_rfc3339(),
             "strategy": "Full"
         }),
+        StatusCode::OK,
     )
     .await;
-    assert_eq!(refund_status, StatusCode::OK);
     assert_eq!(refund_body["payment_id"], "pay_sub_cycle_2");
     assert_eq!(refund_body["action"], "Voided");
     assert_eq!(refund_body["amount_reversed"], 29900);
 }
 
-/// Verifies `UnifiedPaymentGateway::charge_saved_token` (`POST /unified/charge_token`).
+/// Verifies `UnifiedPaymentGateway` (`POST /unified/charge_token` + `POST /unified/reversal`).
 #[tokio::test]
-async fn e2e_unified_gateway_charge_saved_token() {
+async fn e2e_unified_gateway_charge_and_reversal() {
     let (mock, router) = spawn_test_app().await;
-    let recent_ts = (Utc::now() - Duration::minutes(10)).to_rfc3339();
     let idem_key = Uuid::new_v4();
-    mount_active_token_get(mock.server(), "token_uni_01").await;
+    let payment = PaymentSeed {
+        id: "pay_uni_01",
+        is_voided: false,
+        amount: 15000,
+    };
+    mount_token_charge(
+        mock.server(),
+        TokenChargeMock {
+            token_id: "token_uni_01",
+            payment,
+            given_id: idem_key,
+        },
+    )
+    .await;
+    mount_voidable_payment(mock.server(), payment).await;
 
-    let paid = token_payment_json("pay_uni_01", "paid", 15000, &recent_ts);
-    Mock::given(method("POST"))
-        .and(path("/v1/payments"))
-        .and(body_partial_json(json!({
-            "amount": 15000,
-            "currency": "SAR",
-            "given_id": idem_key,
-            "source": {"type": "token", "token": "token_uni_01", "3ds": false}
-        })))
-        .respond_with(ResponseTemplate::new(201).set_body_json(paid))
-        .expect(1)
-        .mount(mock.server())
-        .await;
-
-    let (charge_status, charge_body) = dispatch_json(
-        router,
+    let charge_body = dispatch_expect(
+        router.clone(),
         Method::POST,
         "/unified/charge_token",
         json!({
@@ -257,22 +300,10 @@ async fn e2e_unified_gateway_charge_saved_token() {
             "token_id": "token_uni_01",
             "idempotency_key": idem_key
         }),
+        StatusCode::CREATED,
     )
     .await;
-    assert_eq!(charge_status, StatusCode::CREATED);
-    assert_eq!(charge_body["transaction_id"], "pay_uni_01");
-    assert_eq!(charge_body["status"], "paid");
-    assert_eq!(charge_body["amount_minor"], 15000);
-}
-
-/// Verifies `UnifiedPaymentGateway::refund_or_void` (`POST /unified/reversal`).
-#[tokio::test]
-async fn e2e_unified_gateway_refund_or_void() {
-    let (mock, router) = spawn_test_app().await;
-    let recent_ts = (Utc::now() - Duration::minutes(10)).to_rfc3339();
-    mount_voidable_payment(mock.server(), "pay_uni_01", 15000, &recent_ts).await;
-
-    let (rev_status, rev_body) = dispatch_json(
+    let rev_body = dispatch_expect(
         router,
         Method::POST,
         "/unified/reversal",
@@ -280,11 +311,10 @@ async fn e2e_unified_gateway_refund_or_void() {
             "transaction_id": "pay_uni_01",
             "amount_minor": null
         }),
+        StatusCode::OK,
     )
     .await;
-    assert_eq!(rev_status, StatusCode::OK);
-    assert_eq!(rev_body["transaction_id"], "pay_uni_01");
+    assert_eq!(charge_body["transaction_id"], "pay_uni_01");
     assert_eq!(rev_body["action"], "voided");
     assert_eq!(rev_body["amount_reversed_minor"], 15000);
-    assert_eq!(rev_body["currency"], "SAR");
 }

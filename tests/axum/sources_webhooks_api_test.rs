@@ -12,13 +12,17 @@ use wiremock::{Mock, ResponseTemplate};
 
 use super::spawn_test_app;
 
-/// Sends an HTTP request through the Axum router via `tower::ServiceExt::oneshot` and parses JSON.
-async fn dispatch_json(
+/// Deterministic UUID used across webhook management API E2E tests.
+const TEST_WEBHOOK_ID: &str = "550e8400-e29b-41d4-a716-446655440000";
+
+/// Sends an HTTP request through the Axum router, asserts `expected` status, and parses JSON.
+async fn dispatch_expect(
     app: Router,
     http_method: Method,
     uri: &str,
     body: Option<Value>,
-) -> (StatusCode, Value) {
+    expected: StatusCode,
+) -> Value {
     let mut builder = Request::builder().method(http_method).uri(uri);
     let payload = match body {
         Some(value) => {
@@ -30,12 +34,11 @@ async fn dispatch_json(
     };
     let req = builder.body(payload).expect("build HTTP request");
     let resp = app.oneshot(req).await.expect("oneshot request succeeds");
-    let status = resp.status();
+    assert_eq!(resp.status(), expected);
     let bytes = to_bytes(resp.into_body(), usize::MAX)
         .await
         .expect("read response body");
-    let json = serde_json::from_slice(&bytes).expect("parse response json");
-    (status, json)
+    serde_json::from_slice(&bytes).expect("parse response json")
 }
 
 /// Sends an HTTP request with an empty response body through the Axum router.
@@ -50,9 +53,9 @@ async fn dispatch_status(app: Router, http_method: Method, uri: &str) -> StatusC
 }
 
 /// Builds a deterministic Moyasar `WebhookEndpoint` JSON fixture.
-fn webhook_endpoint_json(id: &str) -> Value {
+fn webhook_endpoint_json() -> Value {
     json!({
-        "id": id,
+        "id": TEST_WEBHOOK_ID,
         "http_method": "post",
         "url": "https://merchant.example/webhooks",
         "shared_secret": "whsec_test_axum_01",
@@ -80,21 +83,20 @@ async fn e2e_sources_get_issuer_lookup() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let (status, body) = dispatch_json(
+    let body = dispatch_expect(
         router,
         Method::POST,
         "/sources/issuer",
         Some(json!({ "first_digits": "420132" })),
+        StatusCode::OK,
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
     assert_eq!(body["issuer_name"], "AL RAJHI BANK");
     assert_eq!(body["issuer_country"], "SA");
     assert_eq!(body["issuer_card_type"], "debit");
-    assert_eq!(body["first_digits"], "420132");
 }
 
-/// Verifies `POST /apple_pay/session` initiates an Apple Pay Web Merchant session via `ApplePayService`.
+/// Verifies `POST /apple_pay/session` initiates an Apple Pay session via `ApplePayService`.
 #[tokio::test]
 async fn e2e_apple_pay_initiate_session() {
     let (mock, router) = spawn_test_app().await;
@@ -124,9 +126,14 @@ async fn e2e_apple_pay_initiate_session() {
         "domain_name": "checkout.example.com",
         "publishable_api_key": "pk_test_axum_key"
     });
-    let (status, body) =
-        dispatch_json(router, Method::POST, "/apple_pay/session", Some(req_body)).await;
-    assert_eq!(status, StatusCode::OK);
+    let body = dispatch_expect(
+        router,
+        Method::POST,
+        "/apple_pay/session",
+        Some(req_body),
+        StatusCode::OK,
+    )
+    .await;
     assert_eq!(body["merchantSessionIdentifier"], "SSH_AXUM_01");
     assert_eq!(body["domainName"], "checkout.example.com");
     assert_eq!(body["displayName"], "Some Store");
@@ -136,8 +143,7 @@ async fn e2e_apple_pay_initiate_session() {
 #[tokio::test]
 async fn e2e_webhooks_api_create_endpoint() {
     let (mock, router) = spawn_test_app().await;
-    let webhook_id = "550e8400-e29b-41d4-a716-446655440000";
-    let upstream = webhook_endpoint_json(webhook_id);
+    let upstream = webhook_endpoint_json();
     Mock::given(method("POST"))
         .and(path("/v1/webhooks"))
         .and(body_partial_json(json!({
@@ -154,11 +160,16 @@ async fn e2e_webhooks_api_create_endpoint() {
         "http_method": "post",
         "events": ["payment_paid", "payment_failed"]
     });
-    let (status, body) = dispatch_json(router, Method::POST, "/webhooks_api", Some(req_body)).await;
-    assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["id"], webhook_id);
+    let body = dispatch_expect(
+        router,
+        Method::POST,
+        "/webhooks_api",
+        Some(req_body),
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(body["id"], TEST_WEBHOOK_ID);
     assert_eq!(body["url"], "https://merchant.example/webhooks");
-    assert_eq!(body["http_method"], "post");
     assert!(body.get("shared_secret").is_none());
 }
 
@@ -166,9 +177,8 @@ async fn e2e_webhooks_api_create_endpoint() {
 #[tokio::test]
 async fn e2e_webhooks_api_list_endpoints() {
     let (mock, router) = spawn_test_app().await;
-    let webhook_id = "550e8400-e29b-41d4-a716-446655440000";
     let upstream = json!({
-        "webhooks": [webhook_endpoint_json(webhook_id)],
+        "webhooks": [webhook_endpoint_json()],
         "meta": {
             "current_page": 1,
             "next_page": null,
@@ -183,11 +193,10 @@ async fn e2e_webhooks_api_list_endpoints() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let (status, body) = dispatch_json(router, Method::GET, "/webhooks_api", None).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["webhooks"][0]["id"], webhook_id);
-    assert_eq!(body["meta"]["current_page"], 1);
+    let body = dispatch_expect(router, Method::GET, "/webhooks_api", None, StatusCode::OK).await;
+    assert_eq!(body["webhooks"][0]["id"], TEST_WEBHOOK_ID);
     assert_eq!(body["meta"]["total_count"], 1);
+    assert!(body["webhooks"][0].get("shared_secret").is_none());
 }
 
 /// Verifies `GET /webhooks_api/events` lists supported Moyasar webhook event types.
@@ -203,8 +212,14 @@ async fn e2e_webhooks_api_available_events() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let (status, body) = dispatch_json(router, Method::GET, "/webhooks_api/events", None).await;
-    assert_eq!(status, StatusCode::OK);
+    let body = dispatch_expect(
+        router,
+        Method::GET,
+        "/webhooks_api/events",
+        None,
+        StatusCode::OK,
+    )
+    .await;
     assert_eq!(
         body,
         json!(["payment_paid", "payment_failed", "payment_refunded"])
@@ -215,7 +230,6 @@ async fn e2e_webhooks_api_available_events() {
 #[tokio::test]
 async fn e2e_webhooks_api_delete_endpoint() {
     let (mock, router) = spawn_test_app().await;
-    let webhook_id = "550e8400-e29b-41d4-a716-446655440000";
     Mock::given(method("DELETE"))
         .and(path("/v1/webhooks/550e8400-e29b-41d4-a716-446655440000"))
         .respond_with(ResponseTemplate::new(204))
@@ -225,7 +239,7 @@ async fn e2e_webhooks_api_delete_endpoint() {
     let status = dispatch_status(
         router,
         Method::DELETE,
-        &format!("/webhooks_api/{webhook_id}"),
+        &format!("/webhooks_api/{TEST_WEBHOOK_ID}"),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);

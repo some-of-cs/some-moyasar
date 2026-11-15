@@ -3,7 +3,7 @@
 
 use core::fmt;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -17,7 +17,9 @@ use some_moyasar::resources::payouts::models::{
     PayoutAccount, PayoutAccountProperties, PayoutAccountType,
 };
 use some_moyasar::resources::payouts::payout_model::{Payout, PayoutId};
-use some_moyasar::resources::payouts::payouts_create::CreatePayoutParams;
+use some_moyasar::resources::payouts::payouts_create::{
+    CreatePayoutParams, validate_sequence_number,
+};
 use some_moyasar::resources::settlements::balance::MerchantBalance;
 use some_moyasar::resources::settlements::internal_transactions::ListInternalTransactionsParams;
 use some_moyasar::resources::settlements::internal_txn_models::InternalTransaction;
@@ -48,6 +50,29 @@ impl fmt::Debug for CreatePayoutAccountRequest {
             .field("credentials", &"[REDACTED]")
             .finish()
     }
+}
+
+/// Optional query parameters for `GET /payout_accounts`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ListPayoutAccountsQuery {
+    /// Optional 1-indexed page number.
+    pub page: Option<u32>,
+    /// Optional items-per-page count.
+    pub per: Option<u32>,
+}
+
+/// Optional query parameters for `GET /transfers`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ListTransfersQuery {
+    /// Optional 1-indexed page number.
+    pub page: Option<u32>,
+}
+
+/// Optional query parameters for `GET /internal_transactions`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ListInternalTransactionsQuery {
+    /// Optional 1-indexed page number.
+    pub page: Option<u32>,
 }
 
 /// Serializable pagination metadata DTO mirroring [`Meta`].
@@ -112,12 +137,16 @@ pub fn router() -> Router<AppState> {
         .route("/internal_transactions", get(list_internal_transactions))
 }
 
-/// Converts a raw JSON credential value into a redacted [`SecretString`].
-fn into_secret_credentials(value: Value) -> SecretString {
-    match value {
-        Value::String(raw) => SecretString::from(raw),
-        other => SecretString::from(other.to_string()),
-    }
+/// Serializes a JSON credential [`Value`] into a redacted [`SecretString`].
+fn into_secret_credentials(value: &Value) -> SecretString {
+    SecretString::from(value.to_string())
+}
+
+/// Validates a raw path parameter into a [`TransferId`].
+fn parse_transfer_id(raw: String) -> Result<TransferId, AppError> {
+    let transfer_id = TransferId::new(raw);
+    transfer_id.validate()?;
+    Ok(transfer_id)
 }
 
 /// Handles `POST /payout_accounts` by registering a new payout source account.
@@ -125,7 +154,7 @@ async fn create_payout_account(
     State(state): State<AppState>,
     Json(payload): Json<CreatePayoutAccountRequest>,
 ) -> Result<(StatusCode, Json<PayoutAccount>), AppError> {
-    let credentials = into_secret_credentials(payload.credentials);
+    let credentials = into_secret_credentials(&payload.credentials);
     let params =
         CreatePayoutAccountParams::new(payload.account_type, payload.properties, credentials)?;
     let account = state.client.payout_accounts().create(&params).await?;
@@ -135,12 +164,13 @@ async fn create_payout_account(
 /// Handles `GET /payout_accounts` by listing registered payout source accounts.
 async fn list_payout_accounts(
     State(state): State<AppState>,
+    Query(query): Query<ListPayoutAccountsQuery>,
 ) -> Result<Json<PaginatedResponse<PayoutAccount>>, AppError> {
-    let list = state
-        .client
-        .payout_accounts()
-        .list(&ListPayoutAccountsParams::new())
-        .await?;
+    let params = ListPayoutAccountsParams {
+        page: query.page,
+        per: query.per,
+    };
+    let list = state.client.payout_accounts().list(&params).await?;
     Ok(Json(PaginatedResponse::from(list)))
 }
 
@@ -149,6 +179,8 @@ async fn create_payout(
     State(state): State<AppState>,
     Json(params): Json<CreatePayoutParams>,
 ) -> Result<(StatusCode, Json<Payout>), AppError> {
+    let seq = params.sequence_number.as_deref().unwrap_or_default();
+    validate_sequence_number(seq)?;
     let payout = state.client.payouts().create(&params).await?;
     Ok((StatusCode::CREATED, Json(payout)))
 }
@@ -185,13 +217,14 @@ async fn retrieve_settlement(
 /// Handles `GET /transfers` by listing merchant ledger transfers.
 async fn list_transfers(
     State(state): State<AppState>,
+    Query(query): Query<ListTransfersQuery>,
 ) -> Result<Json<PaginatedResponse<Transfer>>, AppError> {
-    let list = state
-        .client
-        .transfers()
-        .list(&ListTransfersParams::new())
-        .await?;
-    Ok(Json(PaginatedResponse::from(list)))
+    let params = ListTransfersParams {
+        page: query.page,
+        ..ListTransfersParams::default()
+    };
+    let transfers = state.client.transfers().list(&params).await?;
+    Ok(Json(PaginatedResponse::from(transfers)))
 }
 
 /// Handles `GET /transfers/{id}` by retrieving a single ledger transfer by ID.
@@ -199,8 +232,7 @@ async fn retrieve_transfer(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Transfer>, AppError> {
-    let transfer_id = TransferId::new(id);
-    transfer_id.validate()?;
+    let transfer_id = parse_transfer_id(id)?;
     let transfer = state.client.transfers().retrieve(&transfer_id).await?;
     Ok(Json(transfer))
 }
@@ -208,11 +240,12 @@ async fn retrieve_transfer(
 /// Handles `GET /internal_transactions` by listing internal ledger transactions.
 async fn list_internal_transactions(
     State(state): State<AppState>,
+    Query(query): Query<ListInternalTransactionsQuery>,
 ) -> Result<Json<PaginatedResponse<InternalTransaction>>, AppError> {
-    let list = state
-        .client
-        .internal_transactions()
-        .list(&ListInternalTransactionsParams::new())
-        .await?;
-    Ok(Json(PaginatedResponse::from(list)))
+    let mut params = ListInternalTransactionsParams::new();
+    if let Some(page) = query.page {
+        params = params.page(page);
+    }
+    let page_data = state.client.internal_transactions().list(&params).await?;
+    Ok(Json(PaginatedResponse::from(page_data)))
 }

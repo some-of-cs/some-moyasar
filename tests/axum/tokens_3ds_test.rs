@@ -62,10 +62,10 @@ impl<'a> MockDispatchSpec<'a> {
 }
 
 /// Builds a valid Moyasar `Token` JSON payload.
-fn token_fixture(id: &str, status: &str) -> Value {
+fn token_fixture() -> Value {
     json!({
-        "id": id,
-        "status": status,
+        "id": "token_mock_01",
+        "status": "active",
         "number": "4111XXXXXXXX1111",
         "company": "visa",
         "gateway_id": "gw_token_01",
@@ -74,9 +74,14 @@ fn token_fixture(id: &str, status: &str) -> Value {
 }
 
 /// Builds a valid Moyasar `CardAuthentication` JSON payload.
-fn card_auth_fixture(id: &str, status: &str) -> Value {
+fn card_auth_fixture(is_authenticated: bool) -> Value {
+    let status = if is_authenticated {
+        "authenticated"
+    } else {
+        "initiated"
+    };
     json!({
-        "id": id,
+        "id": "ca_mock_01",
         "status": status,
         "transaction_url": "https://acs.moyasar.example/challenge/ca_mock_01",
         "result": {
@@ -91,10 +96,15 @@ fn card_auth_fixture(id: &str, status: &str) -> Value {
     })
 }
 
-/// Builds a valid Moyasar `Invoice` JSON payload.
-fn invoice_fixture(id: &str, status: &str) -> Value {
+/// Builds a valid Moyasar `Invoice` JSON payload (`0 = created`, `1 = paid`, `2 = canceled`).
+fn invoice_fixture(state_code: u8) -> Value {
+    let status = match state_code {
+        1 => "paid",
+        2 => "canceled",
+        _ => "created",
+    };
     json!({
-        "id": id,
+        "id": TEST_INVOICE_ID,
         "status": status,
         "amount": 25000,
         "currency": "SAR",
@@ -160,6 +170,23 @@ async fn assert_json_dispatch(spec: MockDispatchSpec<'_>, status: StatusCode) ->
     body
 }
 
+/// Dispatches `GET /invoices/{id}` (`false`) or `PUT /invoices/{id}/cancel` (`true`).
+async fn dispatch_invoice_step(is_cancel: bool) -> Value {
+    let (http_method, suffix, code) = if is_cancel {
+        (Method::PUT, "/cancel", 2_u8)
+    } else {
+        (Method::GET, "", 1_u8)
+    };
+    let upstream_path = format!("/v1/invoices/{TEST_INVOICE_ID}{suffix}");
+    let app_uri = format!("/invoices/{TEST_INVOICE_ID}{suffix}");
+    let spec = MockDispatchSpec::without_request_body(
+        http_method,
+        (&upstream_path, &app_uri),
+        invoice_fixture(code),
+    );
+    assert_json_dispatch(spec, StatusCode::OK).await
+}
+
 /// Verifies `POST /tokens` creates a card token and returns `201 Created`.
 #[tokio::test]
 async fn e2e_create_token_returns_201_created() {
@@ -172,11 +199,7 @@ async fn e2e_create_token_returns_201_created() {
         "callback_url": "https://merchant.example/tokens/callback",
         "save_only": true
     });
-    let spec = MockDispatchSpec::post_json(
-        ("/v1/tokens", "/tokens"),
-        req_body,
-        token_fixture("token_mock_01", "active"),
-    );
+    let spec = MockDispatchSpec::post_json(("/v1/tokens", "/tokens"), req_body, token_fixture());
     let body = assert_json_dispatch(spec, StatusCode::CREATED).await;
     assert_eq!(body["company"], "visa");
 }
@@ -187,7 +210,7 @@ async fn e2e_retrieve_token_returns_200_ok() {
     let spec = MockDispatchSpec::without_request_body(
         Method::GET,
         ("/v1/tokens/token_mock_01", "/tokens/token_mock_01"),
-        token_fixture("token_mock_01", "active"),
+        token_fixture(),
     );
     let body = assert_json_dispatch(spec, StatusCode::OK).await;
     assert_eq!(body["number"], "4111XXXXXXXX1111");
@@ -226,7 +249,7 @@ async fn e2e_create_card_auth_returns_201_created() {
     let spec = MockDispatchSpec::post_json(
         ("/v1/card_auths", "/card_auths"),
         req_body,
-        card_auth_fixture("ca_mock_01", "initiated"),
+        card_auth_fixture(false),
     );
     let body = assert_json_dispatch(spec, StatusCode::CREATED).await;
     assert_eq!(body["is_frictionless"], true);
@@ -239,12 +262,13 @@ async fn e2e_retrieve_card_auth_returns_200_ok() {
     let spec = MockDispatchSpec::without_request_body(
         Method::GET,
         ("/v1/card_auths/ca_mock_01", "/card_auths/ca_mock_01"),
-        card_auth_fixture("ca_mock_01", "authenticated"),
+        card_auth_fixture(true),
     );
     let body = assert_json_dispatch(spec, StatusCode::OK).await;
+    let has_sensitive =
+        body.get("authentication_value").is_some() || body.get("result").is_some();
     assert_eq!(body["is_frictionless"], true);
-    assert!(body.get("authentication_value").is_none());
-    assert!(body.get("result").is_none());
+    assert!(!has_sensitive);
     assert!(!body.to_string().contains("cavv_test_value"));
 }
 
@@ -260,7 +284,7 @@ async fn e2e_create_invoice_returns_201_created() {
     let spec = MockDispatchSpec::post_json(
         ("/v1/invoices", "/invoices"),
         req_body,
-        invoice_fixture(TEST_INVOICE_ID, "created"),
+        invoice_fixture(0),
     );
     let body = assert_json_dispatch(spec, StatusCode::CREATED).await;
     assert_eq!(body["amount"], 25000);
@@ -269,28 +293,15 @@ async fn e2e_create_invoice_returns_201_created() {
 /// Verifies `GET /invoices/{id}` retrieves a hosted e-invoice by UUID and returns `200 OK`.
 #[tokio::test]
 async fn e2e_retrieve_invoice_returns_200_ok() {
-    let upstream_path = format!("/v1/invoices/{TEST_INVOICE_ID}");
-    let app_uri = format!("/invoices/{TEST_INVOICE_ID}");
-    let spec = MockDispatchSpec::without_request_body(
-        Method::GET,
-        (&upstream_path, &app_uri),
-        invoice_fixture(TEST_INVOICE_ID, "paid"),
-    );
-    let body = assert_json_dispatch(spec, StatusCode::OK).await;
+    let body = dispatch_invoice_step(false).await;
     assert_eq!(body["currency"], "SAR");
 }
 
 /// Verifies `PUT /invoices/{id}/cancel` cancels an active hosted e-invoice and returns `200 OK`.
 #[tokio::test]
 async fn e2e_cancel_invoice_returns_200_ok() {
-    let upstream_path = format!("/v1/invoices/{TEST_INVOICE_ID}/cancel");
-    let app_uri = format!("/invoices/{TEST_INVOICE_ID}/cancel");
-    let spec = MockDispatchSpec::without_request_body(
-        Method::PUT,
-        (&upstream_path, &app_uri),
-        invoice_fixture(TEST_INVOICE_ID, "canceled"),
-    );
-    let body = assert_json_dispatch(spec, StatusCode::OK).await;
+    let body = dispatch_invoice_step(true).await;
+    let payments = body["payments"].as_array().expect("payments array");
     assert_eq!(body["amount_format"], "250.00 SAR");
-    assert!(body["payments"].as_array().expect("payments array").is_empty());
+    assert!(payments.is_empty());
 }

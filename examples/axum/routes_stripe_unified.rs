@@ -44,8 +44,8 @@ pub struct ChargeCustomerRequest {
     pub amount: u64,
     /// ISO 4217 currency code.
     pub currency: Currency,
-    /// Optional caller-supplied `given_id` idempotency UUID.
-    pub given_id: Option<Uuid>,
+    /// Caller-supplied `given_id` idempotency UUID for the purchase attempt.
+    pub given_id: Uuid,
     /// Optional merchant metadata (will have `customer_id` injected automatically).
     pub metadata: Option<Metadata>,
 }
@@ -156,10 +156,8 @@ fn build_customer_charge_params(
     customer_id: &str,
     payload: ChargeCustomerRequest,
 ) -> CustomerChargeParams<'_> {
-    let mut params = CustomerChargeParams::new(customer_id, payload.amount, payload.currency);
-    if let Some(given_id) = payload.given_id {
-        params = params.given_id(given_id);
-    }
+    let mut params = CustomerChargeParams::new(customer_id, payload.amount, payload.currency)
+        .given_id(payload.given_id);
     if let Some(metadata) = payload.metadata {
         params = params.metadata(metadata);
     }

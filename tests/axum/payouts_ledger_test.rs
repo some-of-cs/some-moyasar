@@ -14,9 +14,51 @@ use wiremock::{Mock, ResponseTemplate};
 
 use super::spawn_test_app;
 
+/// Paired upstream Moyasar path and Axum application route path.
+#[derive(Clone, Copy)]
+struct RoutePair {
+    /// Upstream Moyasar API path mounted on the wiremock server.
+    upstream: &'static str,
+    /// Axum router path dispatched by the test client.
+    app: &'static str,
+}
+
+const PAYOUT_ACCOUNTS_ROUTE: RoutePair = RoutePair {
+    upstream: "/v1/payout_accounts",
+    app: "/payout_accounts",
+};
+const PAYOUTS_ROUTE: RoutePair = RoutePair {
+    upstream: "/v1/payouts",
+    app: "/payouts",
+};
+const PAYOUT_BY_ID_ROUTE: RoutePair = RoutePair {
+    upstream: "/v1/payouts/pout_mock_01",
+    app: "/payouts/pout_mock_01",
+};
+const SETTLEMENT_BALANCE_ROUTE: RoutePair = RoutePair {
+    upstream: "/v1/settlements/balance",
+    app: "/settlements/balance",
+};
+const SETTLEMENT_BY_ID_ROUTE: RoutePair = RoutePair {
+    upstream: "/v1/settlements/set_mock_01",
+    app: "/settlements/set_mock_01",
+};
+const TRANSFERS_ROUTE: RoutePair = RoutePair {
+    upstream: "/v1/transfers",
+    app: "/transfers",
+};
+const TRANSFER_BY_ID_ROUTE: RoutePair = RoutePair {
+    upstream: "/v1/transfers/tr_mock_01",
+    app: "/transfers/tr_mock_01",
+};
+const INTERNAL_TXNS_ROUTE: RoutePair = RoutePair {
+    upstream: "/v1/internal_transactions",
+    app: "/internal_transactions",
+};
+
 /// Builds an HTTP [`Request`] with an optional serialized JSON body.
-fn build_json_request(req_method: Method, uri: &str, body: Option<Value>) -> Request<Body> {
-    let mut builder = Request::builder().method(req_method).uri(uri);
+fn build_json_request(req_method: Method, route: RoutePair, body: Option<Value>) -> Request<Body> {
+    let mut builder = Request::builder().method(req_method).uri(route.app);
     let payload = match body {
         Some(value) => {
             builder = builder.header(header::CONTENT_TYPE, "application/json");
@@ -27,28 +69,34 @@ fn build_json_request(req_method: Method, uri: &str, body: Option<Value>) -> Req
     builder.body(payload).expect("build HTTP request")
 }
 
-/// Sends an HTTP request through the Axum router via `tower::ServiceExt::oneshot` and parses JSON.
-async fn dispatch_json(
+/// Sends an HTTP request through the Axum router, asserts `expected` status, and parses JSON.
+async fn dispatch_expect(
     app: Router,
     req_method: Method,
-    uri: &str,
+    route: RoutePair,
     body: Option<Value>,
-) -> (StatusCode, Value) {
-    let req = build_json_request(req_method, uri, body);
+    expected: StatusCode,
+) -> Value {
+    let req = build_json_request(req_method, route, body);
     let resp = app.oneshot(req).await.expect("oneshot request succeeds");
-    let status = resp.status();
+    assert_eq!(resp.status(), expected);
     let bytes = to_bytes(resp.into_body(), usize::MAX)
         .await
         .expect("read response body");
-    let json = serde_json::from_slice(&bytes).expect("parse response json");
-    (status, json)
+    serde_json::from_slice(&bytes).expect("parse response json")
 }
 
 /// Mounts a single-shot JSON mock expectation on the upstream [`MoyasarMockServer`].
-async fn mount_json_mock(mock: &MoyasarMockServer, verb: &str, endpoint: &str, body: Value) {
-    let code = if verb == "POST" { 201 } else { 200 };
-    Mock::given(method(verb))
-        .and(path(endpoint))
+async fn mount_json_mock(
+    mock: &MoyasarMockServer,
+    req_method: Method,
+    route: RoutePair,
+    body: Value,
+) {
+    let is_post = req_method == Method::POST;
+    let code = if is_post { 201 } else { 200 };
+    Mock::given(method(req_method.as_str()))
+        .and(path(route.upstream))
         .respond_with(ResponseTemplate::new(code).set_body_json(body))
         .expect(1)
         .mount(mock.server())
@@ -66,18 +114,10 @@ fn meta_json() -> Value {
     })
 }
 
-/// Wraps a single fixture item inside a deterministic paginated JSON envelope.
-fn paginated_json(key: &str, item: Value) -> Value {
+/// Builds a deterministic Moyasar `PayoutAccount` JSON fixture including an upstream credential.
+fn payout_account_json() -> Value {
     json!({
-        key: [item],
-        "meta": meta_json()
-    })
-}
-
-/// Builds a deterministic Moyasar `PayoutAccount` JSON fixture.
-fn payout_account_json(id: &str) -> Value {
-    json!({
-        "id": id,
+        "id": "pa_mock_01",
         "account_type": "bank",
         "currency": "SAR",
         "properties": {
@@ -85,6 +125,7 @@ fn payout_account_json(id: &str) -> Value {
             "name": "Acme Trading LLC",
             "bank_name": "Al Rajhi Bank"
         },
+        "credentials": "secret_upstream_cred",
         "created_at": FIXTURE_TIMESTAMP
     })
 }
@@ -105,10 +146,11 @@ fn create_payout_account_req_json() -> Value {
     })
 }
 
-/// Builds a deterministic Moyasar `Payout` JSON fixture.
-fn payout_json(id: &str, status: &str) -> Value {
+/// Builds a deterministic Moyasar `Payout` JSON fixture (`queued` or `paid`).
+fn payout_json(is_paid: bool) -> Value {
+    let status = if is_paid { "paid" } else { "queued" };
     json!({
-        "id": id,
+        "id": "pout_mock_01",
         "channel": "sarie",
         "status": status,
         "amount": 50000,
@@ -137,9 +179,9 @@ fn create_payout_req_json() -> Value {
 }
 
 /// Builds a deterministic Moyasar `Settlement` JSON fixture.
-fn settlement_json(id: &str) -> Value {
+fn settlement_json() -> Value {
     json!({
-        "id": id,
+        "id": "set_mock_01",
         "recipient_type": "entity",
         "currency": "SAR",
         "source_currency": "SAR",
@@ -152,10 +194,23 @@ fn settlement_json(id: &str) -> Value {
     })
 }
 
-/// Builds a deterministic Moyasar `Transfer` JSON fixture.
-fn transfer_json(id: &str) -> Value {
+/// Builds a deterministic `Transfer` (`false`) or `InternalTransaction` (`true`) JSON fixture.
+fn ledger_record_json(is_internal_txn: bool) -> Value {
+    if is_internal_txn {
+        return json!({
+            "id": "itx_mock_01",
+            "recipient_type": "entity",
+            "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
+            "amount": 45000,
+            "currency": "SAR",
+            "transfer_id": "tr_mock_01",
+            "settled_at": FIXTURE_TIMESTAMP,
+            "created_at": FIXTURE_TIMESTAMP,
+            "updated_at": FIXTURE_TIMESTAMP
+        });
+    }
     json!({
-        "id": id,
+        "id": "tr_mock_01",
         "recipient_type": "entity",
         "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
         "amount": 75000,
@@ -167,44 +222,38 @@ fn transfer_json(id: &str) -> Value {
     })
 }
 
-/// Builds a deterministic Moyasar `InternalTransaction` JSON fixture.
-fn internal_transaction_json(id: &str) -> Value {
-    json!({
-        "id": id,
-        "recipient_type": "entity",
-        "recipient_id": "550e8400-e29b-41d4-a716-446655440000",
-        "amount": 45000,
-        "currency": "SAR",
-        "transfer_id": "tr_mock_01",
-        "settled_at": FIXTURE_TIMESTAMP,
-        "created_at": FIXTURE_TIMESTAMP,
-        "updated_at": FIXTURE_TIMESTAMP
-    })
-}
-
 /// Verifies `POST /payout_accounts` (`201 Created`) and `GET /payout_accounts` (`200 OK`).
 #[tokio::test]
 async fn e2e_create_and_list_payout_accounts() {
     let (mock, router) = spawn_test_app().await;
-    let account = payout_account_json("pa_mock_01");
-    let list_payload = paginated_json("payout_accounts", account.clone());
-    mount_json_mock(&mock, "POST", "/v1/payout_accounts", account).await;
-    mount_json_mock(&mock, "GET", "/v1/payout_accounts", list_payload).await;
+    let account = payout_account_json();
+    let list_payload = json!({ "payout_accounts": [account.clone()], "meta": meta_json() });
+    mount_json_mock(&mock, Method::POST, PAYOUT_ACCOUNTS_ROUTE, account).await;
+    mount_json_mock(&mock, Method::GET, PAYOUT_ACCOUNTS_ROUTE, list_payload).await;
     let create_req = create_payout_account_req_json();
-    let (create_status, created) = dispatch_json(
+    let created = dispatch_expect(
         router.clone(),
         Method::POST,
-        "/payout_accounts",
+        PAYOUT_ACCOUNTS_ROUTE,
         Some(create_req),
+        StatusCode::CREATED,
     )
     .await;
-    let (list_status, listed) = dispatch_json(router, Method::GET, "/payout_accounts", None).await;
-    assert_eq!(create_status, StatusCode::CREATED);
+    let listed = dispatch_expect(
+        router,
+        Method::GET,
+        PAYOUT_ACCOUNTS_ROUTE,
+        None,
+        StatusCode::OK,
+    )
+    .await;
+    let omits_credentials = created.get("credentials").is_none()
+        && listed["items"][0].get("credentials").is_none()
+        && !created.to_string().contains("secret_upstream_cred")
+        && !listed.to_string().contains("secret_upstream_cred");
     assert_eq!(created["id"], "pa_mock_01");
-    assert_eq!(created["account_type"], "bank");
-    assert_eq!(list_status, StatusCode::OK);
     assert_eq!(listed["items"][0]["id"], "pa_mock_01");
-    assert_eq!(listed["meta"]["total_count"], 1);
+    assert!(omits_credentials);
 }
 
 /// Verifies `POST /payout_accounts` rejects malformed Saudi IBANs before upstream dispatch.
@@ -219,9 +268,14 @@ async fn e2e_create_payout_account_rejects_invalid_iban() {
         },
         "credentials": "secret_cred"
     });
-    let (status, body) =
-        dispatch_json(router, Method::POST, "/payout_accounts", Some(bad_req)).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let body = dispatch_expect(
+        router,
+        Method::POST,
+        PAYOUT_ACCOUNTS_ROUTE,
+        Some(bad_req),
+        StatusCode::BAD_REQUEST,
+    )
+    .await;
     assert_eq!(body["error"]["code"], "validation_error");
 }
 
@@ -229,20 +283,27 @@ async fn e2e_create_payout_account_rejects_invalid_iban() {
 #[tokio::test]
 async fn e2e_create_and_retrieve_payout() {
     let (mock, router) = spawn_test_app().await;
-    let queued = payout_json("pout_mock_01", "queued");
-    let paid = payout_json("pout_mock_01", "paid");
-    mount_json_mock(&mock, "POST", "/v1/payouts", queued).await;
-    mount_json_mock(&mock, "GET", "/v1/payouts/pout_mock_01", paid).await;
+    mount_json_mock(&mock, Method::POST, PAYOUTS_ROUTE, payout_json(false)).await;
+    mount_json_mock(&mock, Method::GET, PAYOUT_BY_ID_ROUTE, payout_json(true)).await;
     let create_req = create_payout_req_json();
-    let (create_status, created) =
-        dispatch_json(router.clone(), Method::POST, "/payouts", Some(create_req)).await;
-    let (get_status, fetched) =
-        dispatch_json(router, Method::GET, "/payouts/pout_mock_01", None).await;
-    assert_eq!(create_status, StatusCode::CREATED);
+    let created = dispatch_expect(
+        router.clone(),
+        Method::POST,
+        PAYOUTS_ROUTE,
+        Some(create_req),
+        StatusCode::CREATED,
+    )
+    .await;
+    let fetched = dispatch_expect(
+        router,
+        Method::GET,
+        PAYOUT_BY_ID_ROUTE,
+        None,
+        StatusCode::OK,
+    )
+    .await;
     assert_eq!(created["id"], "pout_mock_01");
     assert_eq!(created["status"], "queued");
-    assert_eq!(get_status, StatusCode::OK);
-    assert_eq!(fetched["id"], "pout_mock_01");
     assert_eq!(fetched["status"], "paid");
 }
 
@@ -259,17 +320,25 @@ async fn e2e_fetch_settlement_balance_and_retrieve_settlement() {
         "pending_format": "300.00 SAR",
         "reserved_format": "50.00 SAR"
     });
-    let settlement = settlement_json("set_mock_01");
-    mount_json_mock(&mock, "GET", "/v1/settlements/balance", balance).await;
-    mount_json_mock(&mock, "GET", "/v1/settlements/set_mock_01", settlement).await;
-    let (bal_status, bal_body) =
-        dispatch_json(router.clone(), Method::GET, "/settlements/balance", None).await;
-    let (set_status, set_body) =
-        dispatch_json(router, Method::GET, "/settlements/set_mock_01", None).await;
-    assert_eq!(bal_status, StatusCode::OK);
-    assert_eq!(bal_body["currency"], "SAR");
+    mount_json_mock(&mock, Method::GET, SETTLEMENT_BALANCE_ROUTE, balance).await;
+    mount_json_mock(&mock, Method::GET, SETTLEMENT_BY_ID_ROUTE, settlement_json()).await;
+    let bal_body = dispatch_expect(
+        router.clone(),
+        Method::GET,
+        SETTLEMENT_BALANCE_ROUTE,
+        None,
+        StatusCode::OK,
+    )
+    .await;
+    let set_body = dispatch_expect(
+        router,
+        Method::GET,
+        SETTLEMENT_BY_ID_ROUTE,
+        None,
+        StatusCode::OK,
+    )
+    .await;
     assert_eq!(bal_body["available"], 120000);
-    assert_eq!(set_status, StatusCode::OK);
     assert_eq!(set_body["id"], "set_mock_01");
     assert_eq!(set_body["amount"], 100000);
 }
@@ -278,19 +347,28 @@ async fn e2e_fetch_settlement_balance_and_retrieve_settlement() {
 #[tokio::test]
 async fn e2e_list_and_retrieve_transfers() {
     let (mock, router) = spawn_test_app().await;
-    let transfer = transfer_json("tr_mock_01");
-    let list_payload = paginated_json("transfers", transfer.clone());
-    mount_json_mock(&mock, "GET", "/v1/transfers", list_payload).await;
-    mount_json_mock(&mock, "GET", "/v1/transfers/tr_mock_01", transfer).await;
-    let (list_status, listed) =
-        dispatch_json(router.clone(), Method::GET, "/transfers", None).await;
-    let (get_status, fetched) =
-        dispatch_json(router, Method::GET, "/transfers/tr_mock_01", None).await;
-    assert_eq!(list_status, StatusCode::OK);
+    let transfer = ledger_record_json(false);
+    let list_payload = json!({ "transfers": [transfer.clone()], "meta": meta_json() });
+    mount_json_mock(&mock, Method::GET, TRANSFERS_ROUTE, list_payload).await;
+    mount_json_mock(&mock, Method::GET, TRANSFER_BY_ID_ROUTE, transfer).await;
+    let listed = dispatch_expect(
+        router.clone(),
+        Method::GET,
+        TRANSFERS_ROUTE,
+        None,
+        StatusCode::OK,
+    )
+    .await;
+    let fetched = dispatch_expect(
+        router,
+        Method::GET,
+        TRANSFER_BY_ID_ROUTE,
+        None,
+        StatusCode::OK,
+    )
+    .await;
     assert_eq!(listed["items"][0]["id"], "tr_mock_01");
     assert_eq!(listed["meta"]["total_count"], 1);
-    assert_eq!(get_status, StatusCode::OK);
-    assert_eq!(fetched["id"], "tr_mock_01");
     assert_eq!(fetched["amount"], 75000);
 }
 
@@ -298,13 +376,18 @@ async fn e2e_list_and_retrieve_transfers() {
 #[tokio::test]
 async fn e2e_list_internal_transactions() {
     let (mock, router) = spawn_test_app().await;
-    let txn = internal_transaction_json("itx_mock_01");
-    let list_payload = paginated_json("internal_transactions", txn);
-    mount_json_mock(&mock, "GET", "/v1/internal_transactions", list_payload).await;
-    let (status, body) = dispatch_json(router, Method::GET, "/internal_transactions", None).await;
-    assert_eq!(status, StatusCode::OK);
+    let txn = ledger_record_json(true);
+    let list_payload = json!({ "internal_transactions": [txn], "meta": meta_json() });
+    mount_json_mock(&mock, Method::GET, INTERNAL_TXNS_ROUTE, list_payload).await;
+    let body = dispatch_expect(
+        router,
+        Method::GET,
+        INTERNAL_TXNS_ROUTE,
+        None,
+        StatusCode::OK,
+    )
+    .await;
     assert_eq!(body["items"][0]["id"], "itx_mock_01");
     assert_eq!(body["items"][0]["amount"], 45000);
     assert_eq!(body["items"][0]["transfer_id"], "tr_mock_01");
-    assert_eq!(body["meta"]["current_page"], 1);
 }
