@@ -181,7 +181,9 @@ fn is_sensitive_token(token: &str) -> bool {
 
 fn is_secret_token(s: &str) -> bool {
     let trimmed = s.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-    SENSITIVE_PREFIXES.iter().any(|prefix| trimmed.starts_with(prefix))
+    SENSITIVE_PREFIXES
+        .iter()
+        .any(|prefix| trimmed.starts_with(prefix))
 }
 
 fn is_iban_token(s: &str) -> bool {
