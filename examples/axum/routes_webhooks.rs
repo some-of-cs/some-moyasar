@@ -41,7 +41,10 @@ fn verify_and_validate_webhook(
     };
 
     if validate_timestamp_at(event.created_at, Utc::now(), state.verifier.tolerance()).is_err() {
-        return Err((StatusCode::UNAUTHORIZED, "stale or invalid webhook timestamp"));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "stale or invalid webhook timestamp",
+        ));
     }
 
     Ok(event)
