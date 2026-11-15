@@ -1,8 +1,9 @@
 //! Payment create, retrieve, and smart 2h void-vs-refund E2E tests.
 #![forbid(unsafe_code)]
 
+use axum::Router;
 use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Method, Request, StatusCode, header};
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use some_moyasar::test_utils::fixtures::FIXTURE_TIMESTAMP;
@@ -45,48 +46,24 @@ fn payment_json(id: &str, status: &str, refunded: u64, created_at: &str) -> Valu
     })
 }
 
-/// Sends a JSON `POST` request through the Axum router via `tower::ServiceExt::oneshot`.
-async fn post_json(router: axum::Router, uri: &str, payload: Value) -> (StatusCode, Value) {
-    let body = serde_json::to_vec(&payload).expect("serialize request json");
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body))
-        .expect("build POST request");
-    let resp = router.oneshot(req).await.expect("oneshot POST succeeds");
-    let status = resp.status();
-    let bytes = to_bytes(resp.into_body(), usize::MAX)
-        .await
-        .expect("read response body");
-    let json = serde_json::from_slice(&bytes).expect("parse response json");
-    (status, json)
-}
-
-/// Sends a `GET` request through the Axum router via `tower::ServiceExt::oneshot`.
-async fn get_json(router: axum::Router, uri: &str) -> (StatusCode, Value) {
-    let req = Request::builder()
-        .method("GET")
-        .uri(uri)
-        .body(Body::empty())
-        .expect("build GET request");
-    let resp = router.oneshot(req).await.expect("oneshot GET succeeds");
-    let status = resp.status();
-    let bytes = to_bytes(resp.into_body(), usize::MAX)
-        .await
-        .expect("read response body");
-    let json = serde_json::from_slice(&bytes).expect("parse response json");
-    (status, json)
-}
-
-/// Sends an empty-body `POST` request through the Axum router via `tower::ServiceExt::oneshot`.
-async fn post_empty(router: axum::Router, uri: &str) -> (StatusCode, Value) {
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri)
-        .body(Body::empty())
-        .expect("build empty POST request");
-    let resp = router.oneshot(req).await.expect("oneshot POST succeeds");
+/// Sends an HTTP request through the Axum router via `tower::ServiceExt::oneshot` and parses JSON.
+async fn dispatch_json(
+    app: Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder().method(method).uri(uri);
+    let payload = match body {
+        Some(value) => {
+            builder = builder.header(header::CONTENT_TYPE, "application/json");
+            let bytes = serde_json::to_vec(&value).expect("serialize request json");
+            Body::from(bytes)
+        }
+        None => Body::empty(),
+    };
+    let req = builder.body(payload).expect("build HTTP request");
+    let resp = app.oneshot(req).await.expect("oneshot request succeeds");
     let status = resp.status();
     let bytes = to_bytes(resp.into_body(), usize::MAX)
         .await
@@ -116,8 +93,15 @@ async fn e2e_create_payment_with_given_id_idempotency_replay() {
         .expect(2)
         .mount(mock.server())
         .await;
-    let (status_first, first) = post_json(router.clone(), "/payments", request_body.clone()).await;
-    let (status_replay, replay) = post_json(router, "/payments", request_body).await;
+    let (status_first, first) = dispatch_json(
+        router.clone(),
+        Method::POST,
+        "/payments",
+        Some(request_body.clone()),
+    )
+    .await;
+    let (status_replay, replay) =
+        dispatch_json(router, Method::POST, "/payments", Some(request_body)).await;
     assert_eq!(status_first, StatusCode::CREATED);
     assert_eq!(status_replay, StatusCode::CREATED);
     assert_eq!(first["id"], "pay_mock_01");
@@ -135,7 +119,7 @@ async fn e2e_retrieve_payment_by_id() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let (status, body) = get_json(router, "/payments/pay_mock_01").await;
+    let (status, body) = dispatch_json(router, Method::GET, "/payments/pay_mock_01", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["id"], "pay_mock_01");
     assert_eq!(body["status"], "paid");
@@ -162,7 +146,8 @@ async fn e2e_smart_two_hour_void_for_recent_unsettled_payment() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let (status, body) = post_empty(router, "/payments/pay_recent_01/refund").await;
+    let (status, body) =
+        dispatch_json(router, Method::POST, "/payments/pay_recent_01/refund", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["id"], "pay_recent_01");
     assert_eq!(body["status"], "voided");
@@ -188,7 +173,8 @@ async fn e2e_smart_two_hour_refund_for_older_settled_payment() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let (status, body) = post_empty(router, "/payments/pay_settled_01/refund").await;
+    let (status, body) =
+        dispatch_json(router, Method::POST, "/payments/pay_settled_01/refund", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["id"], "pay_settled_01");
     assert_eq!(body["status"], "refunded");

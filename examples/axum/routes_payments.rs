@@ -137,7 +137,8 @@ async fn refund_payment(
     Path(id): Path<String>,
     Json(payload): Json<RefundPaymentRequest>,
 ) -> Result<Json<RefundReceipt>, AppError> {
-    let mut params = RefundCreateParams::new(id).prefer_void_if_unsettled(true);
+    let payment_id = PaymentId::new(id)?;
+    let mut params = RefundCreateParams::new(payment_id.as_str()).prefer_void_if_unsettled(true);
     if let Some(amount) = payload.amount {
         params = params.amount(amount);
     }

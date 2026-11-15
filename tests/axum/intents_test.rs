@@ -15,6 +15,16 @@ use wiremock::{Mock, ResponseTemplate};
 /// Maximum response body size read during E2E assertions (64 KiB).
 const MAX_BODY_BYTES: usize = 64 * 1024;
 
+/// Specification for mounting a single-use upstream mock and dispatching an Axum request.
+struct MockDispatchSpec<'a> {
+    http_method: Method,
+    upstream_path: &'a str,
+    upstream_status: u16,
+    mock_body: Value,
+    app_uri: &'a str,
+    req_body: Option<Value>,
+}
+
 /// Builds a valid mock `PaymentIntent` JSON payload matching `models::PaymentIntent`.
 fn intent_payload(id: &str, status: &str, amount: u64, expires_at: DateTime<Utc>) -> Value {
     let created_at = expires_at - Duration::seconds(INTENT_EXPIRY_SECS);
@@ -55,24 +65,17 @@ async fn read_json_body(response: axum::response::Response) -> Value {
 }
 
 /// Mounts a single-use upstream mock and dispatches a JSON request to the Axum router.
-async fn mount_and_dispatch(
-    http_method: Method,
-    upstream_path: &str,
-    upstream_status: u16,
-    mock_body: Value,
-    app_uri: &str,
-    req_body: Option<Value>,
-) -> axum::response::Response {
+async fn mount_and_dispatch(spec: MockDispatchSpec<'_>) -> axum::response::Response {
     let (mock_server, app) = super::spawn_test_app().await;
-    Mock::given(method(http_method.as_str()))
-        .and(path(upstream_path))
-        .respond_with(ResponseTemplate::new(upstream_status).set_body_json(mock_body))
+    Mock::given(method(spec.http_method.as_str()))
+        .and(path(spec.upstream_path))
+        .respond_with(ResponseTemplate::new(spec.upstream_status).set_body_json(spec.mock_body))
         .with_priority(1)
         .expect(1)
         .mount(mock_server.server())
         .await;
 
-    let request = json_request(http_method, app_uri, req_body);
+    let request = json_request(spec.http_method, spec.app_uri, spec.req_body);
     app.oneshot(request).await.expect("router response")
 }
 
@@ -101,14 +104,14 @@ async fn creates_payment_intent_with_integer_minor_unit_amount() {
         "callback_url": "https://example.com/callback"
     });
 
-    let response = mount_and_dispatch(
-        Method::POST,
-        "/v1/payment_intents",
-        201,
+    let response = mount_and_dispatch(MockDispatchSpec {
+        http_method: Method::POST,
+        upstream_path: "/v1/payment_intents",
+        upstream_status: 201,
         mock_body,
-        "/intents",
-        Some(req_body),
-    )
+        app_uri: "/intents",
+        req_body: Some(req_body),
+    })
     .await;
 
     assert!(
@@ -131,14 +134,14 @@ async fn retrieves_usable_payment_intent_with_200_ok() {
         serde_json::from_value(mock_body.clone()).expect("valid PaymentIntent fixture");
     assert!(model.is_usable());
 
-    let response = mount_and_dispatch(
-        Method::GET,
-        "/v1/payment_intents/pi_e2e_usable_01",
-        200,
+    let response = mount_and_dispatch(MockDispatchSpec {
+        http_method: Method::GET,
+        upstream_path: "/v1/payment_intents/pi_e2e_usable_01",
+        upstream_status: 200,
         mock_body,
-        "/intents/pi_e2e_usable_01",
-        None,
-    )
+        app_uri: "/intents/pi_e2e_usable_01",
+        req_body: None,
+    })
     .await;
 
     let body = assert_intent_ok(response, "pi_e2e_usable_01", "created").await;
@@ -155,14 +158,14 @@ async fn rejects_expired_payment_intent_with_410_gone() {
     assert_eq!(model.status, PaymentIntentStatus::Created);
     assert!(!model.is_usable());
 
-    let response = mount_and_dispatch(
-        Method::GET,
-        "/v1/payment_intents/pi_e2e_expired_01",
-        200,
+    let response = mount_and_dispatch(MockDispatchSpec {
+        http_method: Method::GET,
+        upstream_path: "/v1/payment_intents/pi_e2e_expired_01",
+        upstream_status: 200,
         mock_body,
-        "/intents/pi_e2e_expired_01",
-        None,
-    )
+        app_uri: "/intents/pi_e2e_expired_01",
+        req_body: None,
+    })
     .await;
 
     assert_eq!(response.status(), StatusCode::GONE);
@@ -174,14 +177,14 @@ async fn cancels_payment_intent_with_200_ok() {
     let expires_at = Utc::now() + Duration::minutes(30);
     let mock_body = intent_payload("pi_e2e_cancel_01", "canceled", 25000, expires_at);
 
-    let response = mount_and_dispatch(
-        Method::POST,
-        "/v1/payment_intents/pi_e2e_cancel_01/cancel",
-        200,
+    let response = mount_and_dispatch(MockDispatchSpec {
+        http_method: Method::POST,
+        upstream_path: "/v1/payment_intents/pi_e2e_cancel_01/cancel",
+        upstream_status: 200,
         mock_body,
-        "/intents/pi_e2e_cancel_01/cancel",
-        None,
-    )
+        app_uri: "/intents/pi_e2e_cancel_01/cancel",
+        req_body: None,
+    })
     .await;
 
     assert_intent_ok(response, "pi_e2e_cancel_01", "canceled").await;
