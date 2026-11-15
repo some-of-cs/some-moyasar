@@ -62,6 +62,35 @@ async fn mount_get_json(
         .await;
 }
 
+/// Expected minor-unit fields for asserting a [`Settlement`] entry.
+struct ExpectedSettlementAmounts {
+    /// Expected Moyasar settlement identifier.
+    id: &'static str,
+    /// Expected settlement recipient classification.
+    recipient_type: SettlementRecipientType,
+    /// Expected gross settlement amount in minor units.
+    amount: i64,
+    /// Expected processing fee in minor units.
+    fee: i64,
+    /// Expected VAT/tax in minor units.
+    tax: i64,
+    /// Expected net settlement amount in minor units (`amount - fee - tax`).
+    net: i64,
+}
+
+/// Asserts that a [`Settlement`] entry matches the expected minor-unit amounts.
+fn assert_settlement_entry(item: &Settlement, expected: ExpectedSettlementAmounts) {
+    assert_eq!(item.id.as_str(), expected.id);
+    assert_eq!((item.recipient_type, item.currency), (expected.recipient_type, Currency::SAR));
+    let expected_amounts = (
+        Amount::from_minor(expected.amount),
+        Amount::from_minor(expected.fee),
+        Amount::from_minor(expected.tax),
+    );
+    assert_eq!((item.amount, item.fee, item.tax), expected_amounts);
+    assert_eq!(item.net(), Amount::from_minor(expected.net));
+}
+
 /// Verifies `GET /settlements` lists settlements with integer minor-unit `Amount`s.
 #[rocket::async_test]
 async fn lists_settlements_with_minor_unit_amounts() {
@@ -112,19 +141,28 @@ async fn lists_settlements_with_minor_unit_amounts() {
     assert_eq!(body["total_count"].as_u64(), Some(2));
     assert!(body["next_page"].is_null());
 
-    let first = &items[0];
-    assert_eq!(first.id.as_str(), "stl_e2e_01");
-    assert_eq!(first.recipient_type, SettlementRecipientType::Entity);
-    assert_eq!(first.currency, Currency::SAR);
-    assert_eq!(first.amount, Amount::from_minor(250_000));
-    assert_eq!(first.fee, Amount::from_minor(4_500));
-    assert_eq!(first.tax, Amount::from_minor(675));
-    assert_eq!(first.net(), Amount::from_minor(244_825));
-
-    let second = &items[1];
-    assert_eq!(second.id.as_str(), "stl_e2e_02");
-    assert_eq!(second.recipient_type, SettlementRecipientType::Platform);
-    assert_eq!(second.net(), Amount::from_minor(97_700));
+    assert_settlement_entry(
+        &items[0],
+        ExpectedSettlementAmounts {
+            id: "stl_e2e_01",
+            recipient_type: SettlementRecipientType::Entity,
+            amount: 250_000,
+            fee: 4_500,
+            tax: 675,
+            net: 244_825,
+        },
+    );
+    assert_settlement_entry(
+        &items[1],
+        ExpectedSettlementAmounts {
+            id: "stl_e2e_02",
+            recipient_type: SettlementRecipientType::Platform,
+            amount: 100_000,
+            fee: 2_000,
+            tax: 300,
+            net: 97_700,
+        },
+    );
 }
 
 /// Verifies `GET /settlements/<id>` returns `Settlement` and checked `amount - fee - tax` `net()`.
