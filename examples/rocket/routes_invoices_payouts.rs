@@ -61,7 +61,8 @@ pub struct CreatePayoutRequest {
 }
 
 fn parse_optional_utc(raw: Option<&str>) -> Option<DateTime<Utc>> {
-    raw.and_then(|s| DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc)))
+    raw.and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Utc))
 }
 
 /// Creates a hosted Moyasar e-invoice (`POST /invoices`).
