@@ -5,13 +5,13 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
 use some_moyasar::prelude::{
-    CreatePaymentParams, Currency, MoyasarError, Payment, PaymentId, RefundCreateParams,
-    RefundReceipt,
+    CreatePaymentParams, Currency, MoyasarError, Payment, PaymentId, PaymentStatus,
+    RefundCreateParams, RefundReceipt,
 };
 
 use crate::error::AppError;
@@ -45,6 +45,45 @@ pub struct RefundPaymentRequest {
     pub amount: Option<u64>,
 }
 
+/// Redacted JSON response DTO for [`Payment`].
+#[derive(Debug, Serialize)]
+pub struct PaymentResponse {
+    /// Unique Moyasar payment identifier.
+    pub id: String,
+    /// Current lifecycle status of the payment.
+    pub status: PaymentStatus,
+    /// Payment amount in minor units.
+    pub amount: u64,
+    /// Pre-formatted human-readable payment amount string.
+    pub amount_format: String,
+    /// ISO 4217 currency code.
+    pub currency: Currency,
+    /// Optional merchant-supplied description.
+    pub description: Option<String>,
+    /// Optional 3DS / redirect callback URL.
+    pub callback_url: Option<String>,
+    /// ISO 8601 creation timestamp.
+    pub created_at: String,
+    /// ISO 8601 last-update timestamp.
+    pub updated_at: String,
+}
+
+impl From<Payment> for PaymentResponse {
+    fn from(payment: Payment) -> Self {
+        Self {
+            id: payment.id,
+            status: payment.status,
+            amount: payment.amount,
+            amount_format: payment.amount_format,
+            currency: payment.currency,
+            description: payment.description,
+            callback_url: payment.callback_url,
+            created_at: payment.created_at.to_rfc3339(),
+            updated_at: payment.updated_at.to_rfc3339(),
+        }
+    }
+}
+
 /// Builds the Axum router for payment creation, retrieval, and smart refund/void routes.
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -76,20 +115,20 @@ fn build_create_params(payload: CreatePaymentRequest) -> Result<CreatePaymentPar
 async fn create_payment(
     State(state): State<AppState>,
     Json(payload): Json<CreatePaymentRequest>,
-) -> Result<(StatusCode, Json<Payment>), AppError> {
+) -> Result<(StatusCode, Json<PaymentResponse>), AppError> {
     let params = build_create_params(payload)?;
     let payment = state.client.payments().create(&params).await?;
-    Ok((StatusCode::CREATED, Json(payment)))
+    Ok((StatusCode::CREATED, Json(PaymentResponse::from(payment))))
 }
 
 /// Handles `GET /payments/{id}` by retrieving a payment by its `PaymentId`.
 async fn retrieve_payment(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<Payment>, AppError> {
+) -> Result<Json<PaymentResponse>, AppError> {
     let payment_id = PaymentId::new(id)?;
     let payment = state.client.payments().retrieve(&payment_id).await?;
-    Ok(Json(payment))
+    Ok(Json(PaymentResponse::from(payment)))
 }
 
 /// Handles `POST /payments/{id}/refund` with smart 2-hour unsettled void vs refund routing.
