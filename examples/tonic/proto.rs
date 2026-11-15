@@ -228,60 +228,29 @@ fn unimplemented_response() -> tonic::codegen::http::Response<tonic::body::BoxBo
     res
 }
 
-struct CreateIntentSvc<T>(Arc<T>);
+macro_rules! define_unary_svc {
+    ($($svc:ident : $req:ty => $res:ty => $method:ident;)+) => {
+        $(
+            struct $svc<T>(Arc<T>);
 
-impl<T: MoyasarPaymentGateway> tonic::server::UnaryService<CreateIntentRpcRequest>
-    for CreateIntentSvc<T>
-{
-    type Response = CreateIntentRpcResponse;
-    type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+            impl<T: MoyasarPaymentGateway> tonic::server::UnaryService<$req> for $svc<T> {
+                type Response = $res;
+                type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
-    fn call(&mut self, request: tonic::Request<CreateIntentRpcRequest>) -> Self::Future {
-        let inner = Arc::clone(&self.0);
-        Box::pin(async move { inner.create_intent(request).await })
-    }
+                fn call(&mut self, request: tonic::Request<$req>) -> Self::Future {
+                    let inner = Arc::clone(&self.0);
+                    Box::pin(async move { inner.$method(request).await })
+                }
+            }
+        )+
+    };
 }
 
-struct ChargeSavedTokenSvc<T>(Arc<T>);
-
-impl<T: MoyasarPaymentGateway> tonic::server::UnaryService<ChargeTokenRpcRequest>
-    for ChargeSavedTokenSvc<T>
-{
-    type Response = ChargeTokenRpcResponse;
-    type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-
-    fn call(&mut self, request: tonic::Request<ChargeTokenRpcRequest>) -> Self::Future {
-        let inner = Arc::clone(&self.0);
-        Box::pin(async move { inner.charge_saved_token(request).await })
-    }
-}
-
-struct RefundOrVoidSvc<T>(Arc<T>);
-
-impl<T: MoyasarPaymentGateway> tonic::server::UnaryService<RefundOrVoidRpcRequest>
-    for RefundOrVoidSvc<T>
-{
-    type Response = RefundOrVoidRpcResponse;
-    type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-
-    fn call(&mut self, request: tonic::Request<RefundOrVoidRpcRequest>) -> Self::Future {
-        let inner = Arc::clone(&self.0);
-        Box::pin(async move { inner.refund_or_void(request).await })
-    }
-}
-
-struct VerifyWebhookSvc<T>(Arc<T>);
-
-impl<T: MoyasarPaymentGateway> tonic::server::UnaryService<VerifyWebhookRpcRequest>
-    for VerifyWebhookSvc<T>
-{
-    type Response = VerifyWebhookRpcResponse;
-    type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-
-    fn call(&mut self, request: tonic::Request<VerifyWebhookRpcRequest>) -> Self::Future {
-        let inner = Arc::clone(&self.0);
-        Box::pin(async move { inner.verify_webhook(request).await })
-    }
+define_unary_svc! {
+    CreateIntentSvc: CreateIntentRpcRequest => CreateIntentRpcResponse => create_intent;
+    ChargeSavedTokenSvc: ChargeTokenRpcRequest => ChargeTokenRpcResponse => charge_saved_token;
+    RefundOrVoidSvc: RefundOrVoidRpcRequest => RefundOrVoidRpcResponse => refund_or_void;
+    VerifyWebhookSvc: VerifyWebhookRpcRequest => VerifyWebhookRpcResponse => verify_webhook;
 }
 
 impl<T> tonic::codegen::Service<tonic::codegen::http::Request<tonic::body::BoxBody>>
@@ -331,6 +300,20 @@ impl MoyasarPaymentGatewayClient<tonic::transport::Channel> {
     }
 }
 
+macro_rules! define_client_rpcs {
+    ($($(#[$doc:meta])* $method:ident : $req:ty => $res:ty => $path:expr;)+) => {
+        $(
+            $(#[$doc])*
+            pub async fn $method(
+                &mut self,
+                request: impl tonic::IntoRequest<$req>,
+            ) -> Result<tonic::Response<$res>, tonic::Status> {
+                self.unary_call(request, $path).await
+            }
+        )+
+    };
+}
+
 impl<T> MoyasarPaymentGatewayClient<T>
 where
     T: tonic::client::GrpcService<tonic::body::BoxBody>,
@@ -355,43 +338,19 @@ where
         self.inner.unary(request.into_request(), path, codec).await
     }
 
-    /// Calls `CreateIntent` on the remote gateway service.
-    pub async fn create_intent(
-        &mut self,
-        request: impl tonic::IntoRequest<CreateIntentRpcRequest>,
-    ) -> Result<tonic::Response<CreateIntentRpcResponse>, tonic::Status> {
-        self.unary_call(request, "/moyasar.v1.MoyasarPaymentGateway/CreateIntent")
-            .await
-    }
-
-    /// Calls `ChargeSavedToken` on the remote gateway service.
-    pub async fn charge_saved_token(
-        &mut self,
-        request: impl tonic::IntoRequest<ChargeTokenRpcRequest>,
-    ) -> Result<tonic::Response<ChargeTokenRpcResponse>, tonic::Status> {
-        self.unary_call(
-            request,
-            "/moyasar.v1.MoyasarPaymentGateway/ChargeSavedToken",
-        )
-        .await
-    }
-
-    /// Calls `RefundOrVoid` on the remote gateway service.
-    pub async fn refund_or_void(
-        &mut self,
-        request: impl tonic::IntoRequest<RefundOrVoidRpcRequest>,
-    ) -> Result<tonic::Response<RefundOrVoidRpcResponse>, tonic::Status> {
-        self.unary_call(request, "/moyasar.v1.MoyasarPaymentGateway/RefundOrVoid")
-            .await
-    }
-
-    /// Calls `VerifyWebhook` on the remote gateway service.
-    pub async fn verify_webhook(
-        &mut self,
-        request: impl tonic::IntoRequest<VerifyWebhookRpcRequest>,
-    ) -> Result<tonic::Response<VerifyWebhookRpcResponse>, tonic::Status> {
-        self.unary_call(request, "/moyasar.v1.MoyasarPaymentGateway/VerifyWebhook")
-            .await
+    define_client_rpcs! {
+        /// Calls `CreateIntent` on the remote gateway service.
+        create_intent: CreateIntentRpcRequest => CreateIntentRpcResponse =>
+            "/moyasar.v1.MoyasarPaymentGateway/CreateIntent";
+        /// Calls `ChargeSavedToken` on the remote gateway service.
+        charge_saved_token: ChargeTokenRpcRequest => ChargeTokenRpcResponse =>
+            "/moyasar.v1.MoyasarPaymentGateway/ChargeSavedToken";
+        /// Calls `RefundOrVoid` on the remote gateway service.
+        refund_or_void: RefundOrVoidRpcRequest => RefundOrVoidRpcResponse =>
+            "/moyasar.v1.MoyasarPaymentGateway/RefundOrVoid";
+        /// Calls `VerifyWebhook` on the remote gateway service.
+        verify_webhook: VerifyWebhookRpcRequest => VerifyWebhookRpcResponse =>
+            "/moyasar.v1.MoyasarPaymentGateway/VerifyWebhook";
     }
 }
 
@@ -417,35 +376,27 @@ mod tests {
 
     struct DummyGateway;
 
-    #[tonic::async_trait]
-    impl MoyasarPaymentGateway for DummyGateway {
-        async fn create_intent(
-            &self,
-            _request: tonic::Request<CreateIntentRpcRequest>,
-        ) -> Result<tonic::Response<CreateIntentRpcResponse>, tonic::Status> {
-            Err(tonic::Status::unimplemented("stub"))
-        }
+    macro_rules! impl_dummy_gateway {
+        ($($method:ident : $req:ty => $res:ty;)+) => {
+            #[tonic::async_trait]
+            impl MoyasarPaymentGateway for DummyGateway {
+                $(
+                    async fn $method(
+                        &self,
+                        _request: tonic::Request<$req>,
+                    ) -> Result<tonic::Response<$res>, tonic::Status> {
+                        Err(tonic::Status::unimplemented("stub"))
+                    }
+                )+
+            }
+        };
+    }
 
-        async fn charge_saved_token(
-            &self,
-            _request: tonic::Request<ChargeTokenRpcRequest>,
-        ) -> Result<tonic::Response<ChargeTokenRpcResponse>, tonic::Status> {
-            Err(tonic::Status::unimplemented("stub"))
-        }
-
-        async fn refund_or_void(
-            &self,
-            _request: tonic::Request<RefundOrVoidRpcRequest>,
-        ) -> Result<tonic::Response<RefundOrVoidRpcResponse>, tonic::Status> {
-            Err(tonic::Status::unimplemented("stub"))
-        }
-
-        async fn verify_webhook(
-            &self,
-            _request: tonic::Request<VerifyWebhookRpcRequest>,
-        ) -> Result<tonic::Response<VerifyWebhookRpcResponse>, tonic::Status> {
-            Err(tonic::Status::unimplemented("stub"))
-        }
+    impl_dummy_gateway! {
+        create_intent: CreateIntentRpcRequest => CreateIntentRpcResponse;
+        charge_saved_token: ChargeTokenRpcRequest => ChargeTokenRpcResponse;
+        refund_or_void: RefundOrVoidRpcRequest => RefundOrVoidRpcResponse;
+        verify_webhook: VerifyWebhookRpcRequest => VerifyWebhookRpcResponse;
     }
 
     #[test]

@@ -93,10 +93,19 @@ fn meta_json() -> Value {
     })
 }
 
+/// Wraps a single fixture `item` in a paginated list envelope keyed by `key`.
+fn ledger_list_fixture_json(key: &str, item: Value) -> Value {
+    json!({
+        key: [item],
+        "meta": meta_json()
+    })
+}
+
 /// Builds a deterministic `PayoutAccount` list JSON payload.
 fn payout_accounts_list_json() -> Value {
-    json!({
-        "payout_accounts": [{
+    ledger_list_fixture_json(
+        "payout_accounts",
+        json!({
             "id": "pa_mock_01",
             "account_type": "bank",
             "currency": "SAR",
@@ -107,9 +116,8 @@ fn payout_accounts_list_json() -> Value {
             },
             "credentials": "secret_upstream_cred",
             "created_at": FIXTURE_TIMESTAMP
-        }],
-        "meta": meta_json()
-    })
+        }),
+    )
 }
 
 /// Builds a deterministic `Payout` JSON payload.
@@ -153,42 +161,6 @@ fn settlement_json() -> Value {
     })
 }
 
-/// Builds a deterministic `Transfer` list JSON payload.
-fn transfers_list_json() -> Value {
-    json!({
-        "transfers": [{
-            "id": "tr_mock_01",
-            "recipient_type": "entity",
-            "recipient_id": TEST_ENTITY_UUID,
-            "amount": 75000,
-            "fee": 1500,
-            "tax": 225,
-            "currency": "SAR",
-            "reference": "TR-REF-01",
-            "created_at": FIXTURE_TIMESTAMP
-        }],
-        "meta": meta_json()
-    })
-}
-
-/// Builds a deterministic `InternalTransaction` list JSON payload.
-fn internal_txns_list_json() -> Value {
-    json!({
-        "internal_transactions": [{
-            "id": "itx_mock_01",
-            "recipient_type": "entity",
-            "recipient_id": TEST_ENTITY_UUID,
-            "amount": 45000,
-            "currency": "SAR",
-            "transfer_id": "tr_mock_01",
-            "settled_at": FIXTURE_TIMESTAMP,
-            "created_at": FIXTURE_TIMESTAMP,
-            "updated_at": FIXTURE_TIMESTAMP
-        }],
-        "meta": meta_json()
-    })
-}
-
 /// Mounts all payout, settlement, transfer, and internal transaction mocks on `mock.server()`.
 async fn mount_payouts_and_ledger_mocks(mock: &MoyasarMockServer) {
     mount_json_mock(
@@ -213,14 +185,36 @@ async fn mount_payouts_and_ledger_mocks(mock: &MoyasarMockServer) {
         settlement_json(),
     )
     .await;
-    mount_json_mock(mock, "GET", "/v1/transfers", transfers_list_json()).await;
-    mount_json_mock(
-        mock,
-        "GET",
-        "/v1/internal_transactions",
-        internal_txns_list_json(),
-    )
-    .await;
+    let transfers = ledger_list_fixture_json(
+        "transfers",
+        json!({
+            "id": "tr_mock_01",
+            "recipient_type": "entity",
+            "recipient_id": TEST_ENTITY_UUID,
+            "amount": 75000,
+            "fee": 1500,
+            "tax": 225,
+            "currency": "SAR",
+            "reference": "TR-REF-01",
+            "created_at": FIXTURE_TIMESTAMP
+        }),
+    );
+    let internal_txns = ledger_list_fixture_json(
+        "internal_transactions",
+        json!({
+            "id": "itx_mock_01",
+            "recipient_type": "entity",
+            "recipient_id": TEST_ENTITY_UUID,
+            "amount": 45000,
+            "currency": "SAR",
+            "transfer_id": "tr_mock_01",
+            "settled_at": FIXTURE_TIMESTAMP,
+            "created_at": FIXTURE_TIMESTAMP,
+            "updated_at": FIXTURE_TIMESTAMP
+        }),
+    );
+    mount_json_mock(mock, "GET", "/v1/transfers", transfers).await;
+    mount_json_mock(mock, "GET", "/v1/internal_transactions", internal_txns).await;
 }
 
 /// Mounts BIN issuer, Apple Pay session, and webhook endpoint mocks on `mock.server()`.
