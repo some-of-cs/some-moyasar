@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use some_moyasar::prelude::{
-     Currency, CustomerChargeParams, Metadata, Payment, PaymentStatus, RefundStrategy,
+    Currency, CustomerChargeParams, Metadata, Payment, PaymentStatus, RefundStrategy,
     SubscriptionCycleChargeParams, SubscriptionCycleRefundParams, SubscriptionCycleRefundResult,
     TokenId, UnifiedChargeResponse, UnifiedReversalResponse, UnifiedTokenChargeRequest,
 };
