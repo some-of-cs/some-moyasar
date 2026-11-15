@@ -1,35 +1,69 @@
 {
   "moduleId": "example-actix",
-  "title": "Actix-Web Framework Integration & E2E Test Suite (Full 14-Service Coverage)",
+  "title": "Actix-Web 4.x Reference Server & E2E Test Suite (Full 18-Service Coverage)",
   "baseBranch": "main",
   "moduleBranch": "feat/example-actix",
+  "status": "Merged",
+  "prNumber": 194,
   "modulePr": 194,
   "mergeOrder": 2,
+  "updatedAt": "2026-11-15T19:35:00Z",
   "items": {
     "us-actix-1.0": {
       "storyBranch": "feat/us-actix-1.0-examples",
       "storyPr": 189,
-      "status": "Done",
+      "prNumber": 189,
+      "status": "Merged",
       "units": {
-        "unit-1": { "pr": 173, "status": "Merged" },
-        "unit-2": { "pr": 175, "status": "Merged" },
-        "unit-3": { "pr": 169, "status": "Merged" },
-        "unit-4": { "pr": 181, "status": "Merged" }
+        "unit-1": {
+          "pr": 173,
+          "prNumber": 173,
+          "status": "Merged"
+        },
+        "unit-2": {
+          "pr": 175,
+          "prNumber": 175,
+          "status": "Merged"
+        },
+        "unit-3": {
+          "pr": 169,
+          "prNumber": 169,
+          "status": "Merged"
+        },
+        "unit-4": {
+          "pr": 181,
+          "prNumber": 181,
+          "status": "Merged"
+        }
       }
     },
     "us-actix-2.0": {
       "storyBranch": "feat/us-actix-2.0-tests",
       "storyPr": 188,
-      "status": "Done",
+      "prNumber": 188,
+      "status": "Merged",
       "units": {
-        "unit-1": { "pr": 184, "status": "Merged" },
-        "unit-2": { "pr": 178, "status": "Merged" },
-        "unit-3": { "pr": 179, "status": "Merged" }
+        "unit-1": {
+          "pr": 184,
+          "prNumber": 184,
+          "status": "Merged"
+        },
+        "unit-2": {
+          "pr": 178,
+          "prNumber": 178,
+          "status": "Merged"
+        },
+        "unit-3": {
+          "pr": 179,
+          "prNumber": 179,
+          "status": "Merged"
+        }
       }
     },
     "patch-full-services": {
       "branch": "patch/example-actix-full-services",
       "pr": 206,
+      "prNumber": 206,
       "reviewId": 5909757671,
       "ciJobId": 132750524325,
       "status": "Merged"
