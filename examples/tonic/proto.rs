@@ -1,5 +1,6 @@
 //! Zero-`protoc` pure Rust Prost DTOs and Tonic service/client definitions for `moyasar.v1.MoyasarPaymentGateway`.
 
+#![allow(clippy::result_large_err)]
 #![allow(dead_code)]
 
 use std::future::Future;
