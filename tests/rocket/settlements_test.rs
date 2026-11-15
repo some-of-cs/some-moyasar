@@ -81,7 +81,10 @@ struct ExpectedSettlementAmounts {
 /// Asserts that a [`Settlement`] entry matches the expected minor-unit amounts.
 fn assert_settlement_entry(item: &Settlement, expected: ExpectedSettlementAmounts) {
     assert_eq!(item.id.as_str(), expected.id);
-    assert_eq!((item.recipient_type, item.currency), (expected.recipient_type, Currency::SAR));
+    assert_eq!(
+        (item.recipient_type, item.currency),
+        (expected.recipient_type, Currency::SAR)
+    );
     let expected_amounts = (
         Amount::from_minor(expected.amount),
         Amount::from_minor(expected.fee),
