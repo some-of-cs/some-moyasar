@@ -8,37 +8,17 @@ mod handlers_webhooks;
 mod state;
 
 use actix_web::{App, HttpServer, web};
-use some_moyasar::prelude::MoyasarClient;
+use some_moyasar::prelude::{MoyasarClient, PublishableKey};
 
 use crate::state::ActixAppState;
 
-/// Configures all v1 payment, customer token vault, subscription, and webhook
-/// routes on the given Actix-Web [`web::ServiceConfig`].
+/// Configures all `some-moyasar` v1 payment, token, intent, invoice, 3DS card-auth,
+/// customer vault, subscription, payout, settlement, ledger, source, Apple Pay,
+/// unified gateway, and webhook routes on the given Actix-Web [`web::ServiceConfig`].
 pub fn configure_app(cfg: &mut actix_web::web::ServiceConfig) {
-    cfg.route(
-        "/v1/payments",
-        web::post().to(handlers_payments::create_payment),
-    )
-    .route(
-        "/v1/payments/{id}",
-        web::get().to(handlers_payments::get_payment),
-    )
-    .route(
-        "/v1/customers/{customer_id}/tokens",
-        web::post().to(handlers_payments::attach_customer_token),
-    )
-    .route(
-        "/v1/subscriptions/{sub_id}/charge",
-        web::post().to(handlers_subscriptions::charge_subscription_cycle),
-    )
-    .route(
-        "/v1/subscriptions/{sub_id}/refund",
-        web::post().to(handlers_subscriptions::refund_subscription_cycle),
-    )
-    .route(
-        "/v1/webhooks",
-        web::post().to(handlers_webhooks::handle_webhook),
-    );
+    handlers_payments::configure(cfg);
+    handlers_subscriptions::configure(cfg);
+    handlers_webhooks::configure(cfg);
 }
 
 /// Starts the Actix-Web HTTP server with shared [`ActixAppState`] and configured routes.
@@ -47,7 +27,12 @@ async fn main() -> std::io::Result<()> {
     let client = MoyasarClient::new("$MOYASAR_SECRET_KEY").map_err(std::io::Error::other)?;
     let webhook_secret = std::env::var("MOYASAR_WEBHOOK_SECRET")
         .unwrap_or_else(|_| "whsec_dev_placeholder".to_string());
-    let state = ActixAppState::new(client, &webhook_secret);
+    let mut state = ActixAppState::new(client, &webhook_secret);
+    if let Ok(pk) = PublishableKey::new("$MOYASAR_PUBLISHABLE_KEY")
+        && let Ok(pub_client) = MoyasarClient::new(pk)
+    {
+        state = state.with_publishable_client(pub_client);
+    }
     let bind_addr =
         std::env::var("ACTIX_LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
