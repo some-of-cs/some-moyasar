@@ -3,11 +3,20 @@ name = "some-moyasar"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Idiomatic, microkernel-architected Rust SDK for the Moyasar Payment Gateway"
+description = "Idiomatically, microkernel-architected Rust SDK for the Moyasar Payment Gateway"
 repository = "https://github.com/some-of-cs/some-moyasar"
 
 [features]
-default = ["core", "env-keys", "payments", "payment-intents", "tokens-invoices-3ds", "settlements-ledger", "payouts", "sources-webhooks"]
+default = [
+  "core",
+  "env-keys",
+  "payments",
+  "payment-intents",
+  "tokens-invoices-3ds",
+  "settlements-ledger",
+  "payouts",
+  "sources-webhooks",
+]
 core = []
 env-keys = []
 payments = ["core"]
@@ -30,7 +39,25 @@ some-payments-trait = ["unified-gateway"]
 some-payment-trait = ["some-payments-trait"]
 async-stream = ["core"]
 test-utils = ["core", "dep:wiremock"]
-full = ["core", "env-keys", "payments", "payment-intents", "tokens", "invoices", "card-auths", "payouts", "settlements-ledger", "sources", "webhooks-api", "webhook-engine", "stripe-compat", "unified-gateway", "some-payments-trait", "some-payment-trait", "async-stream"]
+full = [
+  "core",
+  "env-keys",
+  "payments",
+  "payment-intents",
+  "tokens",
+  "invoices",
+  "card-auths",
+  "payouts",
+  "settlements-ledger",
+  "sources",
+  "webhooks-api",
+  "webhook-engine",
+  "stripe-compat",
+  "unified-gateway",
+  "some-payments-trait",
+  "some-payment-trait",
+  "async-stream",
+]
 
 [dependencies]
 base64 = "0.22"
@@ -50,10 +77,22 @@ wiremock = { version = "0.6", optional = true }
 zeroize = { version = "1.8", features = ["derive"] }
 
 [dev-dependencies]
+axum = "0.8"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
+tower = { version = "0.5", features = ["util"] }
 wiremock = "0.6"
+
+[[example]]
+name = "axum_server"
+path = "examples/axum/main.rs"
+required-features = ["full"]
 
 [[test]]
 name = "cross_cutting_integration"
 path = "tests/cross_cutting_integration.rs"
 required-features = ["unified-gateway", "stripe-compat", "test-utils"]
+
+[[test]]
+name = "axum_integration"
+path = "tests/axum_integration.rs"
+required-features = ["full", "test-utils"]
