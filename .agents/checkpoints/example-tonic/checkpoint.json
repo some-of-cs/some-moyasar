@@ -1,0 +1,29 @@
+{
+  "module_id": "example-tonic",
+  "branch": "feat/example-tonic",
+  "base": "main",
+  "status": "merged",
+  "stories": {
+    "US-TONIC-1.0": {
+      "branch": "feat/us-tonic-1.0-grpc-server",
+      "pr": 197,
+      "status": "merged"
+    },
+    "US-TONIC-2.0": {
+      "branch": "feat/us-tonic-2.0-grpc-e2e",
+      "pr": 198,
+      "status": "merged"
+    },
+    "US-TONIC-3.0": {
+      "branch": "feat/us-tonic-3.0-all-services",
+      "pr": 217,
+      "status": "merged",
+      "units": [
+        "unit-1-proto-services",
+        "unit-2-service-payments-tokens",
+        "unit-3-service-payouts-ledger-sources",
+        "unit-4-all-services-e2e"
+      ]
+    }
+  }
+}

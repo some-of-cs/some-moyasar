@@ -83,6 +83,9 @@ axum = "0.8"
 rocket = { version = "0.5", features = ["json"] }
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 tower = { version = "0.5", features = ["util"] }
+prost = "0.13"
+tokio-stream = { version = "0.1", features = ["net"] }
+tonic = "0.12"
 wiremock = "0.6"
 
 [[example]]
@@ -118,4 +121,14 @@ required-features = ["full", "test-utils"]
 [[test]]
 name = "rocket_integration"
 path = "tests/rocket_integration.rs"
+required-features = ["full", "test-utils"]
+
+[[example]]
+name = "tonic_grpc_server"
+path = "examples/tonic/main.rs"
+required-features = ["full"]
+
+[[test]]
+name = "tonic_integration"
+path = "tests/tonic_integration.rs"
 required-features = ["full", "test-utils"]
