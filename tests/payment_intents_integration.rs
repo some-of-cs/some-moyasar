@@ -139,7 +139,7 @@ async fn payment_intents_retrieve_200_and_404_not_found_workflow() {
 #[tokio::test]
 async fn payment_intents_fulfill_with_publishable_and_secret_keys_and_outcomes() {
     let (server, pk_client) = common::start_publishable_client().await;
-    let sk_client = MoyasarClient::builder(common::resolve_test_secret_key())
+    let sk_client = MoyasarClient::builder(common::test_secret_key_ref())
         .base_url(server.uri())
         .build()
         .unwrap();

@@ -12,9 +12,10 @@ use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use super::event_types::{WebhookError, WebhookEvent};
+use super::timestamp::REPLAY_TOLERANCE;
 
 /// Domain-separation key for Double-HMAC-SHA256 webhook secret verification.
 pub const DOMAIN_SEPARATION_KEY: &[u8] = b"some-moyasar-webhook-domain-v1";
@@ -22,7 +23,8 @@ pub const DOMAIN_SEPARATION_KEY: &[u8] = b"some-moyasar-webhook-domain-v1";
 /// Constant-time Double-HMAC-SHA256 verifier for Moyasar webhook `secret_token`s.
 ///
 /// Pre-computes a domain-separated 32-byte HMAC-SHA256 digest of the merchant's
-/// `shared_secret` on construction and zeroizes the digest on [`Drop`].
+/// `shared_secret` on construction (resolving `"$VAR_NAME"` or `"${VAR_NAME}"`
+/// behind the scenes when `env-keys` is enabled) and zeroizes the digest on [`Drop`].
 ///
 /// # Examples
 ///
@@ -57,6 +59,7 @@ pub const DOMAIN_SEPARATION_KEY: &[u8] = b"some-moyasar-webhook-domain-v1";
 #[derive(Clone, Zeroize)]
 pub struct ConstantTimeSecretVerifier {
     expected_secret_digest: [u8; 32],
+    valid_secret: bool,
     #[zeroize(skip)]
     tolerance: Duration,
 }
@@ -76,15 +79,57 @@ impl fmt::Debug for ConstantTimeSecretVerifier {
     }
 }
 
+#[cfg(feature = "env-keys")]
+fn resolve_verifier_secret(raw: &str) -> Option<Zeroizing<String>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with('$') {
+        let resolved = crate::kernel::env::resolve_env_secret(trimmed).ok()?;
+        let inner = resolved.trim();
+        if inner.is_empty() || inner.starts_with('$') {
+            return None;
+        }
+        return Some(Zeroizing::new(resolved));
+    }
+    Some(Zeroizing::new(raw.to_owned()))
+}
+
+#[cfg(not(feature = "env-keys"))]
+fn resolve_verifier_secret(raw: &str) -> Option<Zeroizing<String>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.starts_with('$') {
+        return None;
+    }
+    Some(Zeroizing::new(raw.to_owned()))
+}
+
 impl ConstantTimeSecretVerifier {
     /// Creates a new [`ConstantTimeSecretVerifier`] by pre-computing the
-    /// domain-separated HMAC-SHA256 digest of `shared_secret`.
+    /// domain-separated HMAC-SHA256 digest of `shared_secret` (resolving `"$VAR_NAME"`
+    /// or `"${VAR_NAME}"` behind the scenes when `env-keys` is enabled).
     #[must_use]
     pub fn new(shared_secret: &str, tolerance: Duration) -> Self {
-        Self {
-            expected_secret_digest: Self::compute_digest(shared_secret.as_bytes()),
-            tolerance,
+        match resolve_verifier_secret(shared_secret) {
+            Some(resolved) => Self {
+                expected_secret_digest: Self::compute_digest(resolved.as_bytes()),
+                valid_secret: true,
+                tolerance,
+            },
+            None => Self {
+                expected_secret_digest: [0u8; 32],
+                valid_secret: false,
+                tolerance,
+            },
         }
+    }
+
+    /// Creates a new [`ConstantTimeSecretVerifier`] with [`REPLAY_TOLERANCE`] (4 hours),
+    /// resolving `"$VAR_NAME"` or `"${VAR_NAME}"` behind the scenes.
+    #[must_use]
+    pub fn with_default_tolerance(shared_secret: &str) -> Self {
+        Self::new(shared_secret, REPLAY_TOLERANCE)
     }
 
     /// Computes a domain-separated 32-byte HMAC-SHA256 digest of `input`
@@ -122,12 +167,12 @@ impl ConstantTimeSecretVerifier {
     ) -> Result<WebhookEvent, WebhookError> {
         let event: WebhookEvent = serde_json::from_slice(raw_body)?;
         let mut provided_digest = Self::compute_digest(event.secret_token.as_bytes());
-        let matched = provided_digest
+        let digest_eq = provided_digest
             .ct_eq(&self.expected_secret_digest)
             .unwrap_u8()
             == 1;
         provided_digest.zeroize();
-        if !matched {
+        if !self.valid_secret || !digest_eq {
             return Err(WebhookError::SecretMismatch);
         }
         super::timestamp::validate_timestamp_at(event.created_at, now, self.tolerance)?;
@@ -168,8 +213,7 @@ mod tests {
     #[test]
     fn tc_7_3_0_01_valid_secret_token_accepted() {
         let now = Utc::now();
-        let verifier =
-            ConstantTimeSecretVerifier::new("whsec_live_123", Duration::from_secs(4 * 3600));
+        let verifier = ConstantTimeSecretVerifier::with_default_tolerance("whsec_live_123");
         let body = sample_payload("whsec_live_123", now);
 
         let event = verifier

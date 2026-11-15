@@ -52,3 +52,8 @@ zeroize = { version = "1.8", features = ["derive"] }
 [dev-dependencies]
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6"
+
+[[test]]
+name = "cross_cutting_integration"
+path = "tests/cross_cutting_integration.rs"
+required-features = ["unified-gateway", "stripe-compat", "test-utils"]

@@ -4,14 +4,78 @@ use core::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::SecretString;
 
-use crate::kernel::auth::{AuthKey, AuthMode, SecretKey};
+use crate::kernel::auth::{AuthKey, AuthMode, PublishableKey, SecretKey};
 use crate::kernel::error::MoyasarError;
 use crate::kernel::transport::build_default_headers;
 
 /// Default Moyasar API base URL.
 pub const DEFAULT_BASE_URL: &str = "https://api.moyasar.com";
+
+/// Converts a raw key string (`"sk_test_..."`), an environment/dotenv variable reference
+/// (`"$MOYASAR_SECRET_KEY"` or `"${MOYASAR_SECRET_KEY}"`), or an existing [`AuthKey`]
+/// into a validated key of type `K` behind the scenes when constructing a [`MoyasarClient`].
+pub trait IntoClientKey<K: AuthKey> {
+    /// Resolves and validates the key material.
+    fn into_client_key(self) -> Result<K, MoyasarError>;
+}
+
+impl<K: AuthKey> IntoClientKey<K> for K {
+    fn into_client_key(self) -> Result<K, MoyasarError> {
+        Ok(self)
+    }
+}
+
+impl IntoClientKey<SecretKey> for &str {
+    fn into_client_key(self) -> Result<SecretKey, MoyasarError> {
+        SecretKey::new(self)
+    }
+}
+
+impl IntoClientKey<SecretKey> for String {
+    fn into_client_key(self) -> Result<SecretKey, MoyasarError> {
+        SecretKey::new(&self)
+    }
+}
+
+impl IntoClientKey<SecretKey> for &String {
+    fn into_client_key(self) -> Result<SecretKey, MoyasarError> {
+        SecretKey::new(self.as_str())
+    }
+}
+
+/// Converts a raw publishable key string (`"pk_test_..."`), an environment/dotenv variable
+/// reference (`"$MOYASAR_PUBLISHABLE_KEY"` or `"${MOYASAR_PUBLISHABLE_KEY}"`), or an existing
+/// [`PublishableKey`] into a validated [`PublishableKey`] behind the scenes.
+pub trait IntoPublishableClientKey {
+    /// Resolves and validates the publishable key material.
+    fn into_publishable_client_key(self) -> Result<PublishableKey, MoyasarError>;
+}
+
+impl IntoPublishableClientKey for PublishableKey {
+    fn into_publishable_client_key(self) -> Result<PublishableKey, MoyasarError> {
+        Ok(self)
+    }
+}
+
+impl IntoPublishableClientKey for &str {
+    fn into_publishable_client_key(self) -> Result<PublishableKey, MoyasarError> {
+        PublishableKey::new(self)
+    }
+}
+
+impl IntoPublishableClientKey for String {
+    fn into_publishable_client_key(self) -> Result<PublishableKey, MoyasarError> {
+        PublishableKey::new(&self)
+    }
+}
+
+impl IntoPublishableClientKey for &String {
+    fn into_publishable_client_key(self) -> Result<PublishableKey, MoyasarError> {
+        PublishableKey::new(self.as_str())
+    }
+}
 
 /// Configuration shared across all `MoyasarClient` clones.
 #[derive(Clone)]
@@ -50,21 +114,25 @@ pub struct MoyasarClient<K: AuthKey = SecretKey>(Arc<ClientInner<K>>);
 
 /// Builder for configuring a `MoyasarClient`.
 pub struct MoyasarClientBuilder<K: AuthKey> {
-    key: K,
+    key: Result<K, MoyasarError>,
     config: MoyasarClientConfig,
+    webhook_secret_invalid: bool,
 }
 
 impl<K: AuthKey> MoyasarClient<K> {
-    /// Creates a new `MoyasarClient` with default settings.
-    pub fn new(key: K) -> Result<Self, MoyasarError> {
+    /// Creates a new `MoyasarClient` with default settings, resolving `"$VAR_NAME"` or raw key
+    /// strings behind the scenes.
+    pub fn new(key: impl IntoClientKey<K>) -> Result<Self, MoyasarError> {
         Self::builder(key).build()
     }
 
-    /// Starts a builder for customizing timeouts, retries, and base URL.
-    pub fn builder(key: K) -> MoyasarClientBuilder<K> {
+    /// Starts a builder for customizing timeouts, retries, and base URL, resolving `"$VAR_NAME"`
+    /// or raw key strings behind the scenes.
+    pub fn builder(key: impl IntoClientKey<K>) -> MoyasarClientBuilder<K> {
         MoyasarClientBuilder {
-            key,
+            key: key.into_client_key(),
             config: MoyasarClientConfig::default(),
+            webhook_secret_invalid: false,
         }
     }
 
@@ -102,6 +170,26 @@ impl<K: AuthKey> MoyasarClient<K> {
     #[must_use]
     pub fn webhook_secret(&self) -> Option<&SecretString> {
         self.0.config.webhook_secret.as_ref()
+    }
+}
+
+impl MoyasarClient<PublishableKey> {
+    /// Creates a new publishable `MoyasarClient<PublishableKey>` directly from `"$VAR_NAME"`,
+    /// `"pk_test_..."`, or a [`PublishableKey`] without calling `PublishableKey::new` explicitly.
+    pub fn with_publishable_key(key: impl IntoPublishableClientKey) -> Result<Self, MoyasarError> {
+        Self::publishable_builder(key).build()
+    }
+
+    /// Starts a builder for a publishable `MoyasarClient<PublishableKey>` directly from
+    /// `"$VAR_NAME"`, `"pk_test_..."`, or a [`PublishableKey`].
+    pub fn publishable_builder(
+        key: impl IntoPublishableClientKey,
+    ) -> MoyasarClientBuilder<PublishableKey> {
+        MoyasarClientBuilder {
+            key: key.into_publishable_client_key(),
+            config: MoyasarClientConfig::default(),
+            webhook_secret_invalid: false,
+        }
     }
 }
 
@@ -168,39 +256,75 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
         self
     }
 
-    /// Configures the shared webhook secret used by `verify_webhook`.
+    /// Configures the shared webhook secret used by `verify_webhook`, resolving `"$VAR_NAME"`
+    /// or `"${VAR_NAME}"` behind the scenes when the `env-keys` feature is enabled.
     #[must_use]
     pub fn webhook_secret(mut self, secret: impl Into<String>) -> Self {
-        self.config.webhook_secret = Some(SecretString::from(secret.into()));
+        match resolve_client_webhook_secret(secret.into()) {
+            Ok(resolved) => {
+                self.config.webhook_secret = Some(resolved);
+                self.webhook_secret_invalid = false;
+            }
+            Err(()) => {
+                self.config.webhook_secret = None;
+                self.webhook_secret_invalid = true;
+            }
+        }
         self
     }
 
     /// Validates configuration and builds the `MoyasarClient`.
     pub fn build(mut self) -> Result<MoyasarClient<K>, MoyasarError> {
+        let key = self.key?;
         let trimmed_url = self.config.base_url.trim().trim_end_matches('/').to_owned();
-        validate_base_url_for_mode(&trimmed_url, self.key.mode())?;
+        validate_base_url_for_mode(&trimmed_url, key.mode())?;
         self.config.base_url = trimmed_url;
-        if self
-            .config
-            .webhook_secret
-            .as_ref()
-            .is_some_and(|s| s.expose_secret().trim().is_empty())
-        {
+        if self.webhook_secret_invalid {
             return Err(MoyasarError::InvalidWebhookSecret);
         }
-        let headers = build_default_headers(&self.key)?;
+        let headers = build_default_headers(&key)?;
         let http = reqwest::Client::builder()
             .timeout(self.config.timeout)
             .default_headers(headers)
-            .https_only(self.key.mode() == AuthMode::Live)
+            .https_only(key.mode() == AuthMode::Live)
             .build()?;
 
         Ok(MoyasarClient(Arc::new(ClientInner {
-            key: self.key,
+            key,
             http,
             config: self.config,
         })))
     }
+}
+
+#[cfg(feature = "env-keys")]
+fn resolve_client_webhook_secret(raw: String) -> Result<SecretString, ()> {
+    use zeroize::Zeroize;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(());
+    }
+    if trimmed.starts_with('$') {
+        let mut resolved = crate::kernel::env::resolve_env_secret(trimmed).map_err(|_| ())?;
+        let inner = resolved.trim();
+        if inner.is_empty() || inner.starts_with('$') {
+            resolved.zeroize();
+            return Err(());
+        }
+        let secret = SecretString::from(resolved.as_str());
+        resolved.zeroize();
+        return Ok(secret);
+    }
+    Ok(SecretString::from(raw))
+}
+
+#[cfg(not(feature = "env-keys"))]
+fn resolve_client_webhook_secret(raw: String) -> Result<SecretString, ()> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.starts_with('$') {
+        return Err(());
+    }
+    Ok(SecretString::from(raw))
 }
 
 impl<K: AuthKey> fmt::Debug for MoyasarClient<K> {
@@ -215,6 +339,7 @@ impl<K: AuthKey> fmt::Debug for MoyasarClient<K> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use secrecy::ExposeSecret;
 
     #[test]
     fn rejects_plaintext_http_and_userinfo_base_urls() {
@@ -226,8 +351,7 @@ mod tests {
             "https://",
             "not a url",
         ] {
-            let key = SecretKey::new("sk_test_123").expect("valid key");
-            let err = MoyasarClient::builder(key)
+            let err = MoyasarClient::builder("sk_test_123")
                 .base_url(bad_url)
                 .build()
                 .expect_err("must reject invalid or userinfo base URL");
@@ -241,8 +365,9 @@ mod tests {
             "https://api.moyasar.com?foo=bar",
             "https://api.moyasar.com#frag",
         ] {
-            let key = SecretKey::new("sk_test_query_url").expect("valid key");
-            let result = MoyasarClient::builder(key).base_url(url).build();
+            let result = MoyasarClient::builder("sk_test_query_url")
+                .base_url(url)
+                .build();
             assert!(
                 matches!(result, Err(MoyasarError::InvalidBaseUrl)),
                 "expected InvalidBaseUrl for {url:?}, got {result:?}"
@@ -252,8 +377,7 @@ mod tests {
 
     #[test]
     fn rejects_loopback_http_when_key_is_live_mode() {
-        let live_key = SecretKey::new("sk_live_123").expect("valid live key");
-        let err = MoyasarClient::builder(live_key)
+        let err = MoyasarClient::builder("sk_live_123")
             .base_url("http://127.0.0.1:8080")
             .build()
             .expect_err("live key must reject loopback http");
@@ -262,8 +386,7 @@ mod tests {
 
     #[test]
     fn arc_clone_shares_inner_and_redacts_debug() {
-        let key = SecretKey::new("sk_test_secret_value").expect("valid key");
-        let client = MoyasarClient::builder(key)
+        let client = MoyasarClient::builder("sk_test_secret_value")
             .webhook_secret("whsec_configured_123")
             .build()
             .expect("client builds");
@@ -281,8 +404,7 @@ mod tests {
     #[test]
     fn rejects_empty_or_whitespace_webhook_secret() {
         for empty_secret in ["", "   "] {
-            let key = SecretKey::new("sk_test_123").expect("valid key");
-            let err = MoyasarClient::builder(key)
+            let err = MoyasarClient::builder("sk_test_123")
                 .webhook_secret(empty_secret)
                 .build()
                 .expect_err("empty webhook secret must fail build");
@@ -292,8 +414,7 @@ mod tests {
 
     #[tokio::test]
     async fn tc_1_1_0_01_spawns_10k_concurrent_clones_with_arc_integrity() {
-        let key = SecretKey::new("sk_test_concurrent_10k").expect("valid key");
-        let client = MoyasarClient::new(key).expect("client builds");
+        let client = MoyasarClient::new("sk_test_concurrent_10k").expect("client builds");
         assert_eq!(Arc::strong_count(&client.0), 1);
 
         let mut handles = Vec::with_capacity(10_000);

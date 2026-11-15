@@ -129,9 +129,17 @@ impl CreateWebhookParams {
     /// # Errors
     ///
     /// Returns [`MoyasarError::InvalidWebhookUrl`] if `url` is not a valid `https://` URL.
-    pub fn new(url: impl Into<String>, shared_secret: WebhookSecret) -> Result<Self, MoyasarError> {
+    pub fn new(
+        url: impl Into<String>,
+        shared_secret: impl Into<WebhookSecret>,
+    ) -> Result<Self, MoyasarError> {
         let url = url.into();
         validate_https_url(&url)?;
+        let shared_secret = shared_secret.into();
+        let exposed = shared_secret.expose().trim();
+        if exposed.is_empty() || exposed.starts_with('$') {
+            return Err(MoyasarError::InvalidKey);
+        }
         Ok(Self {
             http_method: "post".to_owned(),
             url,

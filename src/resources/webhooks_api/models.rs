@@ -17,17 +17,52 @@ use crate::webhook_engine::event_types::WebhookEventType;
 #[serde(transparent)]
 pub struct WebhookSecret(String);
 
+#[cfg(feature = "env-keys")]
+fn resolve_webhook_secret_raw(raw: String) -> String {
+    let trimmed = raw.trim();
+    if trimmed.starts_with('$')
+        && let Ok(resolved) = crate::kernel::env::resolve_env_secret(trimmed)
+    {
+        return resolved;
+    }
+    raw
+}
+
+#[cfg(not(feature = "env-keys"))]
+fn resolve_webhook_secret_raw(raw: String) -> String {
+    raw
+}
+
 impl WebhookSecret {
-    /// Creates a new [`WebhookSecret`] from any string-like value.
+    /// Creates a new [`WebhookSecret`] from any string-like value, resolving `"$VAR_NAME"`
+    /// or `"${VAR_NAME}"` behind the scenes when `env-keys` is enabled.
     #[must_use]
     pub fn new(raw: impl Into<String>) -> Self {
-        Self(raw.into())
+        Self(resolve_webhook_secret_raw(raw.into()))
     }
 
     /// Exposes the raw shared secret string for cryptographic verification or API payloads.
     #[must_use]
     pub fn expose(&self) -> &str {
         &self.0
+    }
+}
+
+impl From<&str> for WebhookSecret {
+    fn from(raw: &str) -> Self {
+        Self::new(raw)
+    }
+}
+
+impl From<String> for WebhookSecret {
+    fn from(raw: String) -> Self {
+        Self::new(raw)
+    }
+}
+
+impl From<&String> for WebhookSecret {
+    fn from(raw: &String) -> Self {
+        Self::new(raw.as_str())
     }
 }
 

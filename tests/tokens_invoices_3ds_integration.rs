@@ -28,7 +28,7 @@ fn sample_invoice_json(inv_id: Uuid, status: &str, description: &str) -> Value {
 #[tokio::test]
 async fn tokens_create_retrieve_delete_204_404_and_lifecycle_gates() {
     let (server, sk_client) = common::start_secret_client().await;
-    let pk_client = MoyasarClient::builder(PublishableKey::new(common::TEST_PK).unwrap())
+    let pk_client = MoyasarClient::publishable_builder(common::test_publishable_key_ref())
         .base_url(server.uri())
         .build()
         .unwrap();

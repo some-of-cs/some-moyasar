@@ -7,25 +7,28 @@ use serde_json::json;
 use some_moyasar::prelude::*;
 
 #[test]
-fn auth_keys_enforce_prefixes_suffix_and_redacted_debug() {
-    let sk_live = SecretKey::new(common::LIVE_SK).unwrap();
-    assert_eq!(sk_live.mode(), AuthMode::Live);
-    assert_eq!(sk_live.expose_secret(), common::LIVE_SK);
-    assert_eq!(format!("{sk_live:?}"), "SecretKey([REDACTED])");
+fn client_resolves_keys_behind_the_scenes_and_enforces_prefixes_and_redacted_debug() {
+    let live_client = MoyasarClient::new(common::LIVE_SK).unwrap();
+    assert_eq!(live_client.key().mode(), AuthMode::Live);
+    assert_eq!(live_client.key().expose_secret(), common::LIVE_SK);
+    assert_eq!(format!("{:?}", live_client.key()), "SecretKey([REDACTED])");
 
-    let pk_test = PublishableKey::new(common::TEST_PK).unwrap();
-    assert_eq!(pk_test.mode(), AuthMode::Test);
-    assert_eq!(format!("{pk_test:?}"), "PublishableKey([REDACTED])");
+    let pk_client = MoyasarClient::with_publishable_key(common::TEST_PK).unwrap();
+    assert_eq!(pk_client.key().mode(), AuthMode::Test);
+    assert_eq!(
+        format!("{:?}", pk_client.key()),
+        "PublishableKey([REDACTED])"
+    );
 
     for invalid_sk in ["", "sk_test_", "pk_test_12345"] {
         assert!(matches!(
-            SecretKey::new(invalid_sk),
+            MoyasarClient::new(invalid_sk),
             Err(MoyasarError::InvalidKey)
         ));
     }
     for invalid_pk in ["pk_live_", "sk_live_12345"] {
         assert!(matches!(
-            PublishableKey::new(invalid_pk),
+            MoyasarClient::with_publishable_key(invalid_pk),
             Err(MoyasarError::InvalidKey)
         ));
     }
@@ -34,23 +37,24 @@ fn auth_keys_enforce_prefixes_suffix_and_redacted_debug() {
 }
 
 #[test]
-fn env_keys_reject_missing_environment_variables() {
-    let missing = SecretKey::new("$MOYASAR_NONEXISTENT_INTEGRATION_VAR_999");
-    assert!(matches!(missing, Err(MoyasarError::InvalidKey)));
+fn client_rejects_missing_dollar_environment_variables_behind_the_scenes() {
+    let missing_sk = MoyasarClient::new("$MOYASAR_NONEXISTENT_INTEGRATION_VAR_999");
+    assert!(matches!(missing_sk, Err(MoyasarError::InvalidKey)));
+
+    let missing_pk =
+        MoyasarClient::with_publishable_key("${MOYASAR_NONEXISTENT_INTEGRATION_PK_999}");
+    assert!(matches!(missing_pk, Err(MoyasarError::InvalidKey)));
 }
 
 #[test]
 fn client_builder_enforces_https_and_loopback_test_mode_rules() {
-    let test_sk = SecretKey::new(common::TEST_SK).unwrap();
-    let live_sk = SecretKey::new(common::LIVE_SK).unwrap();
-
     for loopback in [
         "http://127.0.0.1:9999/",
         "http://localhost:9999",
         "http://[::1]:9999",
     ] {
         assert!(
-            MoyasarClient::builder(test_sk.clone())
+            MoyasarClient::builder(common::TEST_SK)
                 .base_url(loopback)
                 .build()
                 .is_ok()
@@ -62,13 +66,13 @@ fn client_builder_enforces_https_and_loopback_test_mode_rules() {
         "https://api.moyasar.com?foo=bar",
         "https://api.moyasar.com#frag",
     ] {
-        let res = MoyasarClient::builder(test_sk.clone())
+        let res = MoyasarClient::builder(common::TEST_SK)
             .base_url(invalid_url)
             .build();
         assert!(matches!(res, Err(MoyasarError::InvalidBaseUrl)));
     }
 
-    let live_loopback = MoyasarClient::builder(live_sk)
+    let live_loopback = MoyasarClient::builder(common::LIVE_SK)
         .base_url("http://127.0.0.1:9999")
         .build();
     assert!(matches!(live_loopback, Err(MoyasarError::InvalidBaseUrl)));
@@ -76,12 +80,12 @@ fn client_builder_enforces_https_and_loopback_test_mode_rules() {
 
 #[test]
 fn basic_auth_and_default_headers_follow_rfc7617_and_version_pinning() {
-    let sk = SecretKey::new("sk_test_abc123").unwrap();
-    let auth_header = encode_basic_auth(&sk).unwrap();
+    let client = MoyasarClient::new("sk_test_abc123").unwrap();
+    let auth_header = encode_basic_auth(client.key()).unwrap();
     let expected = format!("Basic {}", STANDARD.encode("sk_test_abc123:"));
     assert_eq!(auth_header.to_str().unwrap(), expected);
 
-    let headers = build_default_headers(&sk).unwrap();
+    let headers = build_default_headers(client.key()).unwrap();
     assert_eq!(headers.get(MOYASAR_VERSION_HEADER).unwrap(), API_VERSION);
     assert_eq!(headers.get("authorization").unwrap(), &auth_header);
 }
@@ -290,4 +294,21 @@ async fn transport_exhausts_5xx_retries_and_returns_server_error_503() {
         .expect_err("persistent 503 must exhaust retries");
     assert!(matches!(err, MoyasarError::ServerError { status: 503, .. }));
     assert_eq!(server.received_requests().await.unwrap().len(), 2);
+}
+
+#[test]
+fn non_json_error_fallback_truncates_at_max_error_body_chars() {
+    assert_eq!(MAX_RESPONSE_BODY_BYTES, 2 * 1024 * 1024);
+    assert_eq!(MAX_ERROR_BODY_CHARS, 512);
+
+    let oversized_html = "x".repeat(MAX_ERROR_BODY_CHARS + 200);
+    let err = MoyasarError::from_api_response(502, &oversized_html);
+    match err {
+        MoyasarError::ServerError { status, message } => {
+            assert_eq!(status, 502);
+            assert_eq!(message, format!("{}...", "x".repeat(MAX_ERROR_BODY_CHARS)));
+            assert!(message.len() < oversized_html.len());
+        }
+        other => panic!("expected ServerError, got {other:?}"),
+    }
 }

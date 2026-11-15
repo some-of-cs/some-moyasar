@@ -4,7 +4,9 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
+use chrono::Utc;
 use serde_json::json;
 use some_moyasar::prelude::*;
 
@@ -38,20 +40,30 @@ impl Drop for TempDotenvFile {
 }
 
 #[tokio::test]
-async fn dotenv_secret_and_publishable_keys_load_and_authenticate_requests() {
-    let dotenv_body = "MOYASAR_DOTENV_IT_SK=sk_test_from_dotenv_file_777\nMOYASAR_DOTENV_IT_PK=pk_test_from_dotenv_file_888\n";
+async fn client_resolves_dollar_var_names_behind_the_scenes_and_authenticates_requests() {
+    let dotenv_body = "# comment line
+export MOYASAR_DOTENV_IT_SK=sk_test_from_dotenv_file_777
+MOYASAR_DOTENV_IT_PK='pk_test_from_dotenv_file_888'
+";
     let _guard = TempDotenvFile::create(dotenv_body);
 
-    let sk = SecretKey::new("$MOYASAR_DOTENV_IT_SK").expect("resolve SK from temp .env file");
-    let pk =
-        PublishableKey::new("${MOYASAR_DOTENV_IT_PK}").expect("resolve PK from temp .env file");
-    assert_eq!(sk.mode(), AuthMode::Test);
-    assert_eq!(pk.mode(), AuthMode::Test);
-    assert_eq!(sk.expose_secret(), "sk_test_from_dotenv_file_777");
-    assert_eq!(pk.expose_secret(), "pk_test_from_dotenv_file_888");
+    let default_sk_client =
+        MoyasarClient::new("$MOYASAR_DOTENV_IT_SK").expect("resolve $VAR via MoyasarClient::new");
+    let default_pk_client = MoyasarClient::with_publishable_key("${MOYASAR_DOTENV_IT_PK}")
+        .expect("resolve ${VAR} via MoyasarClient::with_publishable_key");
+    assert_eq!(default_sk_client.key().mode(), AuthMode::Test);
+    assert_eq!(default_pk_client.key().mode(), AuthMode::Test);
+    assert_eq!(
+        default_sk_client.key().expose_secret(),
+        "sk_test_from_dotenv_file_777"
+    );
+    assert_eq!(
+        default_pk_client.key().expose_secret(),
+        "pk_test_from_dotenv_file_888"
+    );
 
     let (server, _) = common::start_secret_client().await;
-    let dotenv_client = MoyasarClient::builder(sk)
+    let dotenv_client = MoyasarClient::builder("$MOYASAR_DOTENV_IT_SK")
         .base_url(server.uri())
         .build()
         .unwrap();
@@ -74,6 +86,65 @@ async fn dotenv_secret_and_publishable_keys_load_and_authenticate_requests() {
     let bin = BinLookupParams::new("468540").unwrap();
     let issuer = dotenv_client.sources().get_issuer(&bin).await.unwrap();
     assert_eq!(issuer.issuer_name.as_deref(), Some("Saudi National Bank"));
+}
+
+#[test]
+fn webhook_secrets_resolve_dollar_var_names_behind_the_scenes_and_reject_missing_vars() {
+    let dotenv_body = "MOYASAR_DOTENV_IT_WHSEC=whsec_from_dotenv_file_999
+";
+    let _guard = TempDotenvFile::create(dotenv_body);
+
+    let params = CreateWebhookParams::new(
+        "https://merchant.example.com/webhooks",
+        "$MOYASAR_DOTENV_IT_WHSEC",
+    )
+    .unwrap()
+    .events(vec![WebhookEventType::PaymentPaid]);
+    assert_eq!(params.shared_secret.expose(), "whsec_from_dotenv_file_999");
+
+    let missing_params = CreateWebhookParams::new(
+        "https://merchant.example.com/webhooks",
+        "$MOYASAR_MISSING_WHSEC_999",
+    );
+    assert!(matches!(missing_params, Err(MoyasarError::InvalidKey)));
+
+    let now = Utc::now();
+    let raw_event = webhook_event_fixture_at(
+        "payment_paid",
+        "whsec_from_dotenv_file_999",
+        &now.to_rfc3339(),
+    );
+    let raw_bytes = serde_json::to_vec(&raw_event).unwrap();
+
+    let v1 = ConstantTimeSecretVerifier::with_default_tolerance("$MOYASAR_DOTENV_IT_WHSEC");
+    let v2 =
+        ConstantTimeSecretVerifier::new("${MOYASAR_DOTENV_IT_WHSEC}", Duration::from_secs(300));
+    assert!(v1.verify_and_construct_at(&raw_bytes, now).is_ok());
+    assert!(v2.verify_and_construct_at(&raw_bytes, now).is_ok());
+
+    let missing_v =
+        ConstantTimeSecretVerifier::with_default_tolerance("$MOYASAR_MISSING_WHSEC_999");
+    assert!(matches!(
+        missing_v.verify_and_construct_at(&raw_bytes, now),
+        Err(WebhookError::SecretMismatch)
+    ));
+
+    let client = MoyasarClient::builder(common::TEST_SK)
+        .webhook_secret("$MOYASAR_DOTENV_IT_WHSEC")
+        .build()
+        .unwrap();
+    let sig = compute_webhook_signature(&raw_bytes, "$MOYASAR_DOTENV_IT_WHSEC");
+    let mut headers = http::HeaderMap::new();
+    headers.insert(WEBHOOK_SIGNATURE_HEADER, sig.parse().unwrap());
+    assert!(client.verify_webhook(&headers, &raw_bytes).is_ok());
+
+    let bad_client = MoyasarClient::builder(common::TEST_SK)
+        .webhook_secret("$MOYASAR_MISSING_WHSEC_999")
+        .build();
+    assert!(matches!(
+        bad_client,
+        Err(MoyasarError::InvalidWebhookSecret)
+    ));
 }
 
 #[tokio::test]

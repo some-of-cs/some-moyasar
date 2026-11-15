@@ -18,37 +18,6 @@ fn is_configured_real_secret(raw: &str) -> bool {
     !raw.is_empty() && !raw.contains("replace_with")
 }
 
-fn parse_configured_key<K: AuthKey>(
-    env_ref: &str,
-    parse: fn(&str) -> Result<K, MoyasarError>,
-) -> Option<K> {
-    parse(env_ref)
-        .ok()
-        .filter(|k| is_configured_real_secret(k.expose_secret()))
-}
-
-fn resolve_test_key<K: AuthKey>(
-    env_ref: &str,
-    fallback: &str,
-    parse: fn(&str) -> Result<K, MoyasarError>,
-) -> K {
-    parse_configured_key(env_ref, parse)
-        .filter(|k| k.mode() == AuthMode::Test)
-        .unwrap_or_else(|| parse(fallback).expect("valid fallback test key"))
-}
-
-/// Loads `MOYASAR_SECRET_KEY` from the process environment or `.env.local` / `.env`
-/// using the SDK's built-in `$VAR` resolver (`env-keys` feature), with fallback to [`TEST_SK`].
-pub fn resolve_test_secret_key() -> SecretKey {
-    resolve_test_key("$MOYASAR_SECRET_KEY", TEST_SK, SecretKey::new)
-}
-
-/// Loads `MOYASAR_PUBLISHABLE_KEY` from the process environment or `.env.local` / `.env`
-/// using the SDK's built-in `$VAR` resolver (`env-keys` feature), with fallback to [`TEST_PK`].
-pub fn resolve_test_publishable_key() -> PublishableKey {
-    resolve_test_key("$MOYASAR_PUBLISHABLE_KEY", TEST_PK, PublishableKey::new)
-}
-
 fn configured_base_url() -> String {
     resolve_env_secret("$MOYASAR_BASE_URL")
         .ok()
@@ -56,28 +25,52 @@ fn configured_base_url() -> String {
         .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
 }
 
-/// Attempts to build a real `MoyasarClient<SecretKey>` from `MOYASAR_SECRET_KEY` in `.env`
-/// or the process environment targeting `https://api.moyasar.com` (or `$MOYASAR_BASE_URL`).
+/// Attempts to build a real `MoyasarClient<SecretKey>` by passing `"$MOYASAR_SECRET_KEY"`
+/// directly to `MoyasarClient::builder("$MOYASAR_SECRET_KEY")` (resolved behind the scenes).
 pub fn try_dotenv_secret_client() -> Option<MoyasarClient<SecretKey>> {
-    let key = parse_configured_key("$MOYASAR_SECRET_KEY", SecretKey::new)?;
+    let probe = MoyasarClient::new("$MOYASAR_SECRET_KEY").ok()?;
+    if !is_configured_real_secret(probe.key().expose_secret()) {
+        return None;
+    }
     Some(
-        MoyasarClient::builder(key)
+        MoyasarClient::builder("$MOYASAR_SECRET_KEY")
             .base_url(configured_base_url())
             .build()
             .expect("configured MOYASAR_BASE_URL must build valid MoyasarClient"),
     )
 }
 
-/// Attempts to build a real `MoyasarClient<PublishableKey>` from `MOYASAR_PUBLISHABLE_KEY`
-/// in `.env` or the process environment targeting `https://api.moyasar.com`.
+/// Attempts to build a real `MoyasarClient<PublishableKey>` by passing
+/// `"$MOYASAR_PUBLISHABLE_KEY"` directly to `MoyasarClient::publishable_builder`.
 pub fn try_dotenv_publishable_client() -> Option<MoyasarClient<PublishableKey>> {
-    let key = parse_configured_key("$MOYASAR_PUBLISHABLE_KEY", PublishableKey::new)?;
+    let probe = MoyasarClient::with_publishable_key("$MOYASAR_PUBLISHABLE_KEY").ok()?;
+    if !is_configured_real_secret(probe.key().expose_secret()) {
+        return None;
+    }
     Some(
-        MoyasarClient::builder(key)
+        MoyasarClient::publishable_builder("$MOYASAR_PUBLISHABLE_KEY")
             .base_url(configured_base_url())
             .build()
             .expect("configured MOYASAR_BASE_URL must build valid MoyasarClient"),
     )
+}
+
+/// Returns the active test secret key reference (`"$MOYASAR_SECRET_KEY"` when a real test key
+/// is configured in `.env`, otherwise [`TEST_SK`]).
+pub fn test_secret_key_ref() -> &'static str {
+    match try_dotenv_secret_client() {
+        Some(client) if client.key().mode() == AuthMode::Test => "$MOYASAR_SECRET_KEY",
+        _ => TEST_SK,
+    }
+}
+
+/// Returns the active test publishable key reference (`"$MOYASAR_PUBLISHABLE_KEY"` when a real
+/// test key is configured in `.env`, otherwise [`TEST_PK`]).
+pub fn test_publishable_key_ref() -> &'static str {
+    match try_dotenv_publishable_client() {
+        Some(client) if client.key().mode() == AuthMode::Test => "$MOYASAR_PUBLISHABLE_KEY",
+        _ => TEST_PK,
+    }
 }
 
 /// Returns `true` when a real `MOYASAR_SECRET_KEY` is present in `.env` / environment
@@ -92,17 +85,6 @@ pub fn is_live_dotenv_test_enabled() -> bool {
     !disabled && try_dotenv_secret_client().is_some()
 }
 
-async fn start_client_with_key<K: AuthKey>(key: K, retries: u32) -> (MockServer, MoyasarClient<K>) {
-    let server = MockServer::start().await;
-    let client = MoyasarClient::builder(key)
-        .base_url(server.uri())
-        .timeout(Duration::from_millis(400))
-        .max_network_retries(retries)
-        .build()
-        .expect("loopback test client should build");
-    (server, client)
-}
-
 pub async fn start_secret_client() -> (MockServer, MoyasarClient<SecretKey>) {
     start_secret_client_with_retries(1).await
 }
@@ -110,11 +92,25 @@ pub async fn start_secret_client() -> (MockServer, MoyasarClient<SecretKey>) {
 pub async fn start_secret_client_with_retries(
     retries: u32,
 ) -> (MockServer, MoyasarClient<SecretKey>) {
-    start_client_with_key(resolve_test_secret_key(), retries).await
+    let server = MockServer::start().await;
+    let client = MoyasarClient::builder(test_secret_key_ref())
+        .base_url(server.uri())
+        .timeout(Duration::from_millis(400))
+        .max_network_retries(retries)
+        .build()
+        .expect("loopback test secret client should build");
+    (server, client)
 }
 
 pub async fn start_publishable_client() -> (MockServer, MoyasarClient<PublishableKey>) {
-    start_client_with_key(resolve_test_publishable_key(), 1).await
+    let server = MockServer::start().await;
+    let client = MoyasarClient::publishable_builder(test_publishable_key_ref())
+        .base_url(server.uri())
+        .timeout(Duration::from_millis(400))
+        .max_network_retries(1)
+        .build()
+        .expect("loopback test publishable client should build");
+    (server, client)
 }
 
 async fn mount_template(server: &MockServer, route: Route<'_>, template: ResponseTemplate) {
