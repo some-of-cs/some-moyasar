@@ -163,8 +163,7 @@ async fn creates_payment_intent_with_integer_minor_unit_amount() {
 /// Verifies `GET /intents/{id}` returns `200 OK` when the intent is still usable.
 #[tokio::test]
 async fn retrieves_usable_payment_intent_with_200_ok() {
-    let response =
-        dispatch_get_intent("pi_e2e_usable_01", Duration::minutes(45), true).await;
+    let response = dispatch_get_intent("pi_e2e_usable_01", Duration::minutes(45), true).await;
     let body = assert_intent_ok(response, "pi_e2e_usable_01", PaymentIntentStatus::Created).await;
     assert_eq!(body["amount"], 25000);
 }
@@ -172,8 +171,7 @@ async fn retrieves_usable_payment_intent_with_200_ok() {
 /// Verifies `GET /intents/{id}` returns `410 Gone` when `is_usable() == false` due to expiry.
 #[tokio::test]
 async fn rejects_expired_payment_intent_with_410_gone() {
-    let response =
-        dispatch_get_intent("pi_e2e_expired_01", -Duration::minutes(10), false).await;
+    let response = dispatch_get_intent("pi_e2e_expired_01", -Duration::minutes(10), false).await;
     assert_eq!(response.status(), StatusCode::GONE);
 }
 
