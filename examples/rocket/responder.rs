@@ -164,19 +164,26 @@ fn redact_sensitive(input: &str) -> String {
         .join(" ")
 }
 
+const SENSITIVE_PREFIXES: &[&str] = &["sk_live_", "sk_test_", "whsec_"];
+
 fn redact_token(token: &str) -> &str {
-    if is_secret_token(token) || is_iban_token(token) || is_pan_token(token) {
+    if is_sensitive_token(token) {
         "[REDACTED]"
     } else {
         token
     }
 }
 
+fn is_sensitive_token(token: &str) -> bool {
+    let predicates: [fn(&str) -> bool; 3] = [is_secret_token, is_iban_token, is_pan_token];
+    predicates.iter().any(|check| check(token))
+}
+
 fn is_secret_token(s: &str) -> bool {
     let trimmed = s.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-    trimmed.starts_with("sk_live_")
-        || trimmed.starts_with("sk_test_")
-        || trimmed.starts_with("whsec_")
+    SENSITIVE_PREFIXES
+        .iter()
+        .any(|prefix| trimmed.starts_with(prefix))
 }
 
 fn is_iban_token(s: &str) -> bool {
@@ -228,15 +235,33 @@ mod tests {
         };
         assert_eq!(map_status(&server_err), Status::ServiceUnavailable);
         assert_eq!(map_status(&MoyasarError::Timeout), Status::GatewayTimeout);
-        assert_eq!(map_status(&MoyasarError::InvalidIban), Status::UnprocessableEntity);
-        assert_eq!(map_status(&MoyasarError::InvalidWebhookSignature), Status::Unauthorized);
+        assert_eq!(
+            map_status(&MoyasarError::InvalidIban),
+            Status::UnprocessableEntity
+        );
+        assert_eq!(
+            map_status(&MoyasarError::InvalidWebhookSignature),
+            Status::Unauthorized
+        );
+    }
+
+    #[test]
+    fn is_sensitive_token_detects_secrets_iban_and_pan() {
+        assert!(is_sensitive_token("sk_live_abc123"));
+        assert!(is_sensitive_token("sk_test_xyz789"));
+        assert!(is_sensitive_token("whsec_test_999"));
+        assert!(is_sensitive_token("SA0380000000608010167519"));
+        assert!(is_sensitive_token("4111-1111-1111-1111"));
+        assert!(!is_sensitive_token("rejected"));
     }
 
     #[test]
     fn builds_structured_json_body_and_redacts_secrets_iban_and_pan() {
+        let message =
+            "rejected sk_live_abc123 for SA0380000000608010167519 and 4111-1111-1111-1111";
         let err = MoyasarError::Api {
             error_type: ApiErrorType::InvalidRequestError,
-            message: "rejected sk_live_abc123 for SA0380000000608010167519 and 4111-1111-1111-1111".into(),
+            message: message.into(),
             errors: vec![FieldError {
                 field: "iban".into(),
                 message: "invalid SA0380000000608010167519 with whsec_test_999".into(),
@@ -252,9 +277,15 @@ mod tests {
 
         let parsed: Value = serde_json::from_str(&raw).expect("valid error JSON");
         assert_eq!(parsed["error_type"], "invalid_request_error");
-        assert_eq!(parsed["message"], "rejected [REDACTED] for [REDACTED] and [REDACTED]");
+        assert_eq!(
+            parsed["message"],
+            "rejected [REDACTED] for [REDACTED] and [REDACTED]"
+        );
         assert_eq!(parsed["errors"][0]["field"], "iban");
-        assert_eq!(parsed["errors"][0]["message"], "invalid [REDACTED] with [REDACTED]");
+        assert_eq!(
+            parsed["errors"][0]["message"],
+            "invalid [REDACTED] with [REDACTED]"
+        );
     }
 
     #[test]

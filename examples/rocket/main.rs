@@ -2,9 +2,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use some_moyasar::prelude::{
-    ConstantTimeSecretVerifier, InMemoryDeduplicator, MoyasarClient,
-};
+use some_moyasar::prelude::{ConstantTimeSecretVerifier, InMemoryDeduplicator, MoyasarClient};
 
 use crate::state::RocketAppState;
 

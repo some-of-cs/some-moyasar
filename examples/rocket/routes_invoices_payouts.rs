@@ -60,6 +60,11 @@ pub struct CreatePayoutRequest {
     pub comment: Option<String>,
 }
 
+fn parse_optional_utc(raw: Option<&str>) -> Option<DateTime<Utc>> {
+    raw.and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
 /// Creates a hosted Moyasar e-invoice (`POST /invoices`).
 ///
 /// Converts integer minor-unit `amount` into [`Amount`] without floating-point
@@ -108,7 +113,8 @@ pub async fn cancel_invoice(
         .cancel(uuid)
         .await
         .map_err(MoyasarResponder)?;
-    let sadad_expires_at = sync_sadad_expiry(invoice.expired_at, Utc::now());
+    let expired_at = parse_optional_utc(invoice.expired_at.as_deref());
+    let sadad_expires_at = sync_sadad_expiry(expired_at, Utc::now());
 
     Ok(Json(CancelInvoiceResponse {
         invoice,
