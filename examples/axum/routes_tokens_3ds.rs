@@ -170,6 +170,7 @@ pub fn router() -> Router<AppState> {
         .route("/invoices/{id}/cancel", put(cancel_invoice))
 }
 
+/// Converts a [`CreateTokenRequest`] payload into [`CreateTokenParams`].
 fn build_token_params(req: CreateTokenRequest) -> CreateTokenParams {
     let mut params = CreateTokenParams::new(req.name, req.number, req.month, req.year, req.cvc);
     if let Some(callback_url) = req.callback_url {
@@ -184,6 +185,7 @@ fn build_token_params(req: CreateTokenRequest) -> CreateTokenParams {
     params
 }
 
+/// Validates and converts a [`CreateCardAuthRequest`] payload into [`CreateCardAuthParams`].
 fn build_card_auth_params(
     req: CreateCardAuthRequest,
 ) -> Result<CreateCardAuthParams, MoyasarError> {
