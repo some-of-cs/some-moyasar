@@ -173,8 +173,13 @@ async fn e2e_smart_two_hour_refund_for_older_settled_payment() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let (status, body) =
-        dispatch_json(router, Method::POST, "/payments/pay_settled_01/refund", None).await;
+    let (status, body) = dispatch_json(
+        router,
+        Method::POST,
+        "/payments/pay_settled_01/refund",
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["id"], "pay_settled_01");
     assert_eq!(body["status"], "refunded");

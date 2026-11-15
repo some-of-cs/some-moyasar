@@ -26,7 +26,12 @@ struct MockDispatchSpec<'a> {
 }
 
 /// Builds a valid mock `PaymentIntent` JSON payload matching `models::PaymentIntent`.
-fn intent_payload(id: &str, status: &str, amount: u64, expires_at: DateTime<Utc>) -> Value {
+fn intent_payload(
+    id: &str,
+    status: PaymentIntentStatus,
+    amount: u64,
+    expires_at: DateTime<Utc>,
+) -> Value {
     let created_at = expires_at - Duration::seconds(INTENT_EXPIRY_SECS);
     json!({
         "id": id,
@@ -83,20 +88,50 @@ async fn mount_and_dispatch(spec: MockDispatchSpec<'_>) -> axum::response::Respo
 async fn assert_intent_ok(
     response: axum::response::Response,
     expected_id: &str,
-    expected_status: &str,
+    expected_status: PaymentIntentStatus,
 ) -> Value {
     assert_eq!(response.status(), StatusCode::OK);
     let body = read_json_body(response).await;
     assert_eq!(body["id"], expected_id);
-    assert_eq!(body["status"], expected_status);
+    assert_eq!(body["status"], json!(expected_status));
     body
+}
+
+/// Dispatches `GET /intents/{id}` with a fixture at the given expiry offset and verifies usability.
+async fn dispatch_get_intent(
+    id: &str,
+    expiry_offset: Duration,
+    expected_usable: bool,
+) -> axum::response::Response {
+    let expires_at = Utc::now() + expiry_offset;
+    let mock_body = intent_payload(id, PaymentIntentStatus::Created, 25000, expires_at);
+    let model: PaymentIntent =
+        serde_json::from_value(mock_body.clone()).expect("valid PaymentIntent fixture");
+    assert_eq!(model.is_usable(), expected_usable);
+
+    let upstream_path = format!("/v1/payment_intents/{id}");
+    let app_uri = format!("/intents/{id}");
+    mount_and_dispatch(MockDispatchSpec {
+        http_method: Method::GET,
+        upstream_path: &upstream_path,
+        upstream_status: 200,
+        mock_body,
+        app_uri: &app_uri,
+        req_body: None,
+    })
+    .await
 }
 
 /// Verifies `POST /intents` creates a payment intent with integer minor-unit `amount`.
 #[tokio::test]
 async fn creates_payment_intent_with_integer_minor_unit_amount() {
     let expires_at = Utc::now() + Duration::seconds(INTENT_EXPIRY_SECS);
-    let mock_body = intent_payload("pi_e2e_create_01", "created", 25000, expires_at);
+    let mock_body = intent_payload(
+        "pi_e2e_create_01",
+        PaymentIntentStatus::Created,
+        25000,
+        expires_at,
+    );
     let req_body = json!({
         "amount": 25000_u64,
         "currency": "SAR",
@@ -128,46 +163,17 @@ async fn creates_payment_intent_with_integer_minor_unit_amount() {
 /// Verifies `GET /intents/{id}` returns `200 OK` when the intent is still usable.
 #[tokio::test]
 async fn retrieves_usable_payment_intent_with_200_ok() {
-    let expires_at = Utc::now() + Duration::minutes(45);
-    let mock_body = intent_payload("pi_e2e_usable_01", "created", 25000, expires_at);
-    let model: PaymentIntent =
-        serde_json::from_value(mock_body.clone()).expect("valid PaymentIntent fixture");
-    assert!(model.is_usable());
-
-    let response = mount_and_dispatch(MockDispatchSpec {
-        http_method: Method::GET,
-        upstream_path: "/v1/payment_intents/pi_e2e_usable_01",
-        upstream_status: 200,
-        mock_body,
-        app_uri: "/intents/pi_e2e_usable_01",
-        req_body: None,
-    })
-    .await;
-
-    let body = assert_intent_ok(response, "pi_e2e_usable_01", "created").await;
+    let response =
+        dispatch_get_intent("pi_e2e_usable_01", Duration::minutes(45), true).await;
+    let body = assert_intent_ok(response, "pi_e2e_usable_01", PaymentIntentStatus::Created).await;
     assert_eq!(body["amount"], 25000);
 }
 
 /// Verifies `GET /intents/{id}` returns `410 Gone` when `is_usable() == false` due to expiry.
 #[tokio::test]
 async fn rejects_expired_payment_intent_with_410_gone() {
-    let expired_at = Utc::now() - Duration::minutes(10);
-    let mock_body = intent_payload("pi_e2e_expired_01", "created", 25000, expired_at);
-    let model: PaymentIntent =
-        serde_json::from_value(mock_body.clone()).expect("valid PaymentIntent fixture");
-    assert_eq!(model.status, PaymentIntentStatus::Created);
-    assert!(!model.is_usable());
-
-    let response = mount_and_dispatch(MockDispatchSpec {
-        http_method: Method::GET,
-        upstream_path: "/v1/payment_intents/pi_e2e_expired_01",
-        upstream_status: 200,
-        mock_body,
-        app_uri: "/intents/pi_e2e_expired_01",
-        req_body: None,
-    })
-    .await;
-
+    let response =
+        dispatch_get_intent("pi_e2e_expired_01", -Duration::minutes(10), false).await;
     assert_eq!(response.status(), StatusCode::GONE);
 }
 
@@ -175,7 +181,12 @@ async fn rejects_expired_payment_intent_with_410_gone() {
 #[tokio::test]
 async fn cancels_payment_intent_with_200_ok() {
     let expires_at = Utc::now() + Duration::minutes(30);
-    let mock_body = intent_payload("pi_e2e_cancel_01", "canceled", 25000, expires_at);
+    let mock_body = intent_payload(
+        "pi_e2e_cancel_01",
+        PaymentIntentStatus::Canceled,
+        25000,
+        expires_at,
+    );
 
     let response = mount_and_dispatch(MockDispatchSpec {
         http_method: Method::POST,
@@ -187,5 +198,5 @@ async fn cancels_payment_intent_with_200_ok() {
     })
     .await;
 
-    assert_intent_ok(response, "pi_e2e_cancel_01", "canceled").await;
+    assert_intent_ok(response, "pi_e2e_cancel_01", PaymentIntentStatus::Canceled).await;
 }
