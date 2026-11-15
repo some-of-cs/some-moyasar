@@ -13,7 +13,7 @@ pub mod proto;
 pub mod service;
 pub mod status_mapper;
 
-use proto::moyasar_payment_gateway_server::MoyasarPaymentGatewayServer;
+use proto::MoyasarPaymentGatewayServer;
 use service::MoyasarGrpcService;
 
 /// Default gRPC listen address used when `TONIC_LISTEN_ADDR` is unset or empty.
