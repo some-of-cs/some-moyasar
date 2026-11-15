@@ -106,6 +106,7 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+#![allow(clippy::incompatible_msrv)]
 
 use chrono as _;
 
