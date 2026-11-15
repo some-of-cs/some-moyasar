@@ -40,6 +40,7 @@ impl AppState {
     ///
     /// Returns [`MoyasarError`] if `MOYASAR_SECRET_KEY` is missing, malformed, or fails
     /// client initialization.
+    #[allow(dead_code)]
     pub fn from_env() -> Result<Self, MoyasarError> {
         let secret_key = SecretKey::new("$MOYASAR_SECRET_KEY")?;
         let client = MoyasarClient::new(secret_key)?;
