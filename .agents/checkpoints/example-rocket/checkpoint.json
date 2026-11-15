@@ -1,0 +1,64 @@
+{
+  "moduleId": "example-rocket",
+  "title": "Rocket.rs Framework Integration & E2E Test Suite",
+  "branch": "feat/example-rocket",
+  "updatedAt": "2026-11-15T06:12:00Z",
+  "items": {
+    "us-rocket-1.0": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-1.0-examples-rocket",
+      "prNumber": null,
+      "mergedSha": null,
+      "unitCount": 4
+    },
+    "us-rocket-1.0/unit-1": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-1.0/unit-1-state-responder",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-rocket-1.0/unit-2": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-1.0/unit-2-invoices-payouts",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-rocket-1.0/unit-3": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-1.0/unit-3-settlements",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-rocket-1.0/unit-4": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-1.0/unit-4-webhooks-main",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-rocket-2.0": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-2.0-tests-rocket",
+      "prNumber": null,
+      "mergedSha": null,
+      "unitCount": 3
+    },
+    "us-rocket-2.0/unit-1": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-2.0/unit-1-invoices-payouts-e2e",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-rocket-2.0/unit-2": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-2.0/unit-2-settlements-e2e",
+      "prNumber": null,
+      "mergedSha": null
+    },
+    "us-rocket-2.0/unit-3": {
+      "status": "Todo",
+      "branch": "feat/us-rocket-2.0/unit-3-webhooks-e2e",
+      "prNumber": null,
+      "mergedSha": null
+    }
+  }
+}
