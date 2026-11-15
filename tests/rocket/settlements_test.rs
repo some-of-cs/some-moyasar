@@ -12,26 +12,36 @@ use wiremock::{Mock, ResponseTemplate};
 /// Deterministic ISO 8601 UTC timestamp used in mock settlement payloads.
 const FIXTURE_CREATED_AT: &str = "2026-11-14T00:00:00Z";
 
-/// Builds a deterministic [`Settlement`] JSON fixture using integer minor units.
-fn settlement_json(
-    id: &str,
-    recipient_type: &str,
+/// Input parameters for constructing a deterministic [`Settlement`] JSON fixture.
+struct SettlementFixture {
+    /// Unique Moyasar settlement identifier.
+    id: &'static str,
+    /// Classification of the settlement recipient (e.g., `"entity"` or `"platform"`).
+    recipient_type: &'static str,
+    /// Gross settlement amount in minor units.
     amount: i64,
+    /// Processing fee deducted in minor units.
     fee: i64,
+    /// VAT/tax deducted in minor units.
     tax: i64,
-    reference: &str,
+    /// Merchant-facing settlement batch reference code.
+    reference: &'static str,
+    /// Count of settled transactions included in the batch.
     settlement_count: u32,
-) -> Value {
+}
+
+/// Builds a deterministic [`Settlement`] JSON fixture using integer minor units.
+fn settlement_json(fixture: SettlementFixture) -> Value {
     json!({
-        "id": id,
-        "recipient_type": recipient_type,
+        "id": fixture.id,
+        "recipient_type": fixture.recipient_type,
         "currency": "SAR",
         "source_currency": "SAR",
-        "amount": amount,
-        "fee": fee,
-        "tax": tax,
-        "reference": reference,
-        "settlement_count": settlement_count,
+        "amount": fixture.amount,
+        "fee": fixture.fee,
+        "tax": fixture.tax,
+        "reference": fixture.reference,
+        "settlement_count": fixture.settlement_count,
         "created_at": FIXTURE_CREATED_AT,
     })
 }
@@ -55,11 +65,27 @@ async fn mount_get_json(
 /// Verifies `GET /settlements` lists settlements with integer minor-unit `Amount`s.
 #[rocket::async_test]
 async fn lists_settlements_with_minor_unit_amounts() {
-    let (client, mock_server) = super::spawn_test_client().await;
+    let (mock_server, client) = super::spawn_test_client().await;
     let payload = json!({
         "settlements": [
-            settlement_json("stl_e2e_01", "entity", 250_000, 4_500, 675, "STL-2026-11-01", 42),
-            settlement_json("stl_e2e_02", "platform", 100_000, 2_000, 300, "STL-2026-11-02", 15),
+            settlement_json(SettlementFixture {
+                id: "stl_e2e_01",
+                recipient_type: "entity",
+                amount: 250_000,
+                fee: 4_500,
+                tax: 675,
+                reference: "STL-2026-11-01",
+                settlement_count: 42,
+            }),
+            settlement_json(SettlementFixture {
+                id: "stl_e2e_02",
+                recipient_type: "platform",
+                amount: 100_000,
+                fee: 2_000,
+                tax: 300,
+                reference: "STL-2026-11-02",
+                settlement_count: 15,
+            }),
         ],
         "meta": {
             "current_page": 1,
@@ -103,16 +129,16 @@ async fn lists_settlements_with_minor_unit_amounts() {
 /// Verifies `GET /settlements/<id>` returns `Settlement` and checked `amount - fee - tax` `net()`.
 #[rocket::async_test]
 async fn retrieves_settlement_with_checked_net_breakdown() {
-    let (client, mock_server) = super::spawn_test_client().await;
-    let payload = settlement_json(
-        "stl_e2e_01",
-        "entity",
-        250_000,
-        4_500,
-        675,
-        "STL-2026-11-01",
-        42,
-    );
+    let (mock_server, client) = super::spawn_test_client().await;
+    let payload = settlement_json(SettlementFixture {
+        id: "stl_e2e_01",
+        recipient_type: "entity",
+        amount: 250_000,
+        fee: 4_500,
+        tax: 675,
+        reference: "STL-2026-11-01",
+        settlement_count: 42,
+    });
     mount_get_json(&mock_server, "/v1/settlements/stl_e2e_01", 200, payload).await;
 
     let response = client.get("/settlements/stl_e2e_01").dispatch().await;
@@ -137,16 +163,16 @@ async fn retrieves_settlement_with_checked_net_breakdown() {
 /// Verifies `GET /settlements/<id>` reports `null` `net_amount` on minor-unit underflow.
 #[rocket::async_test]
 async fn retrieves_settlement_handles_checked_net_underflow() {
-    let (client, mock_server) = super::spawn_test_client().await;
-    let payload = settlement_json(
-        "stl_e2e_underflow",
-        "entity",
-        1_000,
-        800,
-        300,
-        "STL-2026-11-03",
-        1,
-    );
+    let (mock_server, client) = super::spawn_test_client().await;
+    let payload = settlement_json(SettlementFixture {
+        id: "stl_e2e_underflow",
+        recipient_type: "entity",
+        amount: 1_000,
+        fee: 800,
+        tax: 300,
+        reference: "STL-2026-11-03",
+        settlement_count: 1,
+    });
     mount_get_json(
         &mock_server,
         "/v1/settlements/stl_e2e_underflow",
@@ -176,7 +202,7 @@ async fn retrieves_settlement_handles_checked_net_underflow() {
 /// Verifies `GET /settlements/<id>` propagates upstream 404 as redacted JSON error.
 #[rocket::async_test]
 async fn retrieves_settlement_propagates_not_found_error() {
-    let (client, mock_server) = super::spawn_test_client().await;
+    let (mock_server, client) = super::spawn_test_client().await;
     let error_payload = json!({
         "type": "record_not_found",
         "message": "Settlement not found",
@@ -199,7 +225,7 @@ async fn retrieves_settlement_propagates_not_found_error() {
 /// Verifies `GET /settlements/balance` returns `MerchantBalance` in integer minor units.
 #[rocket::async_test]
 async fn fetches_merchant_balance_in_minor_units() {
-    let (client, mock_server) = super::spawn_test_client().await;
+    let (mock_server, client) = super::spawn_test_client().await;
     let payload = json!({
         "currency": "SAR",
         "available": 150_000,
@@ -232,7 +258,7 @@ async fn fetches_merchant_balance_in_minor_units() {
 /// Verifies `GET /settlements/balance` maps upstream 401 authentication failure to 401.
 #[rocket::async_test]
 async fn fetches_merchant_balance_propagates_unauthorized_error() {
-    let (client, mock_server) = super::spawn_test_client().await;
+    let (mock_server, client) = super::spawn_test_client().await;
     let error_payload = json!({
         "type": "authentication_error",
         "message": "Invalid authentication credentials",
