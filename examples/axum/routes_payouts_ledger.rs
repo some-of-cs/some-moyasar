@@ -112,6 +112,7 @@ pub fn router() -> Router<AppState> {
         .route("/internal_transactions", get(list_internal_transactions))
 }
 
+/// Converts a raw JSON credential value into a redacted [`SecretString`].
 fn into_secret_credentials(value: Value) -> SecretString {
     match value {
         Value::String(raw) => SecretString::from(raw),
