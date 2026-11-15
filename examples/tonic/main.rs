@@ -96,7 +96,10 @@ mod tests {
     #[test]
     fn parse_listen_addr_from_accepts_valid_custom_addr() {
         let expected: SocketAddr = "127.0.0.1:50052".parse().expect("valid custom addr");
-        assert_eq!(parse_listen_addr_from(Some(" 127.0.0.1:50052 ")), Ok(expected));
+        assert_eq!(
+            parse_listen_addr_from(Some(" 127.0.0.1:50052 ")),
+            Ok(expected)
+        );
     }
 
     #[test]
