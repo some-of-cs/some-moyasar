@@ -4,8 +4,8 @@
 #![allow(dead_code)]
 
 use some_moyasar::prelude::{
-    Amount, CardAuthId, CreateInvoiceParams, Currency, IntentId, Invoice, MoyasarClient,
-    PaymentId, PaymentIntent, PaymentIntentStatus, RefundCreateParams, SecretKey, TokenId,
+    Amount, CardAuthId, CreateInvoiceParams, Currency, IntentId, Invoice, MoyasarClient, PaymentId,
+    PaymentIntent, PaymentIntentStatus, RefundCreateParams, SecretKey, TokenId,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -77,6 +77,16 @@ fn map_intent_response(intent: &PaymentIntent) -> Result<IntentJsonRpcResponse, 
     })
 }
 
+/// Extracts and validates an [`IntentId`] from a gRPC request.
+fn parse_intent_id(request: Request<RetrieveIdRpcRequest>) -> Result<IntentId, Status> {
+    IntentId::new(request.into_inner().id).map_err(|err| to_tonic_status(&err))
+}
+
+/// Extracts and validates a [`TokenId`] from a gRPC request.
+fn parse_token_id(request: Request<RetrieveIdRpcRequest>) -> Result<TokenId, Status> {
+    TokenId::new(request.into_inner().id).map_err(|err| to_tonic_status(&err))
+}
+
 /// Builds [`RefundCreateParams`] with unsettled-void preference and optional partial amount.
 fn build_refund_params(req: SmartRefundRpcRequest) -> Result<RefundCreateParams, Status> {
     let mut params = RefundCreateParams::new(req.payment_id).prefer_void_if_unsettled(true);
@@ -126,8 +136,7 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<RetrieveIdRpcRequest>,
     ) -> Result<Response<PaymentJsonRpcResponse>, Status> {
-        let req = request.into_inner();
-        let id = PaymentId::new(req.id).map_err(|err| to_tonic_status(&err))?;
+        let id = PaymentId::new(request.into_inner().id).map_err(|err| to_tonic_status(&err))?;
         let p = self
             .client()
             .payments()
@@ -148,8 +157,7 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<SmartRefundRpcRequest>,
     ) -> Result<Response<SmartRefundRpcResponse>, Status> {
-        let req = request.into_inner();
-        let params = build_refund_params(req)?;
+        let params = build_refund_params(request.into_inner())?;
         let receipt = self
             .client()
             .refunds()
@@ -169,15 +177,13 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<RetrieveIdRpcRequest>,
     ) -> Result<Response<IntentJsonRpcResponse>, Status> {
-        let req = request.into_inner();
-        let id = IntentId::new(req.id).map_err(|err| to_tonic_status(&err))?;
+        let id = parse_intent_id(request)?;
         let intent = self
             .client()
             .payment_intents()
             .retrieve(&id)
             .await
             .map_err(|err| to_tonic_status(&err))?;
-
         Ok(Response::new(map_intent_response(&intent)?))
     }
 
@@ -186,15 +192,13 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<RetrieveIdRpcRequest>,
     ) -> Result<Response<IntentJsonRpcResponse>, Status> {
-        let req = request.into_inner();
-        let id = IntentId::new(req.id).map_err(|err| to_tonic_status(&err))?;
+        let id = parse_intent_id(request)?;
         let intent = self
             .client()
             .payment_intents()
             .cancel(&id)
             .await
             .map_err(|err| to_tonic_status(&err))?;
-
         Ok(Response::new(map_intent_response(&intent)?))
     }
 
@@ -203,8 +207,7 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<RetrieveIdRpcRequest>,
     ) -> Result<Response<TokenRpcResponse>, Status> {
-        let req = request.into_inner();
-        let id = TokenId::new(req.id).map_err(|err| to_tonic_status(&err))?;
+        let id = parse_token_id(request)?;
         let t = self
             .client()
             .tokens()
@@ -225,8 +228,7 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<RetrieveIdRpcRequest>,
     ) -> Result<Response<TokenRpcResponse>, Status> {
-        let req = request.into_inner();
-        let id = TokenId::new(req.id).map_err(|err| to_tonic_status(&err))?;
+        let id = parse_token_id(request)?;
         self.client()
             .tokens()
             .delete(&id)
@@ -246,15 +248,13 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<CreateInvoiceRpcRequest>,
     ) -> Result<Response<InvoiceRpcResponse>, Status> {
-        let req = request.into_inner();
-        let params = build_invoice_params(req)?;
+        let params = build_invoice_params(request.into_inner())?;
         let inv = self
             .client()
             .invoices()
             .create(&params)
             .await
             .map_err(|err| to_tonic_status(&err))?;
-
         Ok(Response::new(map_invoice_response(inv)))
     }
 
@@ -263,15 +263,13 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<RetrieveIdRpcRequest>,
     ) -> Result<Response<InvoiceRpcResponse>, Status> {
-        let req = request.into_inner();
-        let uuid = parse_invoice_uuid(&req.id)?;
+        let uuid = parse_invoice_uuid(&request.into_inner().id)?;
         let inv = self
             .client()
             .invoices()
             .cancel(uuid)
             .await
             .map_err(|err| to_tonic_status(&err))?;
-
         Ok(Response::new(map_invoice_response(inv)))
     }
 
@@ -280,8 +278,7 @@ impl MoyasarCoreResources for MoyasarCoreResourcesService {
         &self,
         request: Request<RetrieveIdRpcRequest>,
     ) -> Result<Response<CardAuthRpcResponse>, Status> {
-        let req = request.into_inner();
-        let id = CardAuthId::new(req.id).map_err(|err| to_tonic_status(&err))?;
+        let id = CardAuthId::new(request.into_inner().id).map_err(|err| to_tonic_status(&err))?;
         let auth = self
             .client()
             .card_auths()
@@ -317,7 +314,10 @@ mod tests {
             to_proto_amount(u64::MAX).expect_err("overflow").code(),
             Code::Internal
         );
-        assert_eq!(parse_currency("SAR").expect("valid currency"), Currency::SAR);
+        assert_eq!(
+            parse_currency("SAR").expect("valid currency"),
+            Currency::SAR
+        );
         assert_eq!(
             parse_currency("INVALID").expect_err("bad currency").code(),
             Code::InvalidArgument
