@@ -44,6 +44,7 @@ impl ActixAppState {
     }
 
     /// Replaces the publishable-key [`MoyasarClient`] used by storefront and Apple Pay routes.
+    #[allow(dead_code)]
     #[must_use]
     pub fn with_publishable_client(mut self, pub_client: MoyasarClient<PublishableKey>) -> Self {
         self.pub_client = Arc::new(pub_client);
