@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use some_moyasar::prelude::{
     CreatePaymentParams, Currency, MoyasarError, Payment, PaymentId, RefundCreateParams,
-    RefundReceipt, RefundsService,
+    RefundReceipt,
 };
 
 use crate::error::AppError;
@@ -53,9 +53,7 @@ pub fn router() -> Router<AppState> {
         .route("/payments/{id}/refund", post(refund_payment))
 }
 
-fn build_create_params(
-    payload: CreatePaymentRequest,
-) -> Result<CreatePaymentParams, MoyasarError> {
+fn build_create_params(payload: CreatePaymentRequest) -> Result<CreatePaymentParams, MoyasarError> {
     let mut builder = CreatePaymentParams::builder()
         .amount(payload.amount)
         .currency(payload.currency)
@@ -104,6 +102,6 @@ async fn refund_payment(
     if let Some(amount) = payload.amount {
         params = params.amount(amount);
     }
-    let receipt = RefundsService::new(&state.client).create(params).await?;
+    let receipt = state.client.refunds().create(params).await?;
     Ok(Json(receipt))
 }
