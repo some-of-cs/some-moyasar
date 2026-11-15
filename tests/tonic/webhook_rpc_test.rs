@@ -13,13 +13,14 @@ use uuid::Uuid;
 
 use super::proto::moyasar_gateway_client::MoyasarGatewayClient;
 use super::proto::moyasar_gateway_server::MoyasarGatewayServer;
-use super::proto::VerifyWebhookRequest;
+use super::proto::VerifyWebhookRpcRequest;
 use super::service::MoyasarGrpcService;
 use super::status_mapper::to_tonic_status;
 
 const TEST_API_KEY: &str = "sk_test_tonic_e2e_key_1234";
 const TEST_WEBHOOK_SECRET: &str = "whsec_tonic_e2e_secret_1234";
 
+/// Computes the lowercase hex-encoded HMAC-SHA256 signature for a payload.
 fn compute_hmac_hex(payload: &[u8], secret: &str) -> String {
     let mut mac =
         Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC-SHA256 accepts any key");
@@ -32,6 +33,7 @@ fn compute_hmac_hex(payload: &[u8], secret: &str) -> String {
     hex
 }
 
+/// Builds a sample Moyasar webhook event JSON payload for E2E verification tests.
 fn sample_webhook_payload(event_id: Uuid, secret_token: &str) -> Vec<u8> {
     serde_json::json!({
         "id": event_id,
@@ -49,6 +51,7 @@ fn sample_webhook_payload(event_id: Uuid, secret_token: &str) -> Vec<u8> {
     .into_bytes()
 }
 
+/// Spawns an in-process loopback Tonic gRPC server and returns a connected client.
 async fn spawn_webhook_test_client() -> MoyasarGatewayClient<Channel> {
     let key = SecretKey::new(TEST_API_KEY).expect("valid test secret key");
     let client = MoyasarClient::builder(key)
@@ -83,9 +86,10 @@ async fn verify_webhook_valid_hmac_succeeds() {
     let signature = compute_hmac_hex(&raw_body, TEST_WEBHOOK_SECRET);
 
     let response = client
-        .verify_webhook(VerifyWebhookRequest {
-            raw_body,
+        .verify_webhook(VerifyWebhookRpcRequest {
             signature,
+            secret_token: TEST_WEBHOOK_SECRET.to_owned(),
+            raw_body,
         })
         .await
         .expect("valid HMAC webhook should verify")
@@ -104,9 +108,10 @@ async fn verify_webhook_invalid_signature_returns_permission_denied() {
     let tampered_signature = "0".repeat(64);
 
     let status = client
-        .verify_webhook(VerifyWebhookRequest {
-            raw_body,
+        .verify_webhook(VerifyWebhookRpcRequest {
             signature: tampered_signature,
+            secret_token: TEST_WEBHOOK_SECRET.to_owned(),
+            raw_body,
         })
         .await
         .expect_err("tampered HMAC signature must fail");
@@ -120,9 +125,10 @@ async fn verify_webhook_missing_signature_returns_permission_denied() {
     let raw_body = sample_webhook_payload(Uuid::new_v4(), TEST_WEBHOOK_SECRET);
 
     let status = client
-        .verify_webhook(VerifyWebhookRequest {
-            raw_body,
+        .verify_webhook(VerifyWebhookRpcRequest {
             signature: String::new(),
+            secret_token: TEST_WEBHOOK_SECRET.to_owned(),
+            raw_body,
         })
         .await
         .expect_err("empty HMAC signature must fail");
