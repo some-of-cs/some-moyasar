@@ -52,8 +52,19 @@ zeroize = { version = "1.8", features = ["derive"] }
 [dev-dependencies]
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6"
+rocket = { version = "0.5", features = ["json"] }
 
 [[test]]
 name = "cross_cutting_integration"
 path = "tests/cross_cutting_integration.rs"
 required-features = ["unified-gateway", "stripe-compat", "test-utils"]
+
+[[test]]
+name = "rocket_integration"
+path = "tests/rocket_integration.rs"
+required-features = ["full", "test-utils"]
+
+[[example]]
+name = "rocket_server"
+path = "examples/rocket/main.rs"
+required-features = ["full"]
