@@ -2,7 +2,7 @@
   "module_id": "example-tonic",
   "branch": "feat/example-tonic",
   "base": "main",
-  "status": "in_progress",
+  "status": "merged",
   "stories": {
     "US-TONIC-1.0": {
       "branch": "feat/us-tonic-1.0-grpc-server",
@@ -16,7 +16,8 @@
     },
     "US-TONIC-3.0": {
       "branch": "feat/us-tonic-3.0-all-services",
-      "status": "in_progress",
+      "pr": 217,
+      "status": "merged",
       "units": [
         "unit-1-proto-services",
         "unit-2-service-payments-tokens",

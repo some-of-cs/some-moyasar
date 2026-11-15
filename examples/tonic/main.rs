@@ -17,7 +17,10 @@ pub mod service_payouts_ledger_sources;
 pub mod status_mapper;
 
 use proto::MoyasarPaymentGatewayServer;
+use proto_services::{MoyasarCoreResourcesServer, MoyasarPlatformResourcesServer};
 use service::MoyasarGrpcService;
+use service_payments_tokens::MoyasarCoreResourcesService;
+use service_payouts_ledger_sources::MoyasarPlatformResourcesService;
 
 /// Default gRPC listen address used when `TONIC_LISTEN_ADDR` is unset or empty.
 pub const DEFAULT_LISTEN_ADDR: &str = "[::1]:50051";
@@ -74,10 +77,16 @@ pub fn pending_shutdown() -> impl Future<Output = ()> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = build_moyasar_client()?;
     let addr = parse_listen_addr()?;
-    let svc = MoyasarPaymentGatewayServer::new(MoyasarGrpcService::new(client));
+    let unified_svc = MoyasarPaymentGatewayServer::new(MoyasarGrpcService::new(client.clone()));
+    let core_svc =
+        MoyasarCoreResourcesServer::new(MoyasarCoreResourcesService::new(client.clone()));
+    let platform_svc =
+        MoyasarPlatformResourcesServer::new(MoyasarPlatformResourcesService::new(client));
 
     tonic::transport::Server::builder()
-        .add_service(svc)
+        .add_service(unified_svc)
+        .add_service(core_svc)
+        .add_service(platform_svc)
         .serve_with_shutdown(addr, pending_shutdown())
         .await?;
 
