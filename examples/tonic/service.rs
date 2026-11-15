@@ -79,8 +79,7 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
     ) -> Result<Response<CreateIntentRpcResponse>, Status> {
         let req = request.into_inner();
         let amount_minor = parse_non_negative_amount(req.amount_minor)?;
-        let mut unified =
-            UnifiedIntentRequest::new(amount_minor, &req.currency, &req.callback_url);
+        let mut unified = UnifiedIntentRequest::new(amount_minor, &req.currency, &req.callback_url);
         if let Some(desc) = req.description.as_deref() {
             unified = unified.description(desc);
         }
