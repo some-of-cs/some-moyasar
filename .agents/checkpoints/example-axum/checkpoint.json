@@ -1,55 +1,85 @@
 {
   "moduleId": "example-axum",
-  "title": "Axum Framework Integration & E2E Test Suite",
+  "title": "Axum 0.8 Reference Server & E2E Test Suite (Full 18-Service Coverage)",
   "baseBranch": "main",
   "moduleBranch": "feat/example-axum",
+  "status": "Merged",
+  "prNumber": 193,
+  "fullServicesPrNumber": 207,
+  "updatedAt": "2026-11-15T19:35:00Z",
   "items": {
     "us-axum-1.0": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-axum-1.0-handlers",
-      "prNumber": null,
+      "prNumber": 185,
       "unitCount": 4
     },
     "us-axum-1.0/unit-1": {
-      "status": "Todo",
+      "status": "Merged",
       "branch": "feat/us-axum-1.0/unit-1-state-error",
-      "prNumber": null
+      "prNumber": 160
     },
     "us-axum-1.0/unit-2": {
-      "status": "Todo",
+      "status": "Merged",
       "branch": "feat/us-axum-1.0/unit-2-payments-routes",
-      "prNumber": null
+      "prNumber": 163
     },
     "us-axum-1.0/unit-3": {
-      "status": "Todo",
+      "status": "Merged",
       "branch": "feat/us-axum-1.0/unit-3-intents-routes",
-      "prNumber": null
+      "prNumber": 159
     },
     "us-axum-1.0/unit-4": {
-      "status": "Todo",
+      "status": "Merged",
       "branch": "feat/us-axum-1.0/unit-4-webhooks-main",
-      "prNumber": null
+      "prNumber": 162
     },
     "us-axum-2.0": {
-      "status": "In Progress",
+      "status": "Merged",
       "branch": "feat/us-axum-2.0-e2e-tests",
-      "prNumber": null,
+      "prNumber": 187,
       "unitCount": 3
     },
     "us-axum-2.0/unit-1": {
-      "status": "Todo",
+      "status": "Merged",
       "branch": "feat/us-axum-2.0/unit-1-payments-e2e",
-      "prNumber": null
+      "prNumber": 177
     },
     "us-axum-2.0/unit-2": {
-      "status": "Todo",
+      "status": "Merged",
       "branch": "feat/us-axum-2.0/unit-2-intents-e2e",
-      "prNumber": null
+      "prNumber": 172
     },
     "us-axum-2.0/unit-3": {
-      "status": "Todo",
+      "status": "Merged",
       "branch": "feat/us-axum-2.0/unit-3-webhooks-e2e",
-      "prNumber": null
+      "prNumber": 168
+    },
+    "us-axum-3.0": {
+      "status": "Merged",
+      "branch": "feat/axum-all-services",
+      "prNumber": 207,
+      "unitCount": 4
+    },
+    "us-axum-3.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/axum-services/unit-1-tokens-3ds-invoices",
+      "prNumber": 203
+    },
+    "us-axum-3.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/axum-services/unit-2-payouts-ledger",
+      "prNumber": 205
+    },
+    "us-axum-3.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/axum-services/unit-3-sources-webhooks-api",
+      "prNumber": 202
+    },
+    "us-axum-3.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/axum-services/unit-4-stripe-unified",
+      "prNumber": 204
     }
   }
 }
