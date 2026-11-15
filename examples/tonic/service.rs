@@ -1,5 +1,6 @@
 //! `MoyasarGrpcService` implementation wrapping [`UnifiedPaymentGateway`].
 
+#![allow(clippy::result_large_err)]
 use http::header::{HeaderMap, HeaderName, HeaderValue};
 use some_moyasar::prelude::{
     MoyasarClient, SecretKey, UnifiedIntentRequest, UnifiedPaymentGateway,
