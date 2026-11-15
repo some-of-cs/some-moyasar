@@ -141,7 +141,10 @@ fn webhook_secrets_resolve_dollar_var_names_behind_the_scenes_and_reject_missing
     let bad_client = MoyasarClient::builder(common::TEST_SK)
         .webhook_secret("$MOYASAR_MISSING_WHSEC_999")
         .build();
-    assert!(matches!(bad_client, Err(MoyasarError::InvalidWebhookSecret)));
+    assert!(matches!(
+        bad_client,
+        Err(MoyasarError::InvalidWebhookSecret)
+    ));
 }
 
 #[tokio::test]

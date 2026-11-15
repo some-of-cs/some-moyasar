@@ -297,7 +297,6 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
     }
 }
 
-
 #[cfg(feature = "env-keys")]
 fn resolve_client_webhook_secret(raw: String) -> Result<SecretString, ()> {
     use zeroize::Zeroize;

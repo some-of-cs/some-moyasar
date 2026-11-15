@@ -357,7 +357,9 @@ fn resolve_signing_secret(secret: &str) -> Option<zeroize::Zeroizing<String>> {
 #[must_use]
 pub fn compute_webhook_signature(payload: &[u8], secret: &str) -> String {
     let resolved = resolve_signing_secret(secret);
-    let key_bytes = resolved.as_ref().map_or(secret.as_bytes(), |s| s.as_bytes());
+    let key_bytes = resolved
+        .as_ref()
+        .map_or(secret.as_bytes(), |s| s.as_bytes());
     let mut mac =
         Hmac::<Sha256>::new_from_slice(key_bytes).expect("HMAC-SHA256 accepts keys of any size");
     mac.update(payload);
