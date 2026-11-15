@@ -8,6 +8,8 @@ use serde::Serialize;
 
 use some_moyasar::prelude::{ApiErrorType, MoyasarError};
 
+const REDACTED_MARKERS: &[&str] = &["sk_live_", "sk_test_", "whsec_"];
+
 /// Wrapper around [`MoyasarError`] that converts SDK errors into redacted JSON HTTP responses.
 #[derive(Debug)]
 pub struct AppError(pub MoyasarError);
@@ -41,11 +43,7 @@ impl IntoResponse for AppError {
 
 fn sanitize_message(message: &str) -> String {
     let trimmed = message.trim();
-    if trimmed.is_empty()
-        || trimmed.contains("sk_live_")
-        || trimmed.contains("sk_test_")
-        || trimmed.contains("whsec_")
-    {
+    if trimmed.is_empty() || REDACTED_MARKERS.iter().any(|m| trimmed.contains(m)) {
         return "Request rejected by payment gateway.".to_owned();
     }
     trimmed.to_owned()
@@ -106,11 +104,9 @@ fn map_moyasar_error(err: &MoyasarError) -> (StatusCode, &'static str, String) {
         | MoyasarError::InvalidCardAuthId
         | MoyasarError::InvalidIban
         | MoyasarError::InvalidPayoutAmount
-        | MoyasarError::InvalidWebhookUrl => (
-            StatusCode::BAD_REQUEST,
-            "validation_error",
-            err.to_string(),
-        ),
+        | MoyasarError::InvalidWebhookUrl => {
+            (StatusCode::BAD_REQUEST, "validation_error", err.to_string())
+        }
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",
