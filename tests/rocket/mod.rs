@@ -21,14 +21,19 @@ use uuid::Uuid;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
+/// Custom Rocket responder module from `examples/rocket/responder.rs`.
 #[path = "../../examples/rocket/responder.rs"]
 pub mod responder;
+/// Invoices and payouts Rocket routes from `examples/rocket/routes_invoices_payouts.rs`.
 #[path = "../../examples/rocket/routes_invoices_payouts.rs"]
 pub mod routes_invoices_payouts;
+/// Settlements Rocket routes from `examples/rocket/routes_settlements.rs`.
 #[path = "../../examples/rocket/routes_settlements.rs"]
 pub mod routes_settlements;
+/// Webhooks Rocket routes from `examples/rocket/routes_webhooks.rs`.
 #[path = "../../examples/rocket/routes_webhooks.rs"]
 pub mod routes_webhooks;
+/// Managed Rocket application state from `examples/rocket/state.rs`.
 #[path = "../../examples/rocket/state.rs"]
 pub mod state;
 
@@ -53,6 +58,14 @@ pub struct InvoiceCreateRequest {
     pub description: Option<String>,
     /// Optional callback URL for invoice status webhooks.
     pub callback_url: Option<String>,
+}
+
+/// Deterministic HTTP status and JSON body specification for mock endpoints.
+pub struct MockResponseSpec {
+    /// HTTP status code returned by the mock endpoint.
+    pub status: u16,
+    /// JSON response body returned by the mock endpoint.
+    pub body: Value,
 }
 
 /// Maps a [`MoyasarError`] to an appropriate HTTP [`Status`] for test routes.
@@ -156,13 +169,12 @@ pub async fn mount_json_endpoint(
     server: &MoyasarMockServer,
     http_method: &str,
     endpoint_path: &str,
-    status: u16,
-    body: Value,
+    response: MockResponseSpec,
 ) {
     Mock::given(method(http_method))
         .and(path(endpoint_path))
         .and(header("moyasar-version", API_VERSION))
-        .respond_with(ResponseTemplate::new(status).set_body_json(body))
+        .respond_with(ResponseTemplate::new(response.status).set_body_json(response.body))
         .mount(server.server())
         .await;
 }

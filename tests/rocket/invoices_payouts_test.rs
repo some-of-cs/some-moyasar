@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use some_moyasar::prelude::*;
 use uuid::Uuid;
 
-use super::{mount_json_endpoint, spawn_test_client};
+use super::{MockResponseSpec, mount_json_endpoint, spawn_test_client};
 
 /// Builds a deterministic Moyasar invoice JSON fixture for mock responses.
 fn sample_invoice_json(inv_id: Uuid, status: &str) -> Value {
@@ -51,8 +51,10 @@ async fn e2e_post_invoices_creates_invoice_via_tracked_client() {
         &server,
         "POST",
         "/v1/invoices",
-        201,
-        sample_invoice_json(inv_id, "created"),
+        MockResponseSpec {
+            status: 201,
+            body: sample_invoice_json(inv_id, "created"),
+        },
     )
     .await;
 
@@ -92,8 +94,10 @@ async fn e2e_post_invoice_cancel_syncs_29_day_sadad_expiry() {
         &server,
         "PUT",
         &cancel_path,
-        200,
-        sample_invoice_json(inv_id, "canceled"),
+        MockResponseSpec {
+            status: 200,
+            body: sample_invoice_json(inv_id, "canceled"),
+        },
     )
     .await;
 
@@ -132,8 +136,10 @@ async fn e2e_post_payouts_serializes_sama_payout_purpose() {
         &server,
         "POST",
         "/v1/payouts",
-        201,
-        sample_payout_json("po_rocket_001"),
+        MockResponseSpec {
+            status: 201,
+            body: sample_payout_json("po_rocket_001"),
+        },
     )
     .await;
 
@@ -172,7 +178,10 @@ async fn e2e_post_payouts_serializes_sama_payout_purpose() {
         .expect("recorded mock requests");
     assert_eq!(recorded.len(), 1);
     let outbound: Value = serde_json::from_slice(&recorded[0].body).expect("valid outbound JSON");
-    assert_eq!(outbound["purpose"], PayoutPurpose::PaymentToMerchant.as_str());
+    assert_eq!(
+        outbound["purpose"],
+        PayoutPurpose::PaymentToMerchant.as_str()
+    );
     assert_eq!(outbound["purpose"], "payment_to_merchant");
 }
 
