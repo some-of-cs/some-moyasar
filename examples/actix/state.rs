@@ -27,8 +27,7 @@ impl ActixAppState {
     /// publishable client sharing the secret client's `base_url`, and webhook verifier.
     #[must_use]
     pub fn new(client: MoyasarClient<SecretKey>, webhook_secret: &str) -> Self {
-        let pub_key = PublishableKey::new("pk_test_actix_default")
-            .expect("static publishable key is valid");
+        let pub_key = PublishableKey::new("pk_test_actix_default").expect("valid pk");
         let pub_client = MoyasarClient::builder(pub_key)
             .base_url(client.config().base_url.clone())
             .build()
