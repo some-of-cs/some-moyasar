@@ -123,8 +123,8 @@ mod tests {
         let err = MoyasarError::Api {
             error_type: ApiErrorType::InvalidRequestError,
             message: raw_upstream_body.to_owned(),
-            errors: vec![raw_upstream_body.to_owned()],
-            response_code: Some("400".to_owned()),
+            errors: Vec::new(),
+            response_code: None,
         };
         let status = to_tonic_status(&err);
         assert_eq!(status.code(), tonic::Code::InvalidArgument);
