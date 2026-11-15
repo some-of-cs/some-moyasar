@@ -154,8 +154,12 @@ async fn stripe_compat_customers_service_and_in_memory_vault_lifecycle() {
             "source": { "type": "token", "token": "token_cus101_a", "3ds": false }
         })))
         .respond_with(
-            ResponseTemplate::new(201)
-                .set_body_json(sample_module8_payment_json("pay_cus_1", "paid", 0, &recent)),
+            ResponseTemplate::new(201).set_body_json(sample_module8_payment_json(
+                "pay_cus_1",
+                "paid",
+                0,
+                &recent,
+            )),
         )
         .expect(1)
         .mount(&server)
@@ -201,8 +205,12 @@ async fn stripe_compat_subscriptions_charge_cycle_and_inactive_token_guard() {
             "source": { "type": "token", "token": "token_sub_active", "3ds": false }
         })))
         .respond_with(
-            ResponseTemplate::new(201)
-                .set_body_json(sample_module8_payment_json("pay_sub_4", "paid", 0, &recent)),
+            ResponseTemplate::new(201).set_body_json(sample_module8_payment_json(
+                "pay_sub_4",
+                "paid",
+                0,
+                &recent,
+            )),
         )
         .expect(2)
         .mount(&server)
@@ -231,7 +239,13 @@ async fn stripe_compat_subscriptions_charge_cycle_and_inactive_token_guard() {
     assert_eq!(p2.id, "pay_sub_4");
 
     let bad_params = SubscriptionCycleChargeParams::new("sub_pro_9921", 4, 29900, &inactive_tok);
-    assert!(client.subscriptions().charge_cycle(bad_params).await.is_err());
+    assert!(
+        client
+            .subscriptions()
+            .charge_cycle(bad_params)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -261,8 +275,9 @@ async fn stripe_compat_subscriptions_refund_cycle_void_pro_rata_and_plan_interva
         .and(path(&refund_path))
         .and(body_json(json!({ "amount": 19934 })))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(sample_module8_payment_json(pay_id, "refunded", 19934, &recent)),
+            ResponseTemplate::new(200).set_body_json(sample_module8_payment_json(
+                pay_id, "refunded", 19934, &recent,
+            )),
         )
         .expect(1)
         .mount(&server)
@@ -280,7 +295,11 @@ async fn stripe_compat_subscriptions_refund_cycle_void_pro_rata_and_plan_interva
         period_end: p_end,
         strategy: RefundStrategy::Full,
     };
-    let full_res = client.subscriptions().refund_cycle(&full_params).await.unwrap();
+    let full_res = client
+        .subscriptions()
+        .refund_cycle(&full_params)
+        .await
+        .unwrap();
     assert_eq!(full_res.action, ReversalAction::Voided);
 
     let pro_rata_params = SubscriptionCycleRefundParams {
@@ -330,7 +349,10 @@ async fn unified_payment_gateway_mock_server_and_webhook_hmac_verification() {
         .unwrap();
     assert_eq!(charge.transaction_id, "pay_mock_01");
 
-    let rev = client.refund_or_void("pay_mock_01", Some(5000)).await.unwrap();
+    let rev = client
+        .refund_or_void("pay_mock_01", Some(5000))
+        .await
+        .unwrap();
     assert_eq!(rev.action, "refunded");
     assert_eq!(rev.amount_reversed_minor, 5000);
 
@@ -345,7 +367,10 @@ async fn unified_payment_gateway_mock_server_and_webhook_hmac_verification() {
         format!("sha256={sig}").parse().unwrap(),
     );
     assert_eq!(
-        client.verify_webhook(&headers, &raw_bytes).unwrap().event_type,
+        client
+            .verify_webhook(&headers, &raw_bytes)
+            .unwrap()
+            .event_type,
         "payment_paid"
     );
 
