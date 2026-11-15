@@ -80,6 +80,7 @@ zeroize = { version = "1.8", features = ["derive"] }
 actix-rt = "2"
 actix-web = "4"
 axum = "0.8"
+rocket = { version = "0.5", features = ["json"] }
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 tower = { version = "0.5", features = ["util"] }
 wiremock = "0.6"
@@ -92,6 +93,11 @@ required-features = ["full"]
 [[example]]
 name = "actix_server"
 path = "examples/actix/main.rs"
+required-features = ["full"]
+
+[[example]]
+name = "rocket_server"
+path = "examples/rocket/main.rs"
 required-features = ["full"]
 
 [[test]]
@@ -107,4 +113,9 @@ required-features = ["full", "test-utils"]
 [[test]]
 name = "actix_integration"
 path = "tests/actix_integration.rs"
+required-features = ["full", "test-utils"]
+
+[[test]]
+name = "rocket_integration"
+path = "tests/rocket_integration.rs"
 required-features = ["full", "test-utils"]

@@ -1,0 +1,90 @@
+{
+  "moduleId": "example-rocket",
+  "title": "Rocket.rs Framework Integration & E2E Test Suite",
+  "branch": "feat/example-rocket",
+  "status": "Done",
+  "updatedAt": "2026-11-15T08:55:00Z",
+  "items": {
+    "us-rocket-1.0": {
+      "status": "Done",
+      "branch": "feat/us-rocket-1.0-examples-rocket",
+      "prNumber": 186,
+      "mergedSha": "0416ff1b56ce0fa1bc00b31bdcb264749c698026",
+      "unitCount": 4
+    },
+    "us-rocket-1.0/unit-1": {
+      "status": "Done",
+      "branch": "feat/us-rocket-1.0/unit-1-state-responder",
+      "prNumber": 182,
+      "mergedSha": "0416ff1b56ce0fa1bc00b31bdcb264749c698026"
+    },
+    "us-rocket-1.0/unit-2": {
+      "status": "Done",
+      "branch": "feat/us-rocket-1.0/unit-2-invoices-payouts",
+      "prNumber": 183,
+      "mergedSha": "0416ff1b56ce0fa1bc00b31bdcb264749c698026"
+    },
+    "us-rocket-1.0/unit-3": {
+      "status": "Done",
+      "branch": "feat/us-rocket-1.0/unit-3-settlements",
+      "prNumber": 184,
+      "mergedSha": "0416ff1b56ce0fa1bc00b31bdcb264749c698026"
+    },
+    "us-rocket-1.0/unit-4": {
+      "status": "Done",
+      "branch": "feat/us-rocket-1.0/unit-4-webhooks-main",
+      "prNumber": 185,
+      "mergedSha": "0416ff1b56ce0fa1bc00b31bdcb264749c698026"
+    },
+    "us-rocket-2.0": {
+      "status": "Done",
+      "branch": "feat/us-rocket-2.0-tests-rocket",
+      "prNumber": 195,
+      "mergedSha": "b1647d315f190ab1cf944a40c6fb2f2f91c335a9",
+      "unitCount": 3
+    },
+    "us-rocket-2.0/unit-1": {
+      "status": "Done",
+      "branch": "feat/us-rocket-2.0/unit-1-invoices-payouts-e2e",
+      "prNumber": 190,
+      "mergedSha": "b1647d315f190ab1cf944a40c6fb2f2f91c335a9"
+    },
+    "us-rocket-2.0/unit-2": {
+      "status": "Done",
+      "branch": "feat/us-rocket-2.0/unit-2-settlements-e2e",
+      "prNumber": 191,
+      "mergedSha": "b1647d315f190ab1cf944a40c6fb2f2f91c335a9"
+    },
+    "us-rocket-2.0/unit-3": {
+      "status": "Done",
+      "branch": "feat/us-rocket-2.0/unit-3-webhooks-e2e",
+      "prNumber": 192,
+      "mergedSha": "b1647d315f190ab1cf944a40c6fb2f2f91c335a9"
+    },
+    "us-rocket-3.0": {
+      "status": "Done",
+      "branch": "feat/us-rocket-3.0-all-services",
+      "prNumber": 211,
+      "mergedSha": "b9ca13033b405fffbba47c362aaeaf493e83ce89",
+      "unitCount": 3
+    },
+    "us-rocket-3.0/unit-1": {
+      "status": "Done",
+      "branch": "feat/us-rocket-3.0/unit-1-payments-tokens",
+      "prNumber": 209,
+      "mergedSha": "b9ca13033b405fffbba47c362aaeaf493e83ce89"
+    },
+    "us-rocket-3.0/unit-2": {
+      "status": "Done",
+      "branch": "feat/us-rocket-3.0/unit-2-ledger-sources",
+      "prNumber": 210,
+      "mergedSha": "b9ca13033b405fffbba47c362aaeaf493e83ce89"
+    },
+    "us-rocket-3.0/unit-3": {
+      "status": "Done",
+      "branch": "feat/us-rocket-3.0/unit-3-stripe-unified",
+      "prNumber": 208,
+      "mergedSha": "b9ca13033b405fffbba47c362aaeaf493e83ce89"
+    }
+  }
+}
