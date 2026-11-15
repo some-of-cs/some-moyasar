@@ -164,7 +164,7 @@ pub async fn initiate_apple_pay_session(
         body.domain_name,
         body.publishable_api_key,
     )
-    .map_err(|err| AppError(MoyasarError::invalid_request(err.to_string())))?;
+    .map_err(|err| MoyasarError::invalid_request(err.to_string()))?;
     let session = state
         .publishable_client
         .apple_pay()
