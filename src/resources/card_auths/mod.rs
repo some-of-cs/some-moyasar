@@ -20,6 +20,12 @@ pub struct CardAuthsService<'a, K: AuthKey> {
 }
 
 impl<'a, K: AuthKey> CardAuthsService<'a, K> {
+    /// Creates a new [`CardAuthsService`] borrowing `client`.
+    #[must_use]
+    pub const fn new(client: &'a MoyasarClient<K>) -> Self {
+        Self { client }
+    }
+
     /// Returns a reference to the underlying [`MoyasarClient`].
     #[must_use]
     pub const fn client(&self) -> &'a MoyasarClient<K> {
@@ -31,6 +37,6 @@ impl<K: AuthKey> MoyasarClient<K> {
     /// Returns a [`CardAuthsService`] handle for standalone 3DS card authentication endpoints.
     #[must_use]
     pub const fn card_auths(&self) -> CardAuthsService<'_, K> {
-        CardAuthsService { client: self }
+        CardAuthsService::new(self)
     }
 }

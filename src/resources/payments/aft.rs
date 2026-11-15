@@ -3,11 +3,13 @@
 use core::fmt;
 
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
 
 /// Sender identification payload for Account Funding Transactions (AFT).
 ///
-/// The `id_number` field is redacted as `"[REDACTED]"` in [`fmt::Debug`] output so
-/// government identification numbers never leak into application logs.
+/// The `id_number` and `iban` fields are redacted as `"[REDACTED]"` in [`fmt::Debug`]
+/// output so government identification numbers and IBANs never leak into application logs,
+/// and all sender fields are zeroized in memory on drop.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AftSender {
     /// Sender's legal first name.
@@ -23,6 +25,36 @@ pub struct AftSender {
     /// Optional government identification number (redacted in `Debug` output).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id_number: Option<String>,
+    /// Optional sender IBAN (redacted in `Debug` output).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iban: Option<String>,
+    /// Optional sender residential address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+}
+
+fn zeroize_opt_string(opt: &mut Option<String>) {
+    if let Some(value) = opt {
+        value.zeroize();
+    }
+}
+
+impl Zeroize for AftSender {
+    fn zeroize(&mut self) {
+        self.first_name.zeroize();
+        self.last_name.zeroize();
+        zeroize_opt_string(&mut self.nationality);
+        zeroize_opt_string(&mut self.id_type);
+        zeroize_opt_string(&mut self.id_number);
+        zeroize_opt_string(&mut self.iban);
+        zeroize_opt_string(&mut self.address);
+    }
+}
+
+impl Drop for AftSender {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 impl fmt::Debug for AftSender {
@@ -33,6 +65,8 @@ impl fmt::Debug for AftSender {
             .field("nationality", &self.nationality)
             .field("id_type", &self.id_type)
             .field("id_number", &self.id_number.as_ref().map(|_| "[REDACTED]"))
+            .field("iban", &self.iban.as_ref().map(|_| "[REDACTED]"))
+            .field("address", &self.address)
             .finish()
     }
 }
@@ -49,6 +83,8 @@ impl AftSender {
             nationality: None,
             id_type: None,
             id_number: None,
+            iban: None,
+            address: None,
         }
     }
 
@@ -62,6 +98,20 @@ impl AftSender {
     pub fn with_id(mut self, id_type: impl Into<String>, id_number: impl Into<String>) -> Self {
         self.id_type = Some(id_type.into());
         self.id_number = Some(id_number.into());
+        self
+    }
+
+    /// Sets the sender's `iban`.
+    #[must_use]
+    pub fn with_iban(mut self, iban: impl Into<String>) -> Self {
+        self.iban = Some(iban.into());
+        self
+    }
+
+    /// Sets the sender's `address`.
+    #[must_use]
+    pub fn with_address(mut self, address: impl Into<String>) -> Self {
+        self.address = Some(address.into());
         self
     }
 }
@@ -92,12 +142,15 @@ mod tests {
     }
 
     #[test]
-    fn aft_sender_debug_redacts_id_number() {
+    fn aft_sender_debug_redacts_id_number_and_iban() {
         let sender = AftSender::new("Maher", "Mansour")
             .with_nationality("SA")
-            .with_id("national_id", "1020304050");
+            .with_id("national_id", "1020304050")
+            .with_iban("SA0380000000608010167519")
+            .with_address("Riyadh");
         let dbg = format!("{sender:?}");
         assert!(dbg.contains("[REDACTED]"));
         assert!(!dbg.contains("1020304050"));
+        assert!(!dbg.contains("SA0380000000608010167519"));
     }
 }

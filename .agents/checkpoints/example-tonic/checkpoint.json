@@ -1,29 +1,81 @@
 {
-  "module_id": "example-tonic",
-  "branch": "feat/example-tonic",
-  "base": "main",
-  "status": "merged",
-  "stories": {
-    "US-TONIC-1.0": {
+  "moduleId": "example-tonic",
+  "title": "Tonic 0.12 gRPC Reference Server & E2E Test Suite (Full 18-Service Coverage)",
+  "baseBranch": "main",
+  "moduleBranch": "feat/example-tonic",
+  "status": "Merged",
+  "prNumber": 200,
+  "patchPrNumber": 218,
+  "updatedAt": "2026-11-15T19:35:00Z",
+  "items": {
+    "us-tonic-1.0": {
+      "status": "Merged",
       "branch": "feat/us-tonic-1.0-grpc-server",
-      "pr": 197,
-      "status": "merged"
+      "prNumber": 197,
+      "unitCount": 3
     },
-    "US-TONIC-2.0": {
+    "us-tonic-1.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-1.0/unit-1-proto-dtos",
+      "prNumber": 164
+    },
+    "us-tonic-1.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-1.0/unit-2-status-mapper",
+      "prNumber": 165
+    },
+    "us-tonic-1.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-1.0/unit-3-grpc-service",
+      "prNumber": 161
+    },
+    "us-tonic-2.0": {
+      "status": "Merged",
       "branch": "feat/us-tonic-2.0-grpc-e2e",
-      "pr": 198,
-      "status": "merged"
+      "prNumber": 198,
+      "patchPrNumber": 199,
+      "unitCount": 2
     },
-    "US-TONIC-3.0": {
+    "us-tonic-2.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-2.0/unit-1-charge-refund-e2e",
+      "prNumber": 174
+    },
+    "us-tonic-2.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-2.0/unit-2-webhook-error-e2e",
+      "prNumber": 176
+    },
+    "us-tonic-2.0/patch-1": {
+      "status": "Merged",
+      "branch": "patch/us-tonic-2.0-e2e-fixes",
+      "prNumber": 199
+    },
+    "us-tonic-3.0": {
+      "status": "Merged",
       "branch": "feat/us-tonic-3.0-all-services",
-      "pr": 217,
-      "status": "merged",
-      "units": [
-        "unit-1-proto-services",
-        "unit-2-service-payments-tokens",
-        "unit-3-service-payouts-ledger-sources",
-        "unit-4-all-services-e2e"
-      ]
+      "prNumber": 217,
+      "unitCount": 4
+    },
+    "us-tonic-3.0/unit-1": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-3.0/unit-1-proto-services",
+      "prNumber": 213
+    },
+    "us-tonic-3.0/unit-2": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-3.0/unit-2-service-payments-tokens",
+      "prNumber": 214
+    },
+    "us-tonic-3.0/unit-3": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-3.0/unit-3-service-payouts-ledger-sources",
+      "prNumber": 215
+    },
+    "us-tonic-3.0/unit-4": {
+      "status": "Merged",
+      "branch": "feat/us-tonic-3.0/unit-4-all-services-e2e",
+      "prNumber": 216
     }
   }
 }

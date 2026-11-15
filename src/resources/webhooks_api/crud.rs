@@ -62,6 +62,28 @@ pub fn validate_webhook_url(url: &str) -> Result<(), MoyasarError> {
     validate_https_url(url)
 }
 
+/// Validates a webhook callback destination URL (`https://`, non-empty host, no credentials or fragment).
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::InvalidWebhookUrl`] if `url` is not a valid `https://` webhook URL.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::kernel::error::MoyasarError;
+/// use some_moyasar::resources::webhooks_api::crud::validate_webhook_callback_url;
+///
+/// assert!(validate_webhook_callback_url("https://merchant.example/webhooks").is_ok());
+/// assert!(matches!(
+///     validate_webhook_callback_url("http://merchant.example/webhooks"),
+///     Err(MoyasarError::InvalidWebhookUrl)
+/// ));
+/// ```
+pub fn validate_webhook_callback_url(url: &str) -> Result<(), MoyasarError> {
+    validate_https_url(url)
+}
+
 fn has_valid_https_prefix(trimmed: &str) -> bool {
     trimmed.starts_with("https://")
         && !trimmed.starts_with("https:///")

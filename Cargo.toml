@@ -1,10 +1,21 @@
 [package]
 name = "some-moyasar"
-version = "0.1.0"
+version = "0.8.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
-description = "Idiomatically, microkernel-architected Rust SDK for the Moyasar Payment Gateway"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "Idiomatic, microkernel-architected Rust SDK and constant-time webhook verification engine for the Moyasar Payment Gateway"
+readme = "README.md"
+homepage = "https://github.com/some-of-cs/some-moyasar"
+documentation = "https://docs.rs/some-moyasar"
 repository = "https://github.com/some-of-cs/some-moyasar"
+keywords = ["moyasar", "payments", "saudi-arabia", "mada", "fintech"]
+categories = ["api-bindings", "web-programming::http-client", "asynchronous", "authentication"]
+include = ["src/**/*", "examples/**/*", "Cargo.toml", "LICENSE", "README.md"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = [

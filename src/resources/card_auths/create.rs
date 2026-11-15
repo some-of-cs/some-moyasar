@@ -9,7 +9,7 @@ use zeroize::Zeroize;
 
 use crate::kernel::auth::AuthKey;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
-use crate::kernel::transport::send_with_retry;
+use crate::kernel::transport::{decode_json_response, send_with_retry};
 use crate::kernel::types::{Amount, Currency};
 use crate::resources::card_auths::CardAuthsService;
 use crate::resources::card_auths::models::CardAuthentication;
@@ -100,17 +100,83 @@ impl CreateCardAuthParams {
         self
     }
 
-    /// Validates that `callback_url` uses the `https://` scheme with a non-empty host.
+    /// Validates that `amount > 0`, `callback_url` is a valid `https://` URL without userinfo or
+    /// fragments, and cardholder / card fields are valid.
     pub fn validate(&self) -> Result<(), MoyasarError> {
-        let rest = self
-            .callback_url
-            .strip_prefix("https://")
-            .ok_or(MoyasarError::InvalidBaseUrl)?;
-        if rest.is_empty() {
+        if self.amount.minor_units() <= 0 {
+            let msg = "card auth amount must be greater than zero";
+            return Err(MoyasarError::invalid_request(msg));
+        }
+        if !is_valid_https_callback_url(&self.callback_url) {
             return Err(MoyasarError::InvalidBaseUrl);
         }
-        Ok(())
+        self.validate_card_inputs()
     }
+
+    fn validate_card_inputs(&self) -> Result<(), MoyasarError> {
+        if self.name.trim().is_empty() {
+            let msg = "cardholder name must not be empty";
+            return Err(MoyasarError::invalid_request(msg));
+        }
+        #[cfg(feature = "payments")]
+        {
+            crate::resources::payments::card_validation::validate_card_fields(
+                self.number.expose_secret(),
+                self.month,
+                self.year,
+                self.cvc.expose_secret(),
+            )
+        }
+        #[cfg(not(feature = "payments"))]
+        {
+            validate_basic_card_fields(
+                self.number.expose_secret(),
+                self.month,
+                self.year,
+                self.cvc.expose_secret(),
+            )
+        }
+    }
+}
+
+fn has_https_host(parsed: &reqwest::Url) -> bool {
+    parsed.scheme() == "https" && parsed.host_str().is_some()
+}
+
+fn has_no_userinfo_or_fragment(parsed: &reqwest::Url) -> bool {
+    parsed.username().is_empty() && parsed.password().is_none() && parsed.fragment().is_none()
+}
+
+fn is_valid_https_callback_url(url: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    has_https_host(&parsed) && has_no_userinfo_or_fragment(&parsed)
+}
+
+#[cfg(not(feature = "payments"))]
+fn validate_basic_card_fields(
+    number: &str,
+    month: u8,
+    year: u16,
+    cvc: &str,
+) -> Result<(), MoyasarError> {
+    let digits = number.bytes().filter(u8::is_ascii_digit).count();
+    if !(12..=19).contains(&digits) {
+        return Err(MoyasarError::InvalidCardNumber);
+    }
+    if !(1..=12).contains(&month) || year == 0 {
+        return Err(MoyasarError::CardExpired);
+    }
+    validate_basic_cvc(cvc)
+}
+
+#[cfg(not(feature = "payments"))]
+fn validate_basic_cvc(cvc: &str) -> Result<(), MoyasarError> {
+    if !(3..=4).contains(&cvc.len()) || !cvc.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(MoyasarError::InvalidCvc);
+    }
+    Ok(())
 }
 
 impl fmt::Debug for CreateCardAuthParams {
@@ -224,17 +290,7 @@ impl<'a, K: AuthKey> CardAuthsService<'a, K> {
             .await;
         body_bytes.zeroize();
         let response = send_res.map_err(MoyasarError::from)?;
-        let status = response.status();
-        let body = response.text().await.map_err(MoyasarError::from)?;
-        if !status.is_success() {
-            return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-        }
-        serde_json::from_str::<CardAuthentication>(&body).map_err(|err| MoyasarError::Api {
-            error_type: ApiErrorType::Unknown,
-            message: format!("failed to decode CardAuthentication response: {err}"),
-            errors: Vec::new(),
-            response_code: None,
-        })
+        decode_json_response(response).await
     }
 }
 

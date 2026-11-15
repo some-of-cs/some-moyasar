@@ -57,30 +57,87 @@ pub fn webhook_event_fixture_at(event_type: &str, secret_token: &str, created_at
     })
 }
 
+/// Fluent builder for constructing deterministic Moyasar webhook JSON fixtures.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::test_utils::fixtures::WebhookFixtureBuilder;
+///
+/// let payload = WebhookFixtureBuilder::new("payment_paid", "whsec_test_123")
+///     .created_at("2026-11-14T12:00:00Z")
+///     .build();
+/// assert_eq!(payload["type"], "payment_paid");
+/// assert_eq!(payload["data"]["status"], "paid");
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct WebhookFixtureBuilder<'a> {
+    event_type: &'a str,
+    secret_token: &'a str,
+    created_at: &'a str,
+}
+
+impl<'a> WebhookFixtureBuilder<'a> {
+    /// Creates a new [`WebhookFixtureBuilder`] defaulted to [`FIXTURE_TIMESTAMP`].
+    #[must_use]
+    pub const fn new(event_type: &'a str, secret_token: &'a str) -> Self {
+        Self {
+            event_type,
+            secret_token,
+            created_at: FIXTURE_TIMESTAMP,
+        }
+    }
+
+    /// Overrides the RFC 3339 `created_at` timestamp for the generated fixture.
+    #[must_use]
+    pub const fn created_at(mut self, created_at: &'a str) -> Self {
+        self.created_at = created_at;
+        self
+    }
+
+    /// Builds the deterministic JSON [`Value`] webhook payload.
+    #[must_use]
+    pub fn build(self) -> Value {
+        webhook_event_fixture_at(self.event_type, self.secret_token, self.created_at)
+    }
+}
+
+const EVENT_PAYMENT_STATUS: &[(&str, &str)] = &[
+    ("payment_failed", "failed"),
+    ("payment_faild", "failed"),
+    ("payment_refunded", "refunded"),
+    ("payment_voided", "voided"),
+    ("payment_authorized", "authorized"),
+    ("payment_captured", "captured"),
+    ("payment_verified", "verified"),
+    ("payment_expired", "expired"),
+    ("payment_abandoned", "initiated"),
+];
+
+fn resolve_payment_fixture_status(event_type: &str) -> &'static str {
+    EVENT_PAYMENT_STATUS
+        .iter()
+        .find(|&&(evt, _)| evt == event_type)
+        .map_or("paid", |&(_, status)| status)
+}
+
+fn captured_fixture_fields(status: &str) -> (u64, &'static str) {
+    if matches!(status, "paid" | "captured" | "refunded") {
+        (15000_u64, "150.00 SAR")
+    } else {
+        (0_u64, "0.00 SAR")
+    }
+}
+
 fn payment_fixture_data(event_type: &str, created_at: &str) -> Value {
-    let status = match event_type {
-        "payment_failed" | "payment_faild" => "failed",
-        "payment_refunded" => "refunded",
-        "payment_voided" => "voided",
-        "payment_authorized" => "authorized",
-        "payment_captured" => "captured",
-        "payment_verified" => "verified",
-        "payment_expired" => "expired",
-        "payment_abandoned" => "initiated",
-        _ => "paid",
-    };
+    let status = resolve_payment_fixture_status(event_type);
     let refunded = if status == "refunded" { 15000_u64 } else { 0 };
     let refunded_fmt = if refunded > 0 {
         "150.00 SAR"
     } else {
         "0.00 SAR"
     };
-    let is_captured = matches!(status, "paid" | "captured" | "refunded");
-    let (captured, captured_fmt) = if is_captured {
-        (15000_u64, "150.00 SAR")
-    } else {
-        (0_u64, "0.00 SAR")
-    };
+    let (captured, captured_fmt) = captured_fixture_fields(status);
     json!({
         "id": "pay_01J9FIXTURE",
         "status": status,

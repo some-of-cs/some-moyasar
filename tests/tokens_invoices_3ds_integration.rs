@@ -106,6 +106,18 @@ async fn invoices_create_bulk_and_batch_size_guards() {
         .unwrap();
     assert_eq!(bulk.len(), 1);
 
+    server.reset().await;
+    common::mount_json_endpoint(
+        &server,
+        ("POST", "/v1/invoices/bulk"),
+        201,
+        json!(vec![inv_json; 50]),
+    )
+    .await;
+    let batch_50 = vec![params.clone(); 50];
+    let bulk_50 = client.invoices().create_bulk(batch_50).await.unwrap();
+    assert_eq!(bulk_50.len(), 50);
+
     assert!(client.invoices().create_bulk(Vec::new()).await.is_err());
     assert!(
         client
@@ -225,4 +237,63 @@ async fn card_auths_create_retrieve_mpi_bridge_and_cavv_redaction() {
             .and_then(|d| d.eci.as_deref()),
         Some("05")
     );
+}
+
+#[test]
+fn negative_token_and_card_auth_ids_validate_params_and_case_insensitive_cavv_redaction() {
+    for bad_token_id in ["token_", "token_.", "token_../admin", "token_%2f"] {
+        let res = TokenId::new(bad_token_id);
+        assert!(matches!(res, Err(MoyasarError::InvalidTokenId)));
+    }
+    for bad_ca_id in ["ca_", "ca_.", "ca_../admin", "ca_%2f"] {
+        let res = CardAuthId::new(bad_ca_id);
+        assert!(matches!(res, Err(MoyasarError::InvalidCardAuthId)));
+    }
+
+    let zero_amt = CreateCardAuthParams::new(
+        Amount::from_minor(0),
+        Currency::SAR,
+        "https://merchant.example.com/3ds-cb",
+        "MAHER MANSOUR",
+        "4111111111111111".into(),
+        "123".into(),
+        12,
+        2029,
+    );
+    assert!(zero_amt.is_err());
+
+    for bad_url in [
+        "http://merchant.example.com/3ds-cb",
+        "https://user:pass@merchant.example.com/3ds-cb",
+        "https://merchant.example.com/3ds-cb#frag",
+    ] {
+        let bad_cb = CreateCardAuthParams::new(
+            Amount::from_minor(15000),
+            Currency::SAR,
+            bad_url,
+            "MAHER MANSOUR",
+            "4111111111111111".into(),
+            "123".into(),
+            12,
+            2029,
+        );
+        assert!(matches!(bad_cb, Err(MoyasarError::InvalidBaseUrl)));
+    }
+
+    let mut extra = std::collections::BTreeMap::new();
+    extra.insert("CAVV".to_string(), json!("UPPER_CASE_CAVV_SECRET"));
+    let auth_key = "Authentication_Value".to_string();
+    extra.insert(auth_key, json!("MIXED_CASE_AUTH_SECRET"));
+    let mpi = ExternalMpiData {
+        eci: Some("05".to_string()),
+        authentication_value: None,
+        ds_transaction_id: Some("ds-1".to_string()),
+        version: None,
+        transaction_status: None,
+        extra,
+    };
+    let mpi_dbg = format!("{mpi:?}");
+    assert!(mpi_dbg.contains("[REDACTED]"));
+    assert!(!mpi_dbg.contains("UPPER_CASE_CAVV_SECRET"));
+    assert!(!mpi_dbg.contains("MIXED_CASE_AUTH_SECRET"));
 }

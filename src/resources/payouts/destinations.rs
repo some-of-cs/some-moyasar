@@ -1,5 +1,7 @@
 //! Payout destination models and validators (`US-5.2.0` Unit 3).
 
+use core::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use crate::kernel::error::{ApiErrorType, MoyasarError};
@@ -7,7 +9,7 @@ use crate::kernel::response_code::FieldError;
 pub use crate::resources::payouts::accounts_retrieve::validate_sa_iban;
 
 /// Bank account destination for a Moyasar payout disbursement.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BankDestination {
     /// Beneficiary Saudi IBAN (`SA` followed by 22 ASCII digits).
     pub iban: String,
@@ -21,11 +23,31 @@ pub struct BankDestination {
     pub city: String,
 }
 
+impl fmt::Debug for BankDestination {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BankDestination")
+            .field("iban", &"[REDACTED]")
+            .field("name", &self.name)
+            .field("mobile", &"[REDACTED]")
+            .field("country", &self.country)
+            .field("city", &self.city)
+            .finish()
+    }
+}
+
 /// Mobile wallet destination for a Moyasar payout disbursement.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WalletDestination {
     /// Beneficiary Saudi mobile number (`05XXXXXXXX`, `+9665XXXXXXXX`, or `9665XXXXXXXX`).
     pub mobile: String,
+}
+
+impl fmt::Debug for WalletDestination {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WalletDestination")
+            .field("mobile", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// Polymorphic payout destination tagged by `"type"` (`"bank"` or `"wallet"`).

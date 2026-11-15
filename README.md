@@ -18,6 +18,8 @@
 [Quick Start](#quick-start) •
 [Webhook Security](#constant-time-webhook-verification-engine) •
 [API Coverage](#complete-moyasar-services--api-coverage) •
+[Roadmap (v0.1–v0.8)](#development-status--release-roadmap-v010--v080) •
+[Framework Servers](#framework-reference-servers--e2e-suites) •
 [some-payment Ecosystem](#cross-gateway-interoperability-with-some-payment) •
 [Sponsors](#backers--corporate-sponsors)
 
@@ -80,7 +82,7 @@ Building high-concurrency Rust backend systems for Saudi Arabia and GCC commerce
 
 ```toml
 [dependencies]
-some-moyasar = "0.1.0"
+some-moyasar = "0.8.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -88,7 +90,7 @@ tokio = { version = "1", features = ["full"] }
 
 ```toml
 [dependencies]
-some-moyasar = { version = "0.1.0", features = [
+some-moyasar = { version = "0.8.0", features = [
     "full",
     "stripe-compat",
     "some-payment-trait"
@@ -264,6 +266,59 @@ fn verify_moyasar_webhook(raw_body: &[u8], shared_secret: &str) {
 
 ---
 
+## Development Status & Release Roadmap (v0.1.0 – v0.8.0)
+
+All 8 SDK modules (`v0.1.0` through `v0.8.0`) and all 4 framework reference servers + E2E integration suites covering all 18 crate services are **Merged / Completed (`v0.8.0` Stable)**:
+
+| Milestone / Module | Version | Feature Flags | Scope & Services | PR(s) | Status |
+| :--- | :---: | :--- | :--- | :---: | :---: |
+| **Module 1: Core Microkernel & Transport** | `v0.1.0` | `core`, `env-keys`, `async-stream` | `MoyasarClient`, Basic Auth typestate keys (`SecretKey` / `PublishableKey`), `given_id` UUIDv4/v5 idempotency, `Metadata`, `Amount`, `Currency`, `MoyasarError`, `Paginator` | [#15](https://github.com/some-of-cs/some-moyasar/pull/15) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Module 2: Payments Service** | `v0.2.0` | `payments` | `PaymentsService` (`create`, `retrieve`, `list`, `update`, `refund`, `capture`, `void`, `reverse`), Cards, Apple Pay, Samsung Pay, STC Pay OTP, SADAD, Splits & AFT | [#80](https://github.com/some-of-cs/some-moyasar/pull/80) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Module 3: Payment Intents** | `v0.3.0` | `payment-intents` | `PaymentIntentsService` (`create`, `fulfill`, `retrieve`, `cancel`) & 1-hour `is_usable()` expiry guard | [#51](https://github.com/some-of-cs/some-moyasar/pull/51) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Module 4: Tokens, Invoices & 3D Secure** | `v0.4.0` | `tokens`, `invoices`, `card-auths`, `tokens-invoices-3ds` | `TokensService`, `InvoicesService` (single & bulk e-invoices), `CardAuthsService` (standalone 3DS & MPI extraction) | [#79](https://github.com/some-of-cs/some-moyasar/pull/79) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Module 5: Payouts & Payout Accounts** | `v0.5.0` | `payouts` | `PayoutAccountsService` & `PayoutsService` (single & bulk disbursements across `internal`, `ips`, and `sarie` with 20 Saudi purpose codes) | [#129](https://github.com/some-of-cs/some-moyasar/pull/129) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Module 6: Settlements, Transfers & Ledger** | `v0.6.0` | `settlements-ledger` (`settlements`) | `SettlementsService` (lines & merchant balance), `TransfersService`, `InternalTransactionsService` | [#114](https://github.com/some-of-cs/some-moyasar/pull/114) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Module 7: Sources, Apple Pay & Webhooks** | `v0.7.0` | `sources`, `webhooks-api`, `webhook-engine`, `sources-webhooks` | `SourcesService` (BIN/IIN lookup), `ApplePayService`, `WebhooksService` CRUD, `ConstantTimeSecretVerifier` & `InMemoryDeduplicator` | [#131](https://github.com/some-of-cs/some-moyasar/pull/131) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Module 8: Cross-Cutting Hardening & DX** | `v0.8.0` | `stripe-compat`, `unified-gateway`, `some-payment-trait`, `test-utils`, `full` | `RefundsService`, `CustomersService`, `SubscriptionsService`, `InMemoryCustomerVault`, `UnifiedPaymentGateway`, `MoyasarMockServer`, security & DX hardening | [#152](https://github.com/some-of-cs/some-moyasar/pull/152) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Axum 0.8 Reference Server** | `v0.8.0` | `full`, `test-utils` | `axum_server` (`examples/axum/`) & E2E suite `axum_integration` (`axum_e2e`) across all 18 services | [#193](https://github.com/some-of-cs/some-moyasar/pull/193), [#207](https://github.com/some-of-cs/some-moyasar/pull/207) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Actix-Web 4 Reference Server** | `v0.8.0` | `full`, `test-utils` | `actix_server` (`examples/actix/`) & E2E suite `actix_integration` (`actix_e2e`) across all 18 services | [#194](https://github.com/some-of-cs/some-moyasar/pull/194), [#206](https://github.com/some-of-cs/some-moyasar/pull/206) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Rocket.rs 0.5 Reference Server** | `v0.8.0` | `full`, `test-utils` | `rocket_server` (`examples/rocket/`) & E2E suite `rocket_integration` (`rocket_e2e`) across all 18 services | [#212](https://github.com/some-of-cs/some-moyasar/pull/212) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Tonic 0.12 gRPC Reference Server** | `v0.8.0` | `full`, `test-utils` | `tonic_grpc_server` (`examples/tonic/`) & E2E suite `tonic_integration` (`tonic_e2e`) across all 18 services | [#200](https://github.com/some-of-cs/some-moyasar/pull/200), [#218](https://github.com/some-of-cs/some-moyasar/pull/218) | **Merged / Completed (`v0.8.0` Stable)** |
+
+---
+
+## Framework Reference Servers & E2E Suites
+
+Production-grade reference servers and wire-level E2E test suites (`MoyasarMockServer`) are included for **Axum 0.8**, **Actix-Web 4**, **Rocket.rs 0.5**, and **Tonic 0.12 gRPC**, exercising all 18 crate services:
+
+| Web / RPC Framework | Example Target (`examples/`) | E2E Test Suite (`tests/`) | Run Example Server | Run E2E Test Suite |
+| :--- | :--- | :--- | :--- | :--- |
+| **Axum 0.8** | `axum_server` | `axum_integration` (`axum_e2e`) | `cargo run --example axum_server --features full` | `cargo test --test axum_integration --features "full,test-utils"` |
+| **Actix-Web 4** | `actix_server` | `actix_integration` (`actix_e2e`) | `cargo run --example actix_server --features full` | `cargo test --test actix_integration --features "full,test-utils"` |
+| **Rocket.rs 0.5** | `rocket_server` | `rocket_integration` (`rocket_e2e`) | `cargo run --example rocket_server --features full` | `cargo test --test rocket_integration --features "full,test-utils"` |
+| **Tonic 0.12 gRPC** | `tonic_grpc_server` | `tonic_integration` (`tonic_e2e`) | `cargo run --example tonic_grpc_server --features full` | `cargo test --test tonic_integration --features "full,test-utils"` |
+
+```bash
+# Run any reference server (requires MOYASAR_SECRET_KEY and MOYASAR_WEBHOOK_SECRET in env)
+cargo run --example axum_server --features full
+cargo run --example actix_server --features full
+cargo run --example rocket_server --features full
+cargo run --example tonic_grpc_server --features full
+
+# Run framework E2E integration suites (axum_e2e, actix_e2e, rocket_e2e, tonic_e2e)
+cargo test --test axum_integration --features "full,test-utils"
+cargo test --test actix_integration --features "full,test-utils"
+cargo test --test rocket_integration --features "full,test-utils"
+cargo test --test tonic_integration --features "full,test-utils"
+# Or by suite alias:
+# cargo test --test axum_e2e --features "full,test-utils"
+# cargo test --test actix_e2e --features "full,test-utils"
+# cargo test --test rocket_e2e --features "full,test-utils"
+# cargo test --test tonic_e2e --features "full,test-utils"
+```
+
+---
+
 ## Cross-Gateway Interoperability with `some-payment`
 
 `some-moyasar` is part of the unified **[`some-payment`](https://github.com/some-of-cs/some-payment)** ecosystem alongside **[`some-stripe`](https://github.com/some-of-cs/some-stripe)** and **[`some-paymob`](https://github.com/some-of-cs/some-paymob)**. Enable the `some-payment-trait` feature to plug `MoyasarClient` directly into `some-payment`'s country-aware router and cross-gateway capability composer—for example:
@@ -312,17 +367,17 @@ fn verify_moyasar_webhook(raw_body: &[u8], shared_secret: &str) {
 
 We welcome community contributions! To ensure code quality and consistency:
 
-1. Ensure all tests and doc-tests pass:
+1. Ensure all unit, integration, and doc-tests pass across all features:
    ```bash
-   cargo test
+   cargo test --all-features
    ```
 2. Ensure code compiles without warnings on the Rust 2024 edition:
    ```bash
-   cargo clippy --all-targets -- -D warnings
+   cargo clippy --all-targets --all-features -- -D warnings
    ```
 3. Format all code according to standard `rustfmt`:
    ```bash
-   cargo fmt --check
+   cargo fmt --all -- --check
    ```
 
 ---

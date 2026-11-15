@@ -312,3 +312,45 @@ fn non_json_error_fallback_truncates_at_max_error_body_chars() {
         other => panic!("expected ServerError, got {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn transport_rejects_response_body_exceeding_two_mib_limit() {
+    let (server, client) = common::start_secret_client_with_retries(1).await;
+    let oversized = "x".repeat(MAX_RESPONSE_BODY_BYTES + 1);
+    common::mount_raw_endpoint(&server, ("GET", "/v1/payments"), 200, &oversized).await;
+
+    let err = client
+        .payments()
+        .list(&ListParams::new().page(1))
+        .await
+        .expect_err("response exceeding 2 MiB must fail");
+    assert!(!err.is_retryable());
+    assert!(err.to_string().contains("2 MiB"));
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
+
+#[test]
+fn security_url_spoofing_path_segments_and_checked_amount_boundaries() {
+    for spoofed_url in [
+        "https://user:pass@api.moyasar.com",
+        "http://localhost.evil.com",
+        "https://api.moyasar.com#frag",
+    ] {
+        let res = MoyasarClient::builder(common::TEST_SK)
+            .base_url(spoofed_url)
+            .build();
+        assert!(matches!(res, Err(MoyasarError::InvalidBaseUrl)));
+    }
+
+    for bad_segment in [".", "%2f", "pay_%2f", "pay_\0", "../admin"] {
+        assert!(!is_valid_path_segment(bad_segment));
+        assert!(validate_path_segment(bad_segment, "id").is_err());
+    }
+
+    let checked = Amount::checked_from_major(i64::MAX, Currency::SAR);
+    assert_eq!(checked, None);
+    let sat = Amount::from_major(i64::MAX, Currency::SAR);
+    assert_eq!(sat, Amount::from_minor(i64::MAX));
+    assert_eq!(Amount::from(u64::MAX), Amount::from_minor(i64::MAX));
+    assert!(u64::try_from(Amount::from_minor(-1)).is_err());
+}

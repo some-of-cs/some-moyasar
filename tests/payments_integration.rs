@@ -289,9 +289,21 @@ async fn stc_pay_otp_verification_succeeds_on_200_and_rejects_non_https_or_inval
         .unwrap_err();
     assert!(matches!(http_err, MoyasarError::InvalidBaseUrl));
 
+    for ssrf_url in [
+        "https://evil.example.com/v1/stc_pays/1/proceed",
+        "http://localhost.evil.com/v1/stc_pays/1/proceed",
+    ] {
+        let ssrf_err = client
+            .payments()
+            .verify_stc_otp(ssrf_url, "123456")
+            .await
+            .unwrap_err();
+        assert!(matches!(ssrf_err, MoyasarError::InvalidBaseUrl));
+    }
+
     let bad_otp_err = client
         .payments()
-        .verify_stc_otp("https://api.moyasar.com/v1/stc/verify", "   ")
+        .verify_stc_otp(&valid_url, "   ")
         .await
         .unwrap_err();
     assert!(matches!(bad_otp_err, MoyasarError::Api { .. }));
@@ -444,4 +456,44 @@ async fn payments_create_retries_503_with_deterministic_given_id_and_rejects_mal
     ));
     assert!(!err.is_retryable());
     assert_eq!(bad_server.received_requests().await.unwrap().len(), 1);
+}
+
+#[test]
+fn reversal_mada_sadad_and_split_overflow_exact_boundaries() {
+    let client = MoyasarClient::new(common::TEST_SK).unwrap();
+    let created_at = Utc.with_ymd_and_hms(2026, 11, 14, 10, 0, 0).unwrap();
+    let paid: Payment = serde_json::from_value(sample_payment_json(
+        "pay_boundary_1",
+        "paid",
+        "mada",
+        "2026-11-14T10:00:00Z",
+    ))
+    .unwrap();
+
+    let at_7199s = created_at + ChronoDuration::seconds(7_199);
+    let at_7200s = created_at + ChronoDuration::seconds(7_200);
+    let plan_7199 = client.payments().plan_reversal(&paid, at_7199s);
+    assert_eq!(plan_7199, ReversalStrategy::Void);
+    let plan_7200 = client.payments().plan_reversal(&paid, at_7200s);
+    assert_eq!(plan_7200, ReversalStrategy::Refund { amount: None });
+
+    let at_14d = created_at + ChronoDuration::days(14);
+    let at_14d_plus_1s = at_14d + ChronoDuration::seconds(1);
+    assert!(!is_mada_hold_likely_expired(created_at, at_14d));
+    assert!(is_mada_hold_likely_expired(created_at, at_14d_plus_1s));
+
+    let at_29d = created_at + ChronoDuration::days(29);
+    let at_29d_plus_1s = at_29d + ChronoDuration::seconds(1);
+    let ok_sadad = validate_sadad_expiry_with_invoice(Some(at_29d), Some(at_29d), created_at);
+    assert!(ok_sadad.is_ok());
+    let err_sadad = validate_sadad_expiry_with_invoice(Some(at_29d_plus_1s), None, created_at);
+    assert!(matches!(err_sadad, Err(MoyasarError::SadadExpiryTooFar)));
+
+    let s_max = PaymentSplitRequest::new(u64::MAX, SplitRecipientType::Entity, Uuid::nil());
+    let s_one = PaymentSplitRequest::new(1, SplitRecipientType::Entity, Uuid::nil());
+    let err_splits = validate_splits(&[s_max, s_one], u64::MAX);
+    assert!(matches!(
+        err_splits,
+        Err(MoyasarError::SplitTotalExceedsAmount)
+    ));
 }

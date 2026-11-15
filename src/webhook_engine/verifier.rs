@@ -179,6 +179,22 @@ impl ConstantTimeSecretVerifier {
         Ok(event)
     }
 
+    /// Creates a [`ConstantTimeSecretVerifier`] from `shared_secret`, returning
+    /// [`crate::kernel::error::MoyasarError::InvalidWebhookSecret`] if the secret is empty
+    /// or refers to an unresolved `"$VAR_NAME"` environment variable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::kernel::error::MoyasarError::InvalidWebhookSecret`] on an invalid or
+    /// missing secret.
+    pub fn from_secret(shared_secret: &str) -> Result<Self, crate::kernel::error::MoyasarError> {
+        let verifier = Self::with_default_tolerance(shared_secret);
+        if !verifier.valid_secret {
+            return Err(crate::kernel::error::MoyasarError::InvalidWebhookSecret);
+        }
+        Ok(verifier)
+    }
+
     /// Verifies `raw_body` against [`Utc::now()`] and constructs a [`WebhookEvent`].
     ///
     /// # Errors
@@ -187,6 +203,36 @@ impl ConstantTimeSecretVerifier {
     pub fn verify_and_construct(&self, raw_body: &[u8]) -> Result<WebhookEvent, WebhookError> {
         self.verify_and_construct_at(raw_body, Utc::now())
     }
+}
+
+/// Verifies `provided_token` against `expected_secret` in constant time using domain-separated
+/// Double-HMAC-SHA256 (`DOMAIN_SEPARATION_KEY`).
+///
+/// # Errors
+///
+/// Returns [`WebhookError::SecretMismatch`] if `expected_secret` is invalid or `provided_token`
+/// does not match.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::webhook_engine::verifier::verify_signature;
+///
+/// assert!(verify_signature("whsec_live_123", "whsec_live_123").is_ok());
+/// assert!(verify_signature("whsec_live_123", "whsec_wrong").is_err());
+/// ```
+pub fn verify_signature(expected_secret: &str, provided_token: &str) -> Result<(), WebhookError> {
+    let verifier = ConstantTimeSecretVerifier::with_default_tolerance(expected_secret);
+    let mut provided_digest = ConstantTimeSecretVerifier::compute_digest(provided_token.as_bytes());
+    let matched = provided_digest
+        .ct_eq(&verifier.expected_secret_digest)
+        .unwrap_u8()
+        == 1;
+    provided_digest.zeroize();
+    if !verifier.valid_secret || !matched {
+        return Err(WebhookError::SecretMismatch);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

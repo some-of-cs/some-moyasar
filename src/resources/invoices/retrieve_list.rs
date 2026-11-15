@@ -149,14 +149,8 @@ impl ListInvoicesParams {
     }
 }
 
-const fn status_query_value(status: InvoiceStatus) -> Option<&'static str> {
-    match status {
-        InvoiceStatus::Created => Some("created"),
-        InvoiceStatus::Paid => Some("paid"),
-        InvoiceStatus::Canceled => Some("canceled"),
-        InvoiceStatus::Expired => Some("expired"),
-        InvoiceStatus::Unknown => None,
-    }
+fn status_query_value(status: InvoiceStatus) -> Option<&'static str> {
+    (!matches!(status, InvoiceStatus::Unknown)).then(|| status.as_str())
 }
 
 impl<'a, K: SecretAuthKey> InvoicesService<'a, K> {

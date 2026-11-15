@@ -21,6 +21,12 @@ pub struct TokensService<'a, K: AuthKey> {
 }
 
 impl<'a, K: AuthKey> TokensService<'a, K> {
+    /// Creates a new [`TokensService`] borrowing `client`.
+    #[must_use]
+    pub const fn new(client: &'a MoyasarClient<K>) -> Self {
+        Self { client }
+    }
+
     /// Returns a reference to the underlying [`MoyasarClient`].
     #[must_use]
     pub const fn client(&self) -> &'a MoyasarClient<K> {
@@ -32,6 +38,6 @@ impl<K: AuthKey> MoyasarClient<K> {
     /// Returns a [`TokensService`] handle for card tokenization endpoints.
     #[must_use]
     pub const fn tokens(&self) -> TokensService<'_, K> {
-        TokensService { client: self }
+        TokensService::new(self)
     }
 }

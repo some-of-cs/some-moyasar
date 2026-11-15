@@ -6,9 +6,9 @@
 use serde::Serialize;
 
 use crate::kernel::auth::SecretAuthKey;
-use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::error::MoyasarError;
 use crate::kernel::metadata::Metadata;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::kernel::types::validate_path_segment;
 use crate::resources::payments::models::Payment;
 use crate::resources::payments::service::PaymentsService;
@@ -117,17 +117,7 @@ impl<K: SecretAuthKey> PaymentsService<'_, K> {
 pub(crate) async fn parse_payment_response(
     response: reqwest::Response,
 ) -> Result<Payment, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<Payment>(&body).map_err(|err| MoyasarError::Api {
-        error_type: ApiErrorType::Unknown,
-        message: format!("failed to decode Payment response: {err}"),
-        errors: Vec::new(),
-        response_code: None,
-    })
+    decode_json_response(response).await
 }
 
 #[cfg(test)]
@@ -135,6 +125,7 @@ mod tests {
     use super::*;
     use crate::kernel::auth::SecretKey;
     use crate::kernel::client::MoyasarClient;
+    use crate::kernel::error::ApiErrorType;
     use crate::resources::payments::models::PaymentStatus;
     use serde_json::json;
     use wiremock::matchers::{body_json, method, path};
@@ -162,6 +153,7 @@ mod tests {
         assert!(validate_payment_id("pay_01J9XYZ").is_ok());
         for bad in [
             "",
+            ".",
             "   ",
             "pay_123/void",
             "pay_123?foo=bar",

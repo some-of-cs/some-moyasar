@@ -7,6 +7,25 @@
 
 ---
 
+## Release & Implementation Status (v0.8.0 — All 8 Modules & 4 Reference Servers Completed)
+
+| Module / Track | Version | Branch | Stories / Units | PR(s) | Status |
+| :--- | :---: | :--- | :---: | :---: | :---: |
+| **Module 1: Core Microkernel & Transport Layer** | `v0.1.0` | `feat/module-1-core-microkernel` | 3 stories · 11 units | [#15](https://github.com/some-of-cs/some-moyasar/pull/15) | `Merged` |
+| **Module 2: Payments Service** | `v0.2.0` | `feat/module-2-payments` | 5 stories · 24 units | [#80](https://github.com/some-of-cs/some-moyasar/pull/80) | `Merged` |
+| **Module 3: Payment Intents** | `v0.3.0` | `feat/module-3-payment-intents` | 2 stories · 8 units | [#51](https://github.com/some-of-cs/some-moyasar/pull/51) | `Merged` |
+| **Module 4: Tokenization, Invoices & 3D Secure** | `v0.4.0` | `feat/module-4-tokens-invoices-3ds` | 3 stories · 12 units | [#79](https://github.com/some-of-cs/some-moyasar/pull/79) | `Merged` |
+| **Module 5: Payouts & Payout Accounts** | `v0.5.0` | `feat/module-5-payouts` | 2 stories · 10 units | [#129](https://github.com/some-of-cs/some-moyasar/pull/129) | `Merged` |
+| **Module 6: Settlements, Transfers & Ledger** | `v0.6.0` | `feat/module-6-settlements-ledger` | 2 stories · 9 units | [#114](https://github.com/some-of-cs/some-moyasar/pull/114) | `Merged` |
+| **Module 7: Sources, Apple Pay & Webhooks** | `v0.7.0` | `feat/module-7-sources-webhooks` | 3 stories · 13 units | [#131](https://github.com/some-of-cs/some-moyasar/pull/131) | `Merged` |
+| **Module 8: Cross-Cutting Hardening & DX** | `v0.8.0` | `feat/module-8-cross-cutting` | 3 stories · 12 units | [#152](https://github.com/some-of-cs/some-moyasar/pull/152) | `Merged` |
+| **Reference Server: Axum 0.8 (`example-axum`)** | `v0.8.0` | `feat/example-axum` | 3 stories · 11 units | [#193](https://github.com/some-of-cs/some-moyasar/pull/193), [#207](https://github.com/some-of-cs/some-moyasar/pull/207) | `Merged` |
+| **Reference Server: Actix-Web 4 (`example-actix`)** | `v0.8.0` | `feat/example-actix` | 2 stories · 7 units + patch | [#194](https://github.com/some-of-cs/some-moyasar/pull/194), [#206](https://github.com/some-of-cs/some-moyasar/pull/206) | `Merged` |
+| **Reference Server: Rocket.rs 0.5 (`example-rocket`)** | `v0.8.0` | `feat/example-rocket` | 3 stories · 10 units | [#212](https://github.com/some-of-cs/some-moyasar/pull/212) | `Merged` |
+| **Reference Server: Tonic 0.12 gRPC (`example-tonic`)** | `v0.8.0` | `feat/example-tonic` | 3 stories · 9 units + patch | [#200](https://github.com/some-of-cs/some-moyasar/pull/200), [#218](https://github.com/some-of-cs/some-moyasar/pull/218) | `Merged` |
+
+---
+
 ## Decomposition Summary
 
 | Level | Count | Branch Naming Convention |

@@ -11,7 +11,7 @@ use crate::kernel::auth::{AuthKey, serialize_secret};
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
-use crate::kernel::transport::send_with_retry;
+use crate::kernel::transport::{decode_json_response, send_with_retry};
 use crate::resources::tokens::TokensService;
 use crate::resources::tokens::models::Token;
 
@@ -167,18 +167,17 @@ async fn post_create_token<K: AuthKey>(
 ) -> Result<Token, MoyasarError> {
     let url = format!("{}{}", base_url.trim_end_matches('/'), TOKENS_PATH);
     let max_retries = client.config().max_network_retries;
-    let (status, body) = send_with_retry(max_retries, || async {
+    send_with_retry(max_retries, || async {
         dispatch_post(client.http(), &url, params).await
     })
-    .await?;
-    parse_token_response(status, &body)
+    .await
 }
 
 async fn dispatch_post(
     http: &reqwest::Client,
     url: &str,
     params: &CreateTokenParams,
-) -> Result<(u16, String), MoyasarError> {
+) -> Result<Token, MoyasarError> {
     let mut body_bytes = serde_json::to_vec(params).map_err(|err| MoyasarError::Api {
         error_type: ApiErrorType::InvalidRequestError,
         message: format!("failed to serialize token request: {err}"),
@@ -193,24 +192,7 @@ async fn dispatch_post(
         .await;
     body_bytes.zeroize();
     let response = send_res.map_err(MoyasarError::from)?;
-    let status = response.status().as_u16();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    if status >= 500 {
-        return Err(MoyasarError::from_api_response(status, &body));
-    }
-    Ok((status, body))
-}
-
-fn parse_token_response(status: u16, body: &str) -> Result<Token, MoyasarError> {
-    if !(200..300).contains(&status) {
-        return Err(MoyasarError::from_api_response(status, body));
-    }
-    serde_json::from_str::<Token>(body).map_err(|err| MoyasarError::Api {
-        error_type: ApiErrorType::Unknown,
-        message: format!("failed to decode token response: {err}"),
-        errors: Vec::new(),
-        response_code: None,
-    })
+    decode_json_response(response).await
 }
 
 #[cfg(test)]

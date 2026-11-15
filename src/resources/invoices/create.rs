@@ -8,7 +8,7 @@ use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::metadata::Metadata;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::kernel::types::{Amount, Currency};
 use crate::resources::invoices::InvoicesService;
 use crate::resources::invoices::models::Invoice;
@@ -242,17 +242,7 @@ where
         .send()
         .await
         .map_err(MoyasarError::from)?;
-    let status = response.status();
-    let text = response.text().await.map_err(MoyasarError::from)?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &text));
-    }
-    serde_json::from_str::<R>(&text).map_err(|err| MoyasarError::Api {
-        error_type: ApiErrorType::Unknown,
-        message: format!("failed to decode invoice response: {err}"),
-        errors: Vec::new(),
-        response_code: None,
-    })
+    decode_json_response(response).await
 }
 
 #[cfg(test)]

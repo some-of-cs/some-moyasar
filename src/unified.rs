@@ -1,5 +1,9 @@
 //! Unified cross-gateway payment trait adapter for `MoyasarClient`.
 
+/// Ergonomic [`MoyasarGatewayAdapter`] router wrapper for [`MoyasarClient`].
+pub mod router;
+pub use router::MoyasarGatewayAdapter;
+
 use std::future::Future;
 use std::pin::Pin;
 
