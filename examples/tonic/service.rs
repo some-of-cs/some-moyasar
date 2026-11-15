@@ -1,18 +1,17 @@
 //! `MoyasarGrpcService` implementation wrapping [`UnifiedPaymentGateway`].
 
 use http::header::{HeaderMap, HeaderName, HeaderValue};
-use tonic::{Request, Response, Status};
-use uuid::Uuid;
-
 use some_moyasar::prelude::{
     MoyasarClient, SecretKey, UnifiedIntentRequest, UnifiedPaymentGateway,
     UnifiedTokenChargeRequest, WEBHOOK_SECRET_TOKEN_HEADER, WEBHOOK_SIGNATURE_HEADER,
 };
+use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 use crate::proto::{
-    ChargeSavedTokenRequest, ChargeSavedTokenResponse, CreateIntentRequest, CreateIntentResponse,
-    MoyasarPaymentGateway, RefundOrVoidRequest, RefundOrVoidResponse, VerifyWebhookRequest,
-    VerifyWebhookResponse,
+    ChargeTokenRpcRequest, ChargeTokenRpcResponse, CreateIntentRpcRequest, CreateIntentRpcResponse,
+    MoyasarPaymentGateway, RefundOrVoidRpcRequest, RefundOrVoidRpcResponse,
+    VerifyWebhookRpcRequest, VerifyWebhookRpcResponse,
 };
 use crate::status_mapper::to_tonic_status;
 
@@ -35,6 +34,17 @@ impl MoyasarGrpcService {
 fn parse_non_negative_amount(amount_minor: i64) -> Result<u64, Status> {
     u64::try_from(amount_minor)
         .map_err(|_| Status::invalid_argument("amount_minor must be non-negative"))
+}
+
+/// Converts an unsigned minor-unit amount into a signed proto `i64`, failing on overflow.
+fn to_proto_amount(amount_minor: u64) -> Result<i64, Status> {
+    i64::try_from(amount_minor).map_err(|_| Status::internal("amount exceeds i64 range"))
+}
+
+/// Parses a caller-supplied UUID idempotency key, returning `INVALID_ARGUMENT` if malformed.
+fn parse_idempotency_key(raw: &str) -> Result<Uuid, Status> {
+    Uuid::parse_str(raw)
+        .map_err(|_| Status::invalid_argument("idempotency_key must be a valid UUID"))
 }
 
 /// Inserts a non-empty header value into `headers`, returning `INVALID_ARGUMENT` if malformed.
@@ -65,8 +75,8 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
     /// Creates a hosted/client-secret payment intent via [`UnifiedPaymentGateway::create_intent`].
     async fn create_intent(
         &self,
-        request: Request<CreateIntentRequest>,
-    ) -> Result<Response<CreateIntentResponse>, Status> {
+        request: Request<CreateIntentRpcRequest>,
+    ) -> Result<Response<CreateIntentRpcResponse>, Status> {
         let req = request.into_inner();
         let amount_minor = parse_non_negative_amount(req.amount_minor)?;
         let mut unified =
@@ -79,12 +89,12 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
             .client
             .create_intent(unified)
             .await
-            .map_err(to_tonic_status)?;
+            .map_err(|err| to_tonic_status(&err))?;
 
-        Ok(Response::new(CreateIntentResponse {
+        Ok(Response::new(CreateIntentRpcResponse {
             id: res.id,
             client_secret: res.client_secret,
-            amount_minor: res.amount_minor,
+            amount_minor: to_proto_amount(res.amount_minor)?,
             currency: res.currency.as_str().to_owned(),
             expires_at: res.expires_at.to_rfc3339(),
         }))
@@ -93,12 +103,11 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
     /// Charges a saved card token off-session via [`UnifiedPaymentGateway::charge_saved_token`].
     async fn charge_saved_token(
         &self,
-        request: Request<ChargeSavedTokenRequest>,
-    ) -> Result<Response<ChargeSavedTokenResponse>, Status> {
+        request: Request<ChargeTokenRpcRequest>,
+    ) -> Result<Response<ChargeTokenRpcResponse>, Status> {
         let req = request.into_inner();
         let amount_minor = parse_non_negative_amount(req.amount_minor)?;
-        let idempotency_key = Uuid::parse_str(&req.idempotency_key)
-            .map_err(|_| Status::invalid_argument("idempotency_key must be a valid UUID"))?;
+        let idempotency_key = parse_idempotency_key(&req.idempotency_key)?;
         let unified = UnifiedTokenChargeRequest::new(
             amount_minor,
             &req.currency,
@@ -110,12 +119,12 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
             .client
             .charge_saved_token(unified)
             .await
-            .map_err(to_tonic_status)?;
+            .map_err(|err| to_tonic_status(&err))?;
 
-        Ok(Response::new(ChargeSavedTokenResponse {
+        Ok(Response::new(ChargeTokenRpcResponse {
             transaction_id: res.transaction_id,
             status: res.status,
-            amount_minor: res.amount_minor,
+            amount_minor: to_proto_amount(res.amount_minor)?,
             currency: res.currency.as_str().to_owned(),
         }))
     }
@@ -123,8 +132,8 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
     /// Reverses a transaction via smart void or refund using [`UnifiedPaymentGateway::refund_or_void`].
     async fn refund_or_void(
         &self,
-        request: Request<RefundOrVoidRequest>,
-    ) -> Result<Response<RefundOrVoidResponse>, Status> {
+        request: Request<RefundOrVoidRpcRequest>,
+    ) -> Result<Response<RefundOrVoidRpcResponse>, Status> {
         let req = request.into_inner();
         let amount_minor = req
             .amount_minor
@@ -135,12 +144,12 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
             .client
             .refund_or_void(&req.transaction_id, amount_minor)
             .await
-            .map_err(to_tonic_status)?;
+            .map_err(|err| to_tonic_status(&err))?;
 
-        Ok(Response::new(RefundOrVoidResponse {
+        Ok(Response::new(RefundOrVoidRpcResponse {
             transaction_id: res.transaction_id,
             action: res.action,
-            amount_reversed_minor: res.amount_reversed_minor,
+            amount_reversed_minor: to_proto_amount(res.amount_reversed_minor)?,
             currency: res.currency.as_str().to_owned(),
         }))
     }
@@ -148,22 +157,83 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
     /// Verifies and parses an inbound Moyasar webhook via [`UnifiedPaymentGateway::verify_webhook`].
     async fn verify_webhook(
         &self,
-        request: Request<VerifyWebhookRequest>,
-    ) -> Result<Response<VerifyWebhookResponse>, Status> {
+        request: Request<VerifyWebhookRpcRequest>,
+    ) -> Result<Response<VerifyWebhookRpcResponse>, Status> {
         let req = request.into_inner();
         let headers = build_webhook_headers(&req.signature, &req.secret_token)?;
 
         let event = self
             .client
             .verify_webhook(&headers, &req.raw_body)
-            .map_err(to_tonic_status)?;
+            .map_err(|err| to_tonic_status(&err))?;
 
-        Ok(Response::new(VerifyWebhookResponse {
+        Ok(Response::new(VerifyWebhookRpcResponse {
             id: event.id.to_string(),
             event_type: event.event_type,
             created_at: event.created_at.to_rfc3339(),
             live: event.live,
-            data_json: event.data.to_string(),
+            payload_json: event.data.to_string(),
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tonic::Code;
+
+    use super::*;
+
+    #[test]
+    fn parse_non_negative_amount_accepts_zero_and_positive() {
+        assert_eq!(parse_non_negative_amount(0).expect("zero valid"), 0);
+        assert_eq!(
+            parse_non_negative_amount(15_000).expect("positive valid"),
+            15_000
+        );
+    }
+
+    #[test]
+    fn parse_non_negative_amount_rejects_negative() {
+        let err = parse_non_negative_amount(-1).expect_err("negative must fail");
+        assert_eq!(err.code(), Code::InvalidArgument);
+    }
+
+    #[test]
+    fn to_proto_amount_converts_valid_and_rejects_overflow() {
+        assert_eq!(to_proto_amount(25_000).expect("valid u64"), 25_000);
+        let err = to_proto_amount(u64::MAX).expect_err("overflow must fail");
+        assert_eq!(err.code(), Code::Internal);
+        assert_eq!(err.message(), "amount exceeds i64 range");
+    }
+
+    #[test]
+    fn build_webhook_headers_inserts_non_empty_and_skips_empty() {
+        let headers = build_webhook_headers("sig_abc", "").expect("valid headers");
+        assert_eq!(
+            headers
+                .get(WEBHOOK_SIGNATURE_HEADER)
+                .and_then(|v| v.to_str().ok()),
+            Some("sig_abc")
+        );
+        assert!(headers.get(WEBHOOK_SECRET_TOKEN_HEADER).is_none());
+    }
+
+    #[test]
+    fn build_webhook_headers_rejects_invalid_header_value() {
+        let err = build_webhook_headers("bad\nvalue", "secret").expect_err("newline must fail");
+        assert_eq!(err.code(), Code::InvalidArgument);
+    }
+
+    #[test]
+    fn parse_idempotency_key_accepts_uuid_and_rejects_invalid() {
+        let valid = "550e8400-e29b-41d4-a716-446655440000";
+        assert_eq!(
+            parse_idempotency_key(valid)
+                .expect("valid uuid")
+                .to_string(),
+            valid
+        );
+        let err = parse_idempotency_key("not-a-uuid").expect_err("invalid uuid must fail");
+        assert_eq!(err.code(), Code::InvalidArgument);
     }
 }
