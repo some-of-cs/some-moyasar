@@ -31,13 +31,12 @@ impl RocketAppState {
         webhook_verifier: ConstantTimeSecretVerifier,
         deduplicator: InMemoryDeduplicator,
     ) -> Self {
-        let publishable_client =
-            MoyasarClient::publishable_builder("pk_test_rocket_default_key")
-                .base_url(client.base_url())
-                .timeout(client.timeout())
-                .max_network_retries(client.max_network_retries())
-                .build()
-                .expect("publishable client should build from validated secret client config");
+        let publishable_client = MoyasarClient::publishable_builder("pk_test_rocket_default_key")
+            .base_url(client.base_url())
+            .timeout(client.timeout())
+            .max_network_retries(client.max_network_retries())
+            .build()
+            .expect("publishable client should build from validated secret client config");
         Self {
             client,
             publishable_client,
