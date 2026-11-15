@@ -2,7 +2,7 @@
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{execute_with_retry, read_bounded_response_text};
 use crate::resources::tokens::TokensService;
 use crate::resources::tokens::models::{TokenId, TokenStatus};
 
@@ -81,7 +81,7 @@ async fn send_delete_once(http: &reqwest::Client, url: &str) -> Result<(), Moyas
         return Ok(());
     }
     let status_code = status.as_u16();
-    let body = response.text().await.unwrap_or_default();
+    let body = read_bounded_response_text(response, "HTTP").await?;
     Err(MoyasarError::from_api_response(status_code, &body))
 }
 

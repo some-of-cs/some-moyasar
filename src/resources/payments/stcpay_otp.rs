@@ -4,9 +4,10 @@ use core::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::kernel::auth::{AuthMode, SecretAuthKey};
+use crate::kernel::auth::{AuthKey, SecretAuthKey};
+use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::resources::payments::service::PaymentsService;
 
 /// Request payload posted to the server-provided STC Pay `transaction_url`.
@@ -28,7 +29,7 @@ impl fmt::Debug for StcPayOtpRequest<'_> {
 }
 
 /// Payment response returned after submitting an STC Pay OTP.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StcPayOtpPayment {
     /// Unique Moyasar payment identifier.
     pub id: String,
@@ -62,7 +63,7 @@ pub struct StcPayOtpPayment {
     /// Optional payment description.
     #[serde(default)]
     pub description: Option<String>,
-    /// Raw source payload returned by the gateway.
+    /// Raw source payload returned by the gateway (redacted in `Debug` output).
     #[serde(default)]
     pub source: Option<serde_json::Value>,
     /// Optional merchant metadata map.
@@ -80,6 +81,31 @@ pub struct StcPayOtpPayment {
     /// Optional last-update timestamp string.
     #[serde(default)]
     pub updated_at: Option<String>,
+}
+
+impl fmt::Debug for StcPayOtpPayment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StcPayOtpPayment")
+            .field("id", &self.id)
+            .field("status", &self.status)
+            .field("amount", &self.amount)
+            .field("amount_format", &self.amount_format)
+            .field("fee", &self.fee)
+            .field("fee_format", &self.fee_format)
+            .field("refunded", &self.refunded)
+            .field("refunded_format", &self.refunded_format)
+            .field("captured", &self.captured)
+            .field("captured_format", &self.captured_format)
+            .field("currency", &self.currency)
+            .field("description", &self.description)
+            .field("source", &"[REDACTED]")
+            .field("metadata", &self.metadata)
+            .field("callback_url", &self.callback_url)
+            .field("invoice_id", &self.invoice_id)
+            .field("created_at", &self.created_at)
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
 }
 
 /// Returns `true` when an error reflects STC Pay's 60-second OTP resend/retry cooldown.
@@ -102,13 +128,14 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
     ///
     /// # Security
     ///
-    /// - Enforces `https://` on `transaction_url` to prevent plaintext OTP transmission.
+    /// - Enforces same-origin (`scheme`, `host`, and `port`) against `client.base_url()`
+    ///   without userinfo or fragments to prevent SSRF and credential exfiltration.
     /// - Uses `transaction_url` verbatim without client-side URL reconstruction.
-    /// - Redacts `otp` in all `Debug` formatting.
+    /// - Redacts `otp` and `source` in all `Debug` formatting.
     ///
     /// # Errors
     ///
-    /// - [`MoyasarError::InvalidBaseUrl`] if `transaction_url` does not start with `https://`.
+    /// - [`MoyasarError::InvalidBaseUrl`] if `transaction_url` does not match `client.base_url()`'s origin.
     /// - [`MoyasarError::Api`] if `otp` is empty or the gateway rejects the OTP.
     /// - [`MoyasarError::Network`] / [`MoyasarError::ServerError`] on transport failures.
     ///
@@ -155,7 +182,7 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
         transaction_url: &str,
         otp: &str,
     ) -> Result<StcPayOtpPayment, MoyasarError> {
-        if !is_allowed_stc_otp_url(transaction_url, self.client().key().mode()) {
+        if !is_allowed_stc_otp_url(transaction_url, self.client()) {
             return Err(MoyasarError::InvalidBaseUrl);
         }
         self.verify_stc_otp_inner(transaction_url, otp).await
@@ -184,30 +211,29 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
 
         execute_with_retry(max_retries, || async {
             let response = http.post(transaction_url).json(&payload).send().await?;
-            let status = response.status();
-            let body = response.text().await?;
-
-            if status.is_success() {
-                serde_json::from_str::<StcPayOtpPayment>(&body).map_err(|err| MoyasarError::Api {
-                    error_type: ApiErrorType::Unknown,
-                    message: format!("failed to parse STC Pay OTP response: {err}"),
-                    errors: Vec::new(),
-                    response_code: None,
-                })
-            } else {
-                Err(MoyasarError::from_api_response(status.as_u16(), &body))
-            }
+            decode_json_response(response).await
         })
         .await
     }
 }
 
-fn is_allowed_stc_otp_url(url: &str, mode: AuthMode) -> bool {
-    url.starts_with("https://")
-        || (mode == AuthMode::Test
-            && (url.starts_with("http://127.0.0.1")
-                || url.starts_with("http://localhost")
-                || url.starts_with("http://[::1]")))
+fn has_no_userinfo_or_fragment(url: &reqwest::Url) -> bool {
+    url.username().is_empty() && url.password().is_none() && url.fragment().is_none()
+}
+
+fn has_same_origin(a: &reqwest::Url, b: &reqwest::Url) -> bool {
+    (a.scheme(), a.host_str(), a.port_or_known_default())
+        == (b.scheme(), b.host_str(), b.port_or_known_default())
+}
+
+fn is_allowed_stc_otp_url<K: AuthKey>(transaction_url: &str, client: &MoyasarClient<K>) -> bool {
+    let (Ok(parsed), Ok(base)) = (
+        reqwest::Url::parse(transaction_url),
+        reqwest::Url::parse(client.base_url()),
+    ) else {
+        return false;
+    };
+    has_no_userinfo_or_fragment(&parsed) && has_same_origin(&parsed, &base)
 }
 
 #[cfg(test)]
@@ -219,30 +245,59 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
-    fn redacts_otp_in_debug_output() {
+    fn redacts_otp_and_payment_source_in_debug_output() {
         let req = StcPayOtpRequest {
             otp_value: "987654",
         };
         let formatted = format!("{req:?}");
         assert!(formatted.contains("[REDACTED]"));
         assert!(!formatted.contains("987654"));
+
+        let payment = StcPayOtpPayment {
+            id: "pay_1".to_owned(),
+            status: "paid".to_owned(),
+            amount: 1000,
+            amount_format: None,
+            fee: None,
+            fee_format: None,
+            refunded: None,
+            refunded_format: None,
+            captured: None,
+            captured_format: None,
+            currency: "SAR".to_owned(),
+            description: None,
+            source: Some(serde_json::json!({ "mobile": "0512345678" })),
+            metadata: None,
+            callback_url: None,
+            invoice_id: None,
+            created_at: None,
+            updated_at: None,
+        };
+        let pay_dbg = format!("{payment:?}");
+        assert!(pay_dbg.contains("[REDACTED]"));
+        assert!(!pay_dbg.contains("0512345678"));
     }
 
     #[tokio::test]
-    async fn rejects_plaintext_http_transaction_url() {
+    async fn rejects_plaintext_http_and_cross_origin_transaction_urls() {
         let key = SecretKey::new("sk_test_stcpay_otp").expect("valid key");
         let client = MoyasarClient::new(key).expect("client builds");
 
-        let err = client
-            .payments()
-            .verify_stc_otp(
-                "http://api.moyasar.com/v1/stc_pays/pay_1/proceed?otp_token=abc",
-                "123456",
-            )
-            .await
-            .expect_err("must reject http:// transaction_url");
+        for bad_url in [
+            "http://api.moyasar.com/v1/stc_pays/pay_1/proceed?otp_token=abc",
+            "https://evil.example.com/v1/stc_pays/pay_1/proceed?otp_token=abc",
+            "http://localhost.evil.com/v1/stc_pays/pay_1/proceed",
+            "https://user:pass@api.moyasar.com/v1/stc_pays/pay_1/proceed",
+            "https://api.moyasar.com/v1/stc_pays/pay_1/proceed#frag",
+        ] {
+            let err = client
+                .payments()
+                .verify_stc_otp(bad_url, "123456")
+                .await
+                .expect_err("must reject invalid or cross-origin transaction_url");
 
-        assert!(matches!(err, MoyasarError::InvalidBaseUrl));
+            assert!(matches!(err, MoyasarError::InvalidBaseUrl));
+        }
     }
 
     #[tokio::test]
@@ -267,7 +322,10 @@ mod tests {
             .await;
 
         let key = SecretKey::new("sk_test_stcpay_otp").expect("valid key");
-        let client = MoyasarClient::new(key).expect("client builds");
+        let client = MoyasarClient::builder(key)
+            .base_url(server.uri())
+            .build()
+            .expect("client builds");
         let url = format!(
             "{}/v1/stc_pays/pay_123/proceed?otp_token=tok_xyz",
             server.uri()
@@ -275,7 +333,7 @@ mod tests {
 
         let payment = client
             .payments()
-            .verify_stc_otp_inner(&url, "123456")
+            .verify_stc_otp(&url, "123456")
             .await
             .expect("OTP verification succeeds");
 

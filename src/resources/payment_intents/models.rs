@@ -8,6 +8,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Deserializer, Serialize, de};
 
 use crate::kernel::error::{ApiErrorType, MoyasarError};
+use crate::kernel::metadata::Metadata;
 use crate::kernel::types::Currency;
 
 /// Fixed, non-configurable Moyasar Payment Intent lifetime in seconds (1 hour).
@@ -32,15 +33,8 @@ pub const INTENT_EXPIRY_SECS: i64 = 3600;
 #[serde(transparent)]
 pub struct IntentId(String);
 
-fn is_valid_id_char(c: char) -> bool {
-    c.is_ascii_graphic() && !"/?#\\".contains(c)
-}
-
 fn is_valid_intent_id(raw: &str) -> bool {
-    !raw.is_empty()
-        && !raw.ends_with('_')
-        && !raw.contains("..")
-        && raw.chars().all(is_valid_id_char)
+    crate::kernel::types::is_valid_path_segment(raw) && !raw.ends_with('_')
 }
 
 impl IntentId {
@@ -81,10 +75,24 @@ impl FromStr for IntentId {
     }
 }
 
+impl AsRef<str> for IntentId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 impl TryFrom<&str> for IntentId {
     type Error = MoyasarError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<String> for IntentId {
+    type Error = MoyasarError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::new(value)
     }
 }
@@ -137,6 +145,9 @@ pub struct PaymentIntent {
     /// Locked redirect callback URL for 3DS / completion flows.
     #[serde(default)]
     pub callback_url: Option<String>,
+    /// Optional validated merchant key/value metadata attached to the intent.
+    #[serde(default)]
+    pub metadata: Option<Metadata>,
     /// Ephemeral client secret used by the storefront to fulfill the intent.
     #[serde(default)]
     client_secret: Option<SecretString>,
@@ -165,6 +176,7 @@ impl fmt::Debug for PaymentIntent {
             .field("currency", &self.currency)
             .field("description", &self.description)
             .field("callback_url", &self.callback_url)
+            .field("metadata", &self.metadata)
             .field("client_secret", &"[REDACTED]")
             .field("expires_at", &self.expires_at)
             .field("created_at", &self.created_at)

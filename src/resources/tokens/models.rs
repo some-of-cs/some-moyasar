@@ -80,6 +80,22 @@ impl FromStr for TokenId {
     }
 }
 
+impl TryFrom<&str> for TokenId {
+    type Error = MoyasarError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<String> for TokenId {
+    type Error = MoyasarError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
 impl<'de> Deserialize<'de> for TokenId {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;

@@ -54,6 +54,30 @@ pub struct SplitRefundAllocation {
 /// Non-refundable splits (`refundable == false`) are excluded so they are preserved
 /// during parent payment refunds. Returns an empty vector if `payment_total == 0`
 /// or `refund_amount == 0`.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::splits::SplitRecipientType;
+/// use some_moyasar::resources::payments::splits_response::{
+///     PaymentSplitResponse, calculate_proportional_refunds,
+/// };
+/// use uuid::Uuid;
+///
+/// let splits = vec![PaymentSplitResponse {
+///     id: None,
+///     amount: 8_000,
+///     recipient_type: SplitRecipientType::Beneficiary,
+///     recipient_id: Uuid::nil(),
+///     reference: Some("ref-1".to_owned()),
+///     description: None,
+///     fee_source: Some(false),
+///     refundable: true,
+///     status: None,
+/// }];
+/// let allocations = calculate_proportional_refunds(&splits, 10_000, 5_000);
+/// assert_eq!(allocations[0].refund_amount, 4_000);
+/// ```
 pub fn calculate_proportional_refunds(
     splits: &[PaymentSplitResponse],
     payment_total: u64,

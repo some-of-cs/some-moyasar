@@ -9,6 +9,21 @@ use crate::resources::payments::splits::PaymentSplitRequest;
 /// 1. Every split has `amount > 0` (`MoyasarError::InvalidSplitAmount`).
 /// 2. At most one split specifies `fee_source: Some(true)` (`MoyasarError::MultipleFeeSources`).
 /// 3. The checked sum of all split amounts does not exceed `total` (`MoyasarError::SplitTotalExceedsAmount`).
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::split_validation::validate_splits;
+/// use some_moyasar::resources::payments::splits::{PaymentSplitRequest, SplitRecipientType};
+/// use uuid::Uuid;
+///
+/// let splits = vec![
+///     PaymentSplitRequest::new(8_000, SplitRecipientType::Beneficiary, Uuid::nil()),
+///     PaymentSplitRequest::new(2_000, SplitRecipientType::Platform, Uuid::nil())
+///         .with_fee_source(true),
+/// ];
+/// assert!(validate_splits(&splits, 10_000).is_ok());
+/// ```
 pub fn validate_splits(splits: &[PaymentSplitRequest], total: u64) -> Result<(), MoyasarError> {
     if splits.iter().any(|s| s.amount == 0) {
         return Err(MoyasarError::InvalidSplitAmount);

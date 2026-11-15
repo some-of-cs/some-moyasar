@@ -8,7 +8,7 @@ use zeroize::Zeroize;
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::resources::card_auths::CardAuthsService;
 use crate::resources::card_auths::models::{CardAuthId, CardAuthResult, CardAuthentication};
 
@@ -87,8 +87,14 @@ pub struct ExternalMpiData {
     pub extra: BTreeMap<String, serde_json::Value>,
 }
 
-fn zeroize_extra_secret(extra: &mut BTreeMap<String, serde_json::Value>, key: &str) {
-    if let Some(serde_json::Value::String(secret)) = extra.get_mut(key) {
+fn is_sensitive_mpi_key(key: &str) -> bool {
+    key.eq_ignore_ascii_case("cavv") || key.eq_ignore_ascii_case("authentication_value")
+}
+
+fn zeroize_extra_entry(key: &str, val: &mut serde_json::Value) {
+    if is_sensitive_mpi_key(key)
+        && let serde_json::Value::String(secret) = val
+    {
         secret.zeroize();
     }
 }
@@ -98,8 +104,9 @@ impl Drop for ExternalMpiData {
         if let Some(ref mut cavv) = self.authentication_value {
             cavv.zeroize();
         }
-        zeroize_extra_secret(&mut self.extra, "cavv");
-        zeroize_extra_secret(&mut self.extra, "authentication_value");
+        for (k, v) in &mut self.extra {
+            zeroize_extra_entry(k, v);
+        }
     }
 }
 
@@ -107,7 +114,7 @@ fn redacted_extra_debug(extra: &BTreeMap<String, serde_json::Value>) -> BTreeMap
     extra
         .iter()
         .map(|(k, v)| {
-            let val = if k == "cavv" || k == "authentication_value" {
+            let val = if is_sensitive_mpi_key(k) {
                 "[REDACTED]".to_owned()
             } else {
                 v.to_string()
@@ -296,17 +303,7 @@ async fn send_retrieve_once(
     url: &str,
 ) -> Result<CardAuthentication, MoyasarError> {
     let response = http.get(url).send().await.map_err(MoyasarError::from)?;
-    let status = response.status();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-
-    serde_json::from_str(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
-        message: format!("failed to decode CardAuthentication response: {err}"),
-    })
+    decode_json_response(response).await
 }
 
 #[cfg(test)]

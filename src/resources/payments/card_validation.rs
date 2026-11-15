@@ -12,6 +12,18 @@ fn luhn_step(digit: u32, idx: usize) -> u32 {
 /// Validates a card PAN using the Luhn checksum without heap allocation.
 ///
 /// Accepts ASCII digits (ignoring spaces and hyphens) with length between 12 and 19.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::payments::card_validation::{
+///     luhn_valid, validate_card_fields,
+/// };
+///
+/// assert!(luhn_valid("4111111111111111"));
+/// assert!(!luhn_valid("4111111111111112"));
+/// assert!(validate_card_fields("4111111111111111", 12, 2030, "123").is_ok());
+/// ```
 pub fn luhn_valid(number: &str) -> bool {
     let mut count = 0usize;
     let mut sum = 0u32;

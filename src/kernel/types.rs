@@ -21,6 +21,17 @@ const CURRENCY_CODES: &[(&str, Currency)] = &[
 ];
 
 /// ISO 4217 currency codes with minor-unit exponent awareness.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::kernel::types::Currency;
+///
+/// assert_eq!(Currency::SAR.as_str(), "SAR");
+/// assert_eq!(Currency::SAR.exponent(), 2);
+/// assert_eq!(Currency::KWD.exponent(), 3);
+/// assert_eq!(Currency::JPY.exponent(), 0);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Currency {
     /// Saudi Riyal (2 decimal places: 1 SAR = 100 Halalas).
@@ -59,18 +70,7 @@ impl Currency {
     /// Returns the canonical 3-letter ISO 4217 code for this currency.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::SAR => "SAR",
-            Self::USD => "USD",
-            Self::KWD => "KWD",
-            Self::BHD => "BHD",
-            Self::AED => "AED",
-            Self::QAR => "QAR",
-            Self::OMR => "OMR",
-            Self::EUR => "EUR",
-            Self::GBP => "GBP",
-            Self::JPY => "JPY",
-        }
+        CURRENCY_CODES[self as usize].0
     }
 }
 
@@ -94,6 +94,16 @@ impl FromStr for Currency {
 }
 
 /// Monetary amount stored strictly in the smallest currency unit (e.g., Halalas).
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::kernel::types::{Amount, Currency};
+///
+/// let sar = Amount::from_major(150, Currency::SAR);
+/// assert_eq!(sar.minor_units(), 15_000);
+/// assert_eq!(Amount::checked_from_major(i64::MAX, Currency::SAR), None);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Amount(pub i64);
@@ -105,17 +115,44 @@ impl Amount {
         Self(minor)
     }
 
-    /// Converts a major-unit integer amount into minor units using `currency.exponent()`.
+    /// Converts a major-unit integer amount into minor units using `currency.exponent()`,
+    /// saturating on integer overflow.
     #[must_use]
     pub const fn from_major(major: i64, currency: Currency) -> Self {
         let factor = 10_i64.pow(currency.exponent());
-        Self(major * factor)
+        Self(major.saturating_mul(factor))
+    }
+
+    /// Converts a major-unit integer amount into minor units using `currency.exponent()`,
+    /// returning `None` if the multiplication overflows `i64`.
+    #[must_use]
+    pub const fn checked_from_major(major: i64, currency: Currency) -> Option<Self> {
+        let factor = 10_i64.pow(currency.exponent());
+        match major.checked_mul(factor) {
+            Some(minor) => Some(Self(minor)),
+            None => None,
+        }
     }
 
     /// Returns the raw integer value in minor units.
     #[must_use]
     pub const fn minor_units(self) -> i64 {
         self.0
+    }
+}
+
+impl From<u64> for Amount {
+    fn from(value: u64) -> Self {
+        Self(i64::try_from(value).unwrap_or(i64::MAX))
+    }
+}
+
+impl TryFrom<Amount> for u64 {
+    type Error = MoyasarError;
+
+    fn try_from(value: Amount) -> Result<Self, Self::Error> {
+        let err = |_| MoyasarError::invalid_request("amount must be non-negative");
+        Self::try_from(value.0).map_err(err)
     }
 }
 
@@ -129,16 +166,19 @@ pub enum RecipientType {
     Organization,
 }
 
-/// Returns `true` when `c` is a safe resource identifier character (not whitespace or `/?#\`).
+/// Returns `true` when `c` is a safe resource identifier character (ASCII graphic and not `/?#\%`).
 #[must_use]
 pub fn is_valid_id_char(c: char) -> bool {
-    !c.is_whitespace() && !"/?#\\".contains(c)
+    c.is_ascii_graphic() && !"/?#\%".contains(c)
 }
 
-/// Returns `true` when `segment` is a non-empty, URL-safe path segment without `..` traversal.
+/// Returns `true` when `segment` is a non-empty, URL-safe path segment without `.` or `..` traversal.
 #[must_use]
 pub fn is_valid_path_segment(segment: &str) -> bool {
-    !segment.is_empty() && !segment.contains("..") && segment.chars().all(is_valid_id_char)
+    !segment.is_empty()
+        && segment != "."
+        && !segment.contains("..")
+        && segment.chars().all(is_valid_id_char)
 }
 
 /// Returns `true` when `raw` starts with `prefix` followed by a valid URL-safe suffix.
@@ -168,6 +208,14 @@ mod tests {
         assert_eq!(Amount::from_major(1, Currency::KWD).minor_units(), 1000);
         assert_eq!(Amount::from_major(1, Currency::BHD).minor_units(), 1000);
         assert_eq!(Amount::from_major(1, Currency::JPY).minor_units(), 1);
+        let sat = Amount::from_major(i64::MAX, Currency::SAR);
+        assert_eq!(sat, Amount(i64::MAX));
+        let checked = Amount::checked_from_major(i64::MAX, Currency::SAR);
+        assert_eq!(checked, None);
+        assert_eq!(Amount::from(u64::MAX), Amount(i64::MAX));
+        let ok_u64 = u64::try_from(Amount::from_minor(500)).unwrap();
+        assert_eq!(ok_u64, 500);
+        assert!(u64::try_from(Amount::from_minor(-1)).is_err());
     }
 
     #[test]
@@ -184,9 +232,13 @@ mod tests {
     fn validates_path_segments_and_prefixed_ids() {
         assert!(is_valid_path_segment("pay_123"));
         assert!(!is_valid_path_segment(""));
+        assert!(!is_valid_path_segment("."));
         assert!(!is_valid_path_segment("../admin"));
         assert!(!is_valid_path_segment("a/b"));
+        assert!(!is_valid_path_segment("pay_%2f"));
+        assert!(!is_valid_path_segment("pay_\0"));
         assert!(is_valid_prefixed_id("token_abc", "token_"));
         assert!(!is_valid_prefixed_id("token_", "token_"));
+        assert!(!is_valid_prefixed_id("token_.", "token_"));
     }
 }

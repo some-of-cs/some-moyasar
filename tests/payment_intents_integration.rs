@@ -261,3 +261,37 @@ fn payment_intents_negative_guards_reject_invalid_ids_blank_secrets_and_expired_
     assert!(validate_pre_fulfillment(&expired_intent, "pis_secret_token_xyz987").is_err());
     assert!(validate_pre_fulfillment(&expired_intent, "   ").is_err());
 }
+
+#[tokio::test]
+async fn payment_intents_stcpay_debug_redaction_id_boundaries_and_malformed_200() {
+    let stc_source = FulfillPaymentSourceRequest::StcPay {
+        mobile: "0551234567".to_string(),
+    };
+    let stc_dbg = format!("{stc_source:?}");
+    assert!(stc_dbg.contains("[REDACTED]"));
+    assert!(!stc_dbg.contains("0551234567"));
+
+    for bad_id in [".", "pi_123\0", "pi_%2e%2e"] {
+        assert!(IntentId::new(bad_id).is_err());
+    }
+
+    let (server, sk_client) = common::start_secret_client_with_retries(1).await;
+    let id = IntentId::new("pi_malformed200").unwrap();
+    let get_path = format!("/v1/payment_intents/{}", id.as_str());
+    common::mount_raw_endpoint(&server, ("GET", &get_path), 200, "{malformed_json").await;
+
+    let err = sk_client
+        .payment_intents()
+        .retrieve(&id)
+        .await
+        .expect_err("malformed 200 JSON must fail without retry");
+    assert!(matches!(
+        err,
+        MoyasarError::Api {
+            error_type: ApiErrorType::Unknown,
+            ..
+        }
+    ));
+    assert!(!err.is_retryable());
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}

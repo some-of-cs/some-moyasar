@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::resources::payments::models::{Payment, PaymentStatus};
 use crate::resources::payments::service::PaymentsService;
 
@@ -82,6 +82,12 @@ impl ListParams {
     /// with both keys and values percent-encoded to prevent query injection.
     pub fn to_query_string(&self) -> String {
         let mut pairs: Vec<String> = Vec::new();
+        self.push_scalar_filters(&mut pairs);
+        self.push_range_and_metadata_filters(&mut pairs);
+        pairs.join("&")
+    }
+
+    fn push_scalar_filters(&self, pairs: &mut Vec<String>) {
         if let Some(page) = self.page {
             pairs.push(format!("page={page}"));
         }
@@ -91,6 +97,9 @@ impl ListParams {
         if let Some(status) = &self.status {
             pairs.push(format!("status={}", percent_encode(status.as_str())));
         }
+    }
+
+    fn push_range_and_metadata_filters(&self, pairs: &mut Vec<String>) {
         if let Some(gt) = &self.created_gt {
             pairs.push(format!("created[gt]={}", percent_encode(&gt.to_rfc3339())));
         }
@@ -104,7 +113,6 @@ impl ListParams {
                 percent_encode(v)
             ));
         }
-        pairs.join("&")
     }
 }
 
@@ -160,15 +168,7 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
 async fn parse_list_response(
     response: reqwest::Response,
 ) -> Result<PaginatedList<Payment>, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<PaginatedList<Payment>>(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
-        message: format!("failed to decode PaginatedList<Payment>: {err}"),
-    })
+    decode_json_response(response).await
 }
 
 #[cfg(test)]

@@ -6,6 +6,17 @@ use uuid::Uuid;
 use crate::kernel::error::MoyasarError;
 
 /// Policy controlling how `given_id` UUIDs are generated for mutating requests.
+///
+/// # Examples
+///
+/// ```
+/// use serde_json::json;
+/// use some_moyasar::kernel::idempotency::{GivenIdPolicy, inject_given_id};
+///
+/// let mut payload = json!({ "amount": 1000 });
+/// let id = inject_given_id(&mut payload, &GivenIdPolicy::Random).unwrap().unwrap();
+/// assert_eq!(payload["given_id"], id.to_string());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GivenIdPolicy {
     /// Generates a fresh random UUIDv4 per operation.
