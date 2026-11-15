@@ -153,7 +153,7 @@ mod tests {
             "token_123/delete",
             "pay_../other",
             "pay_123/cancel",
-            "pay_123\admin",
+            "pay_123\\admin",
             "pay_abc?foo=bar",
             "pay_abc#frag",
             "pay_ 123",
