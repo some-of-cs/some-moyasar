@@ -77,6 +77,8 @@ wiremock = { version = "0.6", optional = true }
 zeroize = { version = "1.8", features = ["derive"] }
 
 [dev-dependencies]
+actix-rt = "2"
+actix-web = "4"
 axum = "0.8"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 tower = { version = "0.5", features = ["util"] }
@@ -87,6 +89,11 @@ name = "axum_server"
 path = "examples/axum/main.rs"
 required-features = ["full"]
 
+[[example]]
+name = "actix_server"
+path = "examples/actix/main.rs"
+required-features = ["full"]
+
 [[test]]
 name = "cross_cutting_integration"
 path = "tests/cross_cutting_integration.rs"
@@ -95,4 +102,9 @@ required-features = ["unified-gateway", "stripe-compat", "test-utils"]
 [[test]]
 name = "axum_integration"
 path = "tests/axum_integration.rs"
+required-features = ["full", "test-utils"]
+
+[[test]]
+name = "actix_integration"
+path = "tests/actix_integration.rs"
 required-features = ["full", "test-utils"]
