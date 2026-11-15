@@ -155,7 +155,10 @@ async fn retrieves_settlement_handles_checked_net_underflow() {
     )
     .await;
 
-    let response = client.get("/settlements/stl_e2e_underflow").dispatch().await;
+    let response = client
+        .get("/settlements/stl_e2e_underflow")
+        .dispatch()
+        .await;
     assert_eq!(response.status(), Status::Ok);
 
     let body: Value = response
@@ -178,7 +181,13 @@ async fn retrieves_settlement_propagates_not_found_error() {
         "type": "record_not_found",
         "message": "Settlement not found",
     });
-    mount_get_json(&mock_server, "/v1/settlements/stl_missing_99", 404, error_payload).await;
+    mount_get_json(
+        &mock_server,
+        "/v1/settlements/stl_missing_99",
+        404,
+        error_payload,
+    )
+    .await;
 
     let response = client.get("/settlements/stl_missing_99").dispatch().await;
     assert_eq!(response.status(), Status::NotFound);
@@ -209,8 +218,7 @@ async fn fetches_merchant_balance_in_minor_units() {
         .into_string()
         .await
         .expect("merchant balance response body");
-    let balance: MerchantBalance =
-        serde_json::from_str(&body).expect("valid MerchantBalance JSON");
+    let balance: MerchantBalance = serde_json::from_str(&body).expect("valid MerchantBalance JSON");
 
     assert_eq!(balance.currency, Currency::SAR);
     assert_eq!(balance.available, Amount::from_minor(150_000));
