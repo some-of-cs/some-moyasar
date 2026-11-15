@@ -2,7 +2,7 @@
 
 use actix_web::{HttpResponse, web};
 use serde_json::json;
-use some_moyasar::prelude::WebhookError;
+use some_moyasar::prelude::{WebhookDeduplicator, WebhookError};
 
 use crate::state::ActixAppState;
 
