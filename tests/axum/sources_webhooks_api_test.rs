@@ -15,14 +15,8 @@ use super::spawn_test_app;
 /// Deterministic UUID used across webhook management API E2E tests.
 const TEST_WEBHOOK_ID: &str = "550e8400-e29b-41d4-a716-446655440000";
 
-/// Sends an HTTP request through the Axum router, asserts `expected` status, and parses JSON.
-async fn dispatch_expect(
-    app: Router,
-    http_method: Method,
-    uri: &str,
-    body: Option<Value>,
-    expected: StatusCode,
-) -> Value {
+/// Builds an HTTP [`Request`] with an optional serialized JSON body.
+fn build_json_request(http_method: Method, uri: &str, body: Option<Value>) -> Request<Body> {
     let mut builder = Request::builder().method(http_method).uri(uri);
     let payload = match body {
         Some(value) => {
@@ -32,7 +26,11 @@ async fn dispatch_expect(
         }
         None => Body::empty(),
     };
-    let req = builder.body(payload).expect("build HTTP request");
+    builder.body(payload).expect("build HTTP request")
+}
+
+/// Sends an HTTP [`Request`] through the Axum router, asserts `expected` status, and parses JSON.
+async fn send_expect(app: Router, req: Request<Body>, expected: StatusCode) -> Value {
     let resp = app.oneshot(req).await.expect("oneshot request succeeds");
     assert_eq!(resp.status(), expected);
     let bytes = to_bytes(resp.into_body(), usize::MAX)
@@ -83,14 +81,12 @@ async fn e2e_sources_get_issuer_lookup() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let body = dispatch_expect(
-        router,
+    let req = build_json_request(
         Method::POST,
         "/sources/issuer",
         Some(json!({ "first_digits": "420132" })),
-        StatusCode::OK,
-    )
-    .await;
+    );
+    let body = send_expect(router, req, StatusCode::OK).await;
     assert_eq!(body["issuer_name"], "AL RAJHI BANK");
     assert_eq!(body["issuer_country"], "SA");
     assert_eq!(body["issuer_card_type"], "debit");
@@ -126,14 +122,8 @@ async fn e2e_apple_pay_initiate_session() {
         "domain_name": "checkout.example.com",
         "publishable_api_key": "pk_test_axum_key"
     });
-    let body = dispatch_expect(
-        router,
-        Method::POST,
-        "/apple_pay/session",
-        Some(req_body),
-        StatusCode::OK,
-    )
-    .await;
+    let req = build_json_request(Method::POST, "/apple_pay/session", Some(req_body));
+    let body = send_expect(router, req, StatusCode::OK).await;
     assert_eq!(body["merchantSessionIdentifier"], "SSH_AXUM_01");
     assert_eq!(body["domainName"], "checkout.example.com");
     assert_eq!(body["displayName"], "Some Store");
@@ -160,14 +150,8 @@ async fn e2e_webhooks_api_create_endpoint() {
         "http_method": "post",
         "events": ["payment_paid", "payment_failed"]
     });
-    let body = dispatch_expect(
-        router,
-        Method::POST,
-        "/webhooks_api",
-        Some(req_body),
-        StatusCode::CREATED,
-    )
-    .await;
+    let req = build_json_request(Method::POST, "/webhooks_api", Some(req_body));
+    let body = send_expect(router, req, StatusCode::CREATED).await;
     assert_eq!(body["id"], TEST_WEBHOOK_ID);
     assert_eq!(body["url"], "https://merchant.example/webhooks");
     assert!(body.get("shared_secret").is_none());
@@ -193,7 +177,8 @@ async fn e2e_webhooks_api_list_endpoints() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let body = dispatch_expect(router, Method::GET, "/webhooks_api", None, StatusCode::OK).await;
+    let req = build_json_request(Method::GET, "/webhooks_api", None);
+    let body = send_expect(router, req, StatusCode::OK).await;
     assert_eq!(body["webhooks"][0]["id"], TEST_WEBHOOK_ID);
     assert_eq!(body["meta"]["total_count"], 1);
     assert!(body["webhooks"][0].get("shared_secret").is_none());
@@ -212,14 +197,8 @@ async fn e2e_webhooks_api_available_events() {
         .expect(1)
         .mount(mock.server())
         .await;
-    let body = dispatch_expect(
-        router,
-        Method::GET,
-        "/webhooks_api/events",
-        None,
-        StatusCode::OK,
-    )
-    .await;
+    let req = build_json_request(Method::GET, "/webhooks_api/events", None);
+    let body = send_expect(router, req, StatusCode::OK).await;
     assert_eq!(
         body,
         json!(["payment_paid", "payment_failed", "payment_refunded"])

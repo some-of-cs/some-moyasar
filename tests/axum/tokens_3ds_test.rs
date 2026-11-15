@@ -265,8 +265,7 @@ async fn e2e_retrieve_card_auth_returns_200_ok() {
         card_auth_fixture(true),
     );
     let body = assert_json_dispatch(spec, StatusCode::OK).await;
-    let has_sensitive =
-        body.get("authentication_value").is_some() || body.get("result").is_some();
+    let has_sensitive = body.get("authentication_value").is_some() || body.get("result").is_some();
     assert_eq!(body["is_frictionless"], true);
     assert!(!has_sensitive);
     assert!(!body.to_string().contains("cavv_test_value"));
@@ -281,11 +280,8 @@ async fn e2e_create_invoice_returns_201_created() {
         "description": "Enterprise subscription invoice",
         "callback_url": "https://merchant.example/invoices/callback"
     });
-    let spec = MockDispatchSpec::post_json(
-        ("/v1/invoices", "/invoices"),
-        req_body,
-        invoice_fixture(0),
-    );
+    let spec =
+        MockDispatchSpec::post_json(("/v1/invoices", "/invoices"), req_body, invoice_fixture(0));
     let body = assert_json_dispatch(spec, StatusCode::CREATED).await;
     assert_eq!(body["amount"], 25000);
 }

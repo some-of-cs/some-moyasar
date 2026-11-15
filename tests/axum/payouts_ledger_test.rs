@@ -69,21 +69,26 @@ fn build_json_request(req_method: Method, route: RoutePair, body: Option<Value>)
     builder.body(payload).expect("build HTTP request")
 }
 
-/// Sends an HTTP request through the Axum router, asserts `expected` status, and parses JSON.
-async fn dispatch_expect(
-    app: Router,
-    req_method: Method,
-    route: RoutePair,
-    body: Option<Value>,
-    expected: StatusCode,
-) -> Value {
-    let req = build_json_request(req_method, route, body);
+/// Sends an HTTP [`Request`] through the Axum router, asserts `expected` status, and parses JSON.
+async fn send_expect(app: Router, req: Request<Body>, expected: StatusCode) -> Value {
     let resp = app.oneshot(req).await.expect("oneshot request succeeds");
     assert_eq!(resp.status(), expected);
     let bytes = to_bytes(resp.into_body(), usize::MAX)
         .await
         .expect("read response body");
     serde_json::from_slice(&bytes).expect("parse response json")
+}
+
+/// Dispatches a `GET` request to `route`, asserts `200 OK`, and returns the parsed JSON body.
+async fn get_ok(app: Router, route: RoutePair) -> Value {
+    let req = build_json_request(Method::GET, route, None);
+    send_expect(app, req, StatusCode::OK).await
+}
+
+/// Dispatches a `POST` request with `body` to `route` and asserts `expected` status.
+async fn post_expect(app: Router, route: RoutePair, body: Value, expected: StatusCode) -> Value {
+    let req = build_json_request(Method::POST, route, Some(body));
+    send_expect(app, req, expected).await
 }
 
 /// Mounts a single-shot JSON mock expectation on the upstream [`MoyasarMockServer`].
@@ -231,22 +236,14 @@ async fn e2e_create_and_list_payout_accounts() {
     mount_json_mock(&mock, Method::POST, PAYOUT_ACCOUNTS_ROUTE, account).await;
     mount_json_mock(&mock, Method::GET, PAYOUT_ACCOUNTS_ROUTE, list_payload).await;
     let create_req = create_payout_account_req_json();
-    let created = dispatch_expect(
+    let created = post_expect(
         router.clone(),
-        Method::POST,
         PAYOUT_ACCOUNTS_ROUTE,
-        Some(create_req),
+        create_req,
         StatusCode::CREATED,
     )
     .await;
-    let listed = dispatch_expect(
-        router,
-        Method::GET,
-        PAYOUT_ACCOUNTS_ROUTE,
-        None,
-        StatusCode::OK,
-    )
-    .await;
+    let listed = get_ok(router, PAYOUT_ACCOUNTS_ROUTE).await;
     let omits_credentials = created.get("credentials").is_none()
         && listed["items"][0].get("credentials").is_none()
         && !created.to_string().contains("secret_upstream_cred")
@@ -268,11 +265,10 @@ async fn e2e_create_payout_account_rejects_invalid_iban() {
         },
         "credentials": "secret_cred"
     });
-    let body = dispatch_expect(
+    let body = post_expect(
         router,
-        Method::POST,
         PAYOUT_ACCOUNTS_ROUTE,
-        Some(bad_req),
+        bad_req,
         StatusCode::BAD_REQUEST,
     )
     .await;
@@ -286,22 +282,14 @@ async fn e2e_create_and_retrieve_payout() {
     mount_json_mock(&mock, Method::POST, PAYOUTS_ROUTE, payout_json(false)).await;
     mount_json_mock(&mock, Method::GET, PAYOUT_BY_ID_ROUTE, payout_json(true)).await;
     let create_req = create_payout_req_json();
-    let created = dispatch_expect(
+    let created = post_expect(
         router.clone(),
-        Method::POST,
         PAYOUTS_ROUTE,
-        Some(create_req),
+        create_req,
         StatusCode::CREATED,
     )
     .await;
-    let fetched = dispatch_expect(
-        router,
-        Method::GET,
-        PAYOUT_BY_ID_ROUTE,
-        None,
-        StatusCode::OK,
-    )
-    .await;
+    let fetched = get_ok(router, PAYOUT_BY_ID_ROUTE).await;
     assert_eq!(created["id"], "pout_mock_01");
     assert_eq!(created["status"], "queued");
     assert_eq!(fetched["status"], "paid");
@@ -321,23 +309,15 @@ async fn e2e_fetch_settlement_balance_and_retrieve_settlement() {
         "reserved_format": "50.00 SAR"
     });
     mount_json_mock(&mock, Method::GET, SETTLEMENT_BALANCE_ROUTE, balance).await;
-    mount_json_mock(&mock, Method::GET, SETTLEMENT_BY_ID_ROUTE, settlement_json()).await;
-    let bal_body = dispatch_expect(
-        router.clone(),
-        Method::GET,
-        SETTLEMENT_BALANCE_ROUTE,
-        None,
-        StatusCode::OK,
-    )
-    .await;
-    let set_body = dispatch_expect(
-        router,
+    mount_json_mock(
+        &mock,
         Method::GET,
         SETTLEMENT_BY_ID_ROUTE,
-        None,
-        StatusCode::OK,
+        settlement_json(),
     )
     .await;
+    let bal_body = get_ok(router.clone(), SETTLEMENT_BALANCE_ROUTE).await;
+    let set_body = get_ok(router, SETTLEMENT_BY_ID_ROUTE).await;
     assert_eq!(bal_body["available"], 120000);
     assert_eq!(set_body["id"], "set_mock_01");
     assert_eq!(set_body["amount"], 100000);
@@ -351,22 +331,8 @@ async fn e2e_list_and_retrieve_transfers() {
     let list_payload = json!({ "transfers": [transfer.clone()], "meta": meta_json() });
     mount_json_mock(&mock, Method::GET, TRANSFERS_ROUTE, list_payload).await;
     mount_json_mock(&mock, Method::GET, TRANSFER_BY_ID_ROUTE, transfer).await;
-    let listed = dispatch_expect(
-        router.clone(),
-        Method::GET,
-        TRANSFERS_ROUTE,
-        None,
-        StatusCode::OK,
-    )
-    .await;
-    let fetched = dispatch_expect(
-        router,
-        Method::GET,
-        TRANSFER_BY_ID_ROUTE,
-        None,
-        StatusCode::OK,
-    )
-    .await;
+    let listed = get_ok(router.clone(), TRANSFERS_ROUTE).await;
+    let fetched = get_ok(router, TRANSFER_BY_ID_ROUTE).await;
     assert_eq!(listed["items"][0]["id"], "tr_mock_01");
     assert_eq!(listed["meta"]["total_count"], 1);
     assert_eq!(fetched["amount"], 75000);
@@ -379,14 +345,7 @@ async fn e2e_list_internal_transactions() {
     let txn = ledger_record_json(true);
     let list_payload = json!({ "internal_transactions": [txn], "meta": meta_json() });
     mount_json_mock(&mock, Method::GET, INTERNAL_TXNS_ROUTE, list_payload).await;
-    let body = dispatch_expect(
-        router,
-        Method::GET,
-        INTERNAL_TXNS_ROUTE,
-        None,
-        StatusCode::OK,
-    )
-    .await;
+    let body = get_ok(router, INTERNAL_TXNS_ROUTE).await;
     assert_eq!(body["items"][0]["id"], "itx_mock_01");
     assert_eq!(body["items"][0]["amount"], 45000);
     assert_eq!(body["items"][0]["transfer_id"], "tr_mock_01");

@@ -126,17 +126,11 @@ async fn mount_voidable_payment(server: &MockServer, seed: PaymentSeed) {
         .await;
 }
 
-/// Sends a JSON HTTP request through the Axum router, asserts `expected` status, and parses JSON.
-async fn dispatch_expect(
-    app: Router,
-    http_method: Method,
-    uri: &str,
-    body: Value,
-    expected: StatusCode,
-) -> Value {
+/// Sends a JSON `POST` request through the Axum router, asserts `expected` status, and parses JSON.
+async fn post_json_expect(app: Router, uri: &str, body: Value, expected: StatusCode) -> Value {
     let bytes = serde_json::to_vec(&body).expect("serialize request json");
     let req = Request::builder()
-        .method(http_method)
+        .method(Method::POST)
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(bytes))
@@ -154,9 +148,8 @@ async fn dispatch_expect(
 async fn e2e_customers_attach_token_and_charge() {
     let (mock, router) = spawn_test_app().await;
     let given_id = Uuid::new_v4();
-    let attach_body = dispatch_expect(
+    let attach_body = post_json_expect(
         router.clone(),
-        Method::POST,
         "/customers/cus_axum_101/tokens",
         json!({ "token_id": "token_cus_101" }),
         StatusCode::CREATED,
@@ -182,9 +175,8 @@ async fn e2e_customers_attach_token_and_charge() {
         .mount(mock.server())
         .await;
 
-    let charge_body = dispatch_expect(
+    let charge_body = post_json_expect(
         router,
-        Method::POST,
         "/customers/cus_axum_101/charge",
         json!({
             "amount": 15000,
@@ -218,9 +210,8 @@ async fn e2e_subscriptions_charge_cycle() {
     )
     .await;
 
-    let charge_body = dispatch_expect(
+    let charge_body = post_json_expect(
         router,
-        Method::POST,
         "/subscriptions/sub_axum_99/charge",
         json!({
             "cycle_index": 2,
@@ -251,9 +242,8 @@ async fn e2e_subscriptions_refund_cycle() {
 
     let start = Utc.with_ymd_and_hms(2026, 11, 1, 0, 0, 0).unwrap();
     let end = start + Duration::days(30);
-    let refund_body = dispatch_expect(
+    let refund_body = post_json_expect(
         router,
-        Method::POST,
         "/subscriptions/sub_axum_99/refund",
         json!({
             "cycle_payment_id": "pay_sub_cycle_2",
@@ -290,9 +280,8 @@ async fn e2e_unified_gateway_charge_and_reversal() {
     .await;
     mount_voidable_payment(mock.server(), payment).await;
 
-    let charge_body = dispatch_expect(
+    let charge_body = post_json_expect(
         router.clone(),
-        Method::POST,
         "/unified/charge_token",
         json!({
             "amount_minor": 15000,
@@ -303,9 +292,8 @@ async fn e2e_unified_gateway_charge_and_reversal() {
         StatusCode::CREATED,
     )
     .await;
-    let rev_body = dispatch_expect(
+    let rev_body = post_json_expect(
         router,
-        Method::POST,
         "/unified/reversal",
         json!({
             "transaction_id": "pay_uni_01",
