@@ -149,9 +149,9 @@ async fn e2e_smart_two_hour_void_for_recent_unsettled_payment() {
     let (status, body) =
         dispatch_json(router, Method::POST, "/payments/pay_recent_01/refund", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["id"], "pay_recent_01");
+    assert_eq!(body["payment_id"], "pay_recent_01");
     assert_eq!(body["status"], "voided");
-    assert_eq!(body["refunded"], 0);
+    assert_eq!(body["refunded_amount"], 15000);
 }
 
 /// Verifies `POST /payments/{id}/refund` refunds an older (>= 2h) settled payment.
@@ -181,7 +181,7 @@ async fn e2e_smart_two_hour_refund_for_older_settled_payment() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["id"], "pay_settled_01");
+    assert_eq!(body["payment_id"], "pay_settled_01");
     assert_eq!(body["status"], "refunded");
-    assert_eq!(body["refunded"], 15000);
+    assert_eq!(body["refunded_amount"], 15000);
 }
