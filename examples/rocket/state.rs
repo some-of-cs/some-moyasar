@@ -18,7 +18,8 @@ pub struct RocketAppState {
     /// In-memory customer token vault for Stripe-compatible customer charges.
     pub customer_vault: InMemoryCustomerVault,
     /// Constant-time Double-HMAC verifier for inbound webhook secret tokens.
-    pub webhook_verifier: ConstantTimeSecretVerifier,\n    /// Thread-safe in-memory deduplicator for idempotent webhook processing.
+    pub webhook_verifier: ConstantTimeSecretVerifier,
+    /// Thread-safe in-memory deduplicator for idempotent webhook processing.
     pub deduplicator: InMemoryDeduplicator,
 }
 
