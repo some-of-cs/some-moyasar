@@ -1,0 +1,18 @@
+{
+  "moduleId": "example-actix",
+  "title": "Actix-Web Framework Integration & E2E Test Suite",
+  "baseBranch": "main",
+  "moduleBranch": "feat/example-actix",
+  "mergeOrder": ["feat/example-axum", "feat/example-actix", "feat/example-rocket", "feat/example-tonic"],
+  "items": {
+    "us-actix-1.0": { "status": "In Progress", "branch": "feat/us-actix-1.0-examples", "prNumber": null, "mergedSha": null, "unitCount": 4 },
+    "us-actix-1.0/unit-1": { "status": "Todo", "branch": "feat/us-actix-1.0/unit-1-state-error", "agent": "engineering-software-architect", "prNumber": null, "mergedSha": null },
+    "us-actix-1.0/unit-2": { "status": "Todo", "branch": "feat/us-actix-1.0/unit-2-payments-vault", "agent": "engineering-backend-architect", "prNumber": null, "mergedSha": null },
+    "us-actix-1.0/unit-3": { "status": "Todo", "branch": "feat/us-actix-1.0/unit-3-subscriptions", "agent": "engineering-backend-architect", "prNumber": null, "mergedSha": null },
+    "us-actix-1.0/unit-4": { "status": "Todo", "branch": "feat/us-actix-1.0/unit-4-webhooks-main", "agent": "security-appsec-engineer", "prNumber": null, "mergedSha": null },
+    "us-actix-2.0": { "status": "In Progress", "branch": "feat/us-actix-2.0-tests", "prNumber": null, "mergedSha": null, "unitCount": 3 },
+    "us-actix-2.0/unit-1": { "status": "Todo", "branch": "feat/us-actix-2.0/unit-1-payments-vault-e2e", "agent": "testing-api-tester", "prNumber": null, "mergedSha": null },
+    "us-actix-2.0/unit-2": { "status": "Todo", "branch": "feat/us-actix-2.0/unit-2-subscriptions-e2e", "agent": "testing-api-tester", "prNumber": null, "mergedSha": null },
+    "us-actix-2.0/unit-3": { "status": "Todo", "branch": "feat/us-actix-2.0/unit-3-webhooks-e2e", "agent": "security-appsec-engineer", "prNumber": null, "mergedSha": null }
+  }
+}
