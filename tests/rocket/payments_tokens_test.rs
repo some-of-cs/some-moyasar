@@ -33,9 +33,9 @@ async fn post_payment_action(client: &Client, path: &str) -> PaymentResponse {
 }
 
 /// Builds a deterministic Moyasar `Payment` JSON fixture for mock responses.
-fn sample_payment_json(id: &str, status: PaymentStatus) -> Value {
+fn sample_payment_json(status: PaymentStatus) -> Value {
     json!({
-        "id": id,
+        "id": "pay_01",
         "status": status,
         "amount": 15_000,
         "amount_format": "150.00 SAR",
@@ -53,9 +53,9 @@ fn sample_payment_json(id: &str, status: PaymentStatus) -> Value {
 }
 
 /// Builds a deterministic Moyasar `PaymentIntent` JSON fixture for mock responses.
-fn sample_intent_json(id: &str, status: PaymentIntentStatus) -> Value {
+fn sample_intent_json(status: PaymentIntentStatus) -> Value {
     json!({
-        "id": id,
+        "id": "pi_01",
         "status": status,
         "amount": 25_000,
         "amount_format": "250.00 SAR",
@@ -68,9 +68,9 @@ fn sample_intent_json(id: &str, status: PaymentIntentStatus) -> Value {
 }
 
 /// Builds a deterministic Moyasar `Token` JSON fixture for mock responses.
-fn sample_token_json(id: &str) -> Value {
+fn sample_token_json() -> Value {
     json!({
-        "id": id,
+        "id": "token_01",
         "status": "active",
         "number": "XXXX-XXXX-XXXX-1111",
         "company": "visa",
@@ -80,9 +80,9 @@ fn sample_token_json(id: &str) -> Value {
 }
 
 /// Builds a deterministic Moyasar `CardAuthentication` JSON fixture for mock responses.
-fn sample_card_auth_json(id: &str) -> Value {
+fn sample_card_auth_json() -> Value {
     json!({
-        "id": id,
+        "id": "ca_01",
         "status": "initiated",
         "transaction_url": "https://api.moyasar.com/v1/card_auth/ca_01/prepare",
         "result": null
@@ -93,8 +93,8 @@ fn sample_card_auth_json(id: &str) -> Value {
 #[tokio::test]
 async fn retrieves_and_voids_payment() {
     let (server, client) = spawn_test_client().await;
-    let auth_body = sample_payment_json("pay_01", PaymentStatus::Authorized);
-    let void_body = sample_payment_json("pay_01", PaymentStatus::Voided);
+    let auth_body = sample_payment_json(PaymentStatus::Authorized);
+    let void_body = sample_payment_json(PaymentStatus::Voided);
     let void_api = "/v1/payments/pay_01/void";
 
     mount_ok_get(&server, "/v1/payments/pay_01", auth_body).await;
@@ -117,19 +117,19 @@ async fn retrieves_and_voids_payment() {
 #[tokio::test]
 async fn captures_and_refunds_payment() {
     let (server, client) = spawn_test_client().await;
-    let cap_body = sample_payment_json("pay_02", PaymentStatus::Captured);
-    let ref_body = sample_payment_json("pay_02", PaymentStatus::Refunded);
-    let cap_api = "/v1/payments/pay_02/capture";
-    let ref_api = "/v1/payments/pay_02/refund";
+    let cap_body = sample_payment_json(PaymentStatus::Captured);
+    let ref_body = sample_payment_json(PaymentStatus::Refunded);
+    let cap_api = "/v1/payments/pay_01/capture";
+    let ref_api = "/v1/payments/pay_01/refund";
 
     mount_ok_post(&server, cap_api, cap_body).await;
     mount_ok_post(&server, ref_api, ref_body).await;
 
-    let captured = post_payment_action(&client, "/payments/pay_02/capture").await;
+    let captured = post_payment_action(&client, "/payments/pay_01/capture").await;
     assert_eq!(captured.status, PaymentStatus::Captured);
     assert_eq!(captured.captured, 15_000);
 
-    let refunded = post_payment_action(&client, "/payments/pay_02/refund").await;
+    let refunded = post_payment_action(&client, "/payments/pay_01/refund").await;
     assert_eq!(refunded.status, PaymentStatus::Refunded);
     assert_eq!(refunded.refunded, 15_000);
 }
@@ -140,9 +140,9 @@ async fn creates_retrieves_and_cancels_payment_intent() {
     let (server, client) = spawn_test_client().await;
     let get_api = "/v1/payment_intents/pi_01";
     let cancel_api = "/v1/payment_intents/pi_01/cancel";
-    let init_body = sample_intent_json("pi_01", PaymentIntentStatus::Created);
-    let created_body = sample_intent_json("pi_01", PaymentIntentStatus::Created);
-    let canceled_body = sample_intent_json("pi_01", PaymentIntentStatus::Canceled);
+    let init_body = sample_intent_json(PaymentIntentStatus::Created);
+    let created_body = sample_intent_json(PaymentIntentStatus::Created);
+    let canceled_body = sample_intent_json(PaymentIntentStatus::Canceled);
 
     mount_json_endpoint(
         &server,
@@ -188,7 +188,7 @@ async fn creates_retrieves_and_cancels_payment_intent() {
 #[tokio::test]
 async fn retrieves_and_deletes_token() {
     let (server, client) = spawn_test_client().await;
-    let tok_body = sample_token_json("token_01");
+    let tok_body = sample_token_json();
 
     mount_ok_get(&server, "/v1/tokens/token_01", tok_body).await;
     mount_json_endpoint(
@@ -217,7 +217,7 @@ async fn retrieves_and_deletes_token() {
 #[tokio::test]
 async fn retrieves_card_authentication_and_rejects_bad_prefix() {
     let (server, client) = spawn_test_client().await;
-    let ca_body = sample_card_auth_json("ca_01");
+    let ca_body = sample_card_auth_json();
 
     mount_ok_get(&server, "/v1/card_auths/ca_01", ca_body).await;
 
