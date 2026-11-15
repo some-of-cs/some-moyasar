@@ -8,7 +8,7 @@ use super::models::WebhookAttempt;
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
 use crate::kernel::pagination::PaginatedList;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 
 /// Query filter and pagination parameters for `GET /v1/webhooks/attempts`.
 ///
@@ -104,7 +104,7 @@ impl<'a, K: SecretAuthKey> WebhooksService<'a, K> {
                 req = req.query(filter);
             }
             let response = req.send().await.map_err(MoyasarError::from)?;
-            parse_attempts_list_response(response).await
+            decode_json_response(response).await
         })
         .await
     }
@@ -137,40 +137,25 @@ impl<'a, K: SecretAuthKey> WebhooksService<'a, K> {
 
         execute_with_retry(retries, || async {
             let response = http.get(&url).send().await.map_err(MoyasarError::from)?;
-            parse_attempt_response(response).await
+            decode_json_response(response).await
         })
         .await
     }
-}
 
-async fn parse_attempts_list_response(
-    response: reqwest::Response,
-) -> Result<PaginatedList<WebhookAttempt>, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<PaginatedList<WebhookAttempt>>(&body).map_err(|err| {
-        MoyasarError::ServerError {
-            status: status.as_u16(),
-            message: format!("failed to decode PaginatedList<WebhookAttempt>: {err}"),
-        }
-    })
-}
+    /// Retries a webhook delivery attempt by its UUID via
+    /// `POST /v1/webhooks/attempts/{id}/retry`.
+    pub async fn retry_attempt(&self, id: Uuid) -> Result<WebhookAttempt, MoyasarError> {
+        let base_url = self.client().config().base_url.trim_end_matches('/');
+        let url = format!("{base_url}/v1/webhooks/attempts/{id}/retry");
+        let http = self.client().http();
+        let retries = self.client().config().max_network_retries;
 
-async fn parse_attempt_response(
-    response: reqwest::Response,
-) -> Result<WebhookAttempt, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
+        execute_with_retry(retries, || async {
+            let response = http.post(&url).send().await.map_err(MoyasarError::from)?;
+            decode_json_response(response).await
+        })
+        .await
     }
-    serde_json::from_str::<WebhookAttempt>(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
-        message: format!("failed to decode WebhookAttempt response: {err}"),
-    })
 }
 
 #[cfg(test)]
@@ -263,7 +248,7 @@ mod tests {
                 .send()
                 .await
                 .map_err(MoyasarError::from)?;
-            parse_attempts_list_response(resp).await
+            decode_json_response::<PaginatedList<WebhookAttempt>>(resp).await
         })
         .await
         .expect("lists webhook attempts");
@@ -294,7 +279,7 @@ mod tests {
         let http = reqwest::Client::new();
         let err = execute_with_retry(1, || async {
             let resp = http.get(&url).send().await.map_err(MoyasarError::from)?;
-            parse_attempts_list_response(resp).await
+            decode_json_response::<PaginatedList<WebhookAttempt>>(resp).await
         })
         .await
         .expect_err("401 maps to AuthenticationError");
@@ -336,7 +321,7 @@ mod tests {
         let ok_url = format!("{}/v1/webhooks/attempts/{attempt_id}", server.uri());
         let attempt = execute_with_retry(1, || async {
             let resp = http.get(&ok_url).send().await.map_err(MoyasarError::from)?;
-            parse_attempt_response(resp).await
+            decode_json_response::<WebhookAttempt>(resp).await
         })
         .await
         .expect("retrieves webhook attempt");
@@ -366,7 +351,7 @@ mod tests {
                 .send()
                 .await
                 .map_err(MoyasarError::from)?;
-            parse_attempt_response(resp).await
+            decode_json_response::<WebhookAttempt>(resp).await
         })
         .await
         .expect_err("404 maps to RecordNotFound");

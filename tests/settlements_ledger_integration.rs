@@ -235,3 +235,35 @@ async fn internal_transactions_list_and_path_traversal_guards() {
     assert!(SettlementId::new("set_../bad").validate().is_err());
     assert!(TransferId::new("tr_../bad").validate().is_err());
 }
+
+#[test]
+fn settlements_query_currency_internal_txn_id_validation_and_reconcile_overflow_safety() {
+    let pairs = ListInternalTransactionsParams::new()
+        .currency(Currency::BHD)
+        .to_query_pairs();
+    assert_eq!(pairs, vec![("currency".to_owned(), "BHD".to_owned())]);
+
+    let valid_id = InternalTransactionId::new("itx_valid_01");
+    let empty_id = InternalTransactionId::new("");
+    let blank_id = InternalTransactionId::new("   ");
+    let traversal_id = InternalTransactionId::new("../etc/passwd");
+    assert!(valid_id.validate().is_ok());
+    assert!(empty_id.validate().is_err());
+    assert!(blank_id.validate().is_err());
+    assert!(traversal_id.validate().is_err());
+
+    let raw = sample_settlement_json("set_001");
+    let settlement: Settlement = serde_json::from_value(raw).unwrap();
+    let max_line = SettlementLine {
+        payment_id: None,
+        line_type: Some("payment".to_owned()),
+        currency: Currency::SAR,
+        amount: Amount::from_minor(i64::MAX),
+        fee: Amount::from_minor(0),
+        tax: Amount::from_minor(0),
+        reference: None,
+        settled_at: None,
+    };
+    let overflow_res = reconcile_settlement(&settlement, &[max_line.clone(), max_line]);
+    assert!(overflow_res.is_err());
+}

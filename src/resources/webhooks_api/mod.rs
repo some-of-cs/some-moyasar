@@ -1,13 +1,17 @@
 //! Moyasar Webhooks management API service (`/v1/webhooks`).
 
 pub mod attempts;
+pub mod create_update;
 pub mod crud;
 pub mod events;
 pub mod models;
 pub mod retrieve_delete;
 
 pub use attempts::ListWebhookAttemptsParams;
-pub use crud::{CreateWebhookParams, validate_https_url, validate_webhook_url};
+pub use crud::{
+    CreateWebhookParams, validate_https_url, validate_webhook_callback_url, validate_webhook_url,
+};
+pub use events::WebhookEventType;
 pub use models::{WebhookAttempt, WebhookEndpoint, WebhookSecret};
 
 use crate::kernel::auth::AuthKey;

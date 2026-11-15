@@ -10,7 +10,7 @@ use crate::kernel::auth::AuthKey;
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::{ApiErrorType, MoyasarError};
 use crate::kernel::response_code::FieldError;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 
 /// Card funding classification returned by the Moyasar BIN/IIN issuer lookup endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,7 +98,23 @@ impl fmt::Debug for BinLookupParams {
     }
 }
 
-pub(crate) fn validate_bin(first_digits: &str) -> Result<(), MoyasarError> {
+/// Validates that `first_digits` is a 6-to-8-digit ASCII numeric card BIN/IIN prefix.
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::Api`] (`InvalidRequestError`) if `first_digits` is not 6 to 8 ASCII digits.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::resources::sources::issuer::validate_bin;
+///
+/// assert!(validate_bin("420132").is_ok());
+/// assert!(validate_bin("42013211").is_ok());
+/// assert!(validate_bin("12345").is_err());
+/// assert!(validate_bin("4111111111111111").is_err());
+/// ```
+pub fn validate_bin(first_digits: &str) -> Result<(), MoyasarError> {
     let valid_len = (6..=8).contains(&first_digits.len());
     let valid_digits = first_digits.bytes().all(|byte| byte.is_ascii_digit());
     if !valid_len || !valid_digits {
@@ -147,17 +163,7 @@ async fn send_issuer_request<K: AuthKey>(
         .await;
     payload.zeroize();
     let response = send_res.map_err(MoyasarError::from)?;
-    let status = response.status().as_u16();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    if !(200..300).contains(&status) {
-        return Err(MoyasarError::from_api_response(status, &body));
-    }
-    serde_json::from_str::<IssuerMetadata>(&body).map_err(|err| MoyasarError::Api {
-        error_type: ApiErrorType::Unknown,
-        message: format!("failed to decode IssuerMetadata response: {err}"),
-        errors: Vec::new(),
-        response_code: None,
-    })
+    decode_json_response(response).await
 }
 
 #[cfg(test)]

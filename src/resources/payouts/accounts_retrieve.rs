@@ -2,7 +2,7 @@
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{decode_json_response, execute_with_retry};
 use crate::resources::payouts::models::{PayoutAccount, PayoutAccountId};
 use crate::resources::payouts::service::PayoutAccountsService;
 
@@ -112,24 +112,10 @@ impl<'a, K: SecretAuthKey> PayoutAccountsService<'a, K> {
 
         execute_with_retry(retries, || async {
             let response = http.get(&url).send().await.map_err(MoyasarError::from)?;
-            parse_retrieve_response(response).await
+            decode_json_response(response).await
         })
         .await
     }
-}
-
-async fn parse_retrieve_response(
-    response: reqwest::Response,
-) -> Result<PayoutAccount, MoyasarError> {
-    let status = response.status();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<PayoutAccount>(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
-        message: format!("failed to decode PayoutAccount response: {err}"),
-    })
 }
 
 #[cfg(test)]

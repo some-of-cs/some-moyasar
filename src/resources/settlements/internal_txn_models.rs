@@ -7,7 +7,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::kernel::types::{Amount, Currency};
+use crate::kernel::error::MoyasarError;
+use crate::kernel::types::{Amount, Currency, validate_path_segment};
 use crate::resources::settlements::models::SettlementRecipientType;
 
 /// Strongly-typed identifier for a Moyasar internal transaction.
@@ -24,6 +25,16 @@ impl InternalTransactionId {
     /// Returns the underlying identifier as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Validates that this internal transaction identifier is a non-empty, URL-safe path segment.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoyasarError::Api`] (`InvalidRequestError`) if the identifier is empty,
+    /// contains whitespace, contains `..`, or includes URL path/query delimiter characters.
+    pub fn validate(&self) -> Result<(), MoyasarError> {
+        validate_path_segment(&self.0, "internal transaction id")
     }
 }
 

@@ -4,6 +4,6 @@ pub mod apple_pay;
 pub mod issuer;
 pub mod service;
 
-pub use apple_pay::{ApplePayMerchantSession, InitiateApplePayParams};
-pub use issuer::{BinLookupParams, IssuerCardType, IssuerMetadata};
+pub use apple_pay::{ApplePayMerchantSession, InitiateApplePayParams, validate_apple_pay_url};
+pub use issuer::{BinLookupParams, IssuerCardType, IssuerMetadata, validate_bin};
 pub use service::{ApplePayService, SourcesService};

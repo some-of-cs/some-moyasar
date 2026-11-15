@@ -4,7 +4,9 @@ use uuid::Uuid;
 
 use crate::kernel::auth::SecretAuthKey;
 use crate::kernel::error::MoyasarError;
-use crate::kernel::transport::execute_with_retry;
+use crate::kernel::transport::{
+    decode_json_response, execute_with_retry, read_bounded_response_text,
+};
 use crate::resources::webhooks_api::WebhooksService;
 use crate::resources::webhooks_api::models::WebhookEndpoint;
 
@@ -132,15 +134,7 @@ async fn send_retrieve_request(
     url: &str,
 ) -> Result<WebhookEndpoint, MoyasarError> {
     let response = http.get(url).send().await.map_err(MoyasarError::from)?;
-    let status = response.status();
-    let body = response.text().await.map_err(MoyasarError::from)?;
-    if !status.is_success() {
-        return Err(MoyasarError::from_api_response(status.as_u16(), &body));
-    }
-    serde_json::from_str::<WebhookEndpoint>(&body).map_err(|err| MoyasarError::ServerError {
-        status: status.as_u16(),
-        message: format!("failed to decode WebhookEndpoint response: {err}"),
-    })
+    decode_json_response(response).await
 }
 
 async fn delete_webhook(
@@ -159,7 +153,7 @@ async fn send_delete_request(http: &reqwest::Client, url: &str) -> Result<(), Mo
     if status == reqwest::StatusCode::NO_CONTENT || status.is_success() {
         return Ok(());
     }
-    let body = response.text().await.unwrap_or_default();
+    let body = read_bounded_response_text(response, "HTTP").await?;
     Err(MoyasarError::from_api_response(status.as_u16(), &body))
 }
 
