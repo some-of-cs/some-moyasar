@@ -54,10 +54,10 @@ where
 /// `200 OK` with `"status": "processed"`.
 #[actix_rt::test]
 async fn webhook_valid_payment_faild_alias_normalizes_and_processes() {
-    let harness = super::build_test_harness().await;
+    let (_mock_server, app_state) = super::build_test_harness().await;
     let app = test::init_service(
         App::new()
-            .app_data(harness.state.clone())
+            .app_data(app_state.clone())
             .configure(super::configure_test_routes),
     )
     .await;
@@ -86,10 +86,10 @@ async fn webhook_valid_payment_faild_alias_normalizes_and_processes() {
 /// with `"status": "duplicate"` via `InMemoryDeduplicator`.
 #[actix_rt::test]
 async fn webhook_duplicate_event_id_returns_duplicate() {
-    let harness = super::build_test_harness().await;
+    let (_mock_server, app_state) = super::build_test_harness().await;
     let app = test::init_service(
         App::new()
-            .app_data(harness.state.clone())
+            .app_data(app_state.clone())
             .configure(super::configure_test_routes),
     )
     .await;
@@ -112,10 +112,10 @@ async fn webhook_duplicate_event_id_returns_duplicate() {
 /// `ConstantTimeSecretVerifier`.
 #[actix_rt::test]
 async fn webhook_wrong_secret_returns_unauthorized() {
-    let harness = super::build_test_harness().await;
+    let (_mock_server, app_state) = super::build_test_harness().await;
     let app = test::init_service(
         App::new()
-            .app_data(harness.state.clone())
+            .app_data(app_state.clone())
             .configure(super::configure_test_routes),
     )
     .await;
@@ -134,10 +134,10 @@ async fn webhook_wrong_secret_returns_unauthorized() {
 /// `REPLAY_TOLERANCE` window returns `400 Bad Request`.
 #[actix_rt::test]
 async fn webhook_stale_timestamp_beyond_replay_tolerance_returns_bad_request() {
-    let harness = super::build_test_harness().await;
+    let (_mock_server, app_state) = super::build_test_harness().await;
     let app = test::init_service(
         App::new()
-            .app_data(harness.state.clone())
+            .app_data(app_state.clone())
             .configure(super::configure_test_routes),
     )
     .await;
