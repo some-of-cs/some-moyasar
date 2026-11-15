@@ -106,6 +106,7 @@ async fn invoices_create_bulk_and_batch_size_guards() {
         .unwrap();
     assert_eq!(bulk.len(), 1);
 
+    server.reset().await;
     common::mount_json_endpoint(
         &server,
         ("POST", "/v1/invoices/bulk"),
