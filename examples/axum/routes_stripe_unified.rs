@@ -139,12 +139,19 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/customers/{id}/tokens", post(attach_customer_token))
         .route("/customers/{id}/charge", post(charge_customer))
-        .route("/subscriptions/{id}/charge", post(charge_subscription_cycle))
-        .route("/subscriptions/{id}/refund", post(refund_subscription_cycle))
+        .route(
+            "/subscriptions/{id}/charge",
+            post(charge_subscription_cycle),
+        )
+        .route(
+            "/subscriptions/{id}/refund",
+            post(refund_subscription_cycle),
+        )
         .route("/unified/charge_token", post(unified_charge_token))
         .route("/unified/reversal", post(unified_reversal))
 }
 
+/// Builds [`CustomerChargeParams`] from the path customer ID and request payload.
 fn build_customer_charge_params(
     customer_id: &str,
     payload: ChargeCustomerRequest,
@@ -194,7 +201,10 @@ async fn charge_customer(
         .customers(state.vault.as_ref())
         .charge(&params)
         .await?;
-    Ok((StatusCode::CREATED, Json(StripePaymentResponse::from(payment))))
+    Ok((
+        StatusCode::CREATED,
+        Json(StripePaymentResponse::from(payment)),
+    ))
 }
 
 /// Handles `POST /subscriptions/{id}/charge` via [`some_moyasar::prelude::SubscriptionsService::charge_cycle`].
@@ -213,7 +223,10 @@ async fn charge_subscription_cycle(
     )
     .currency(currency);
     let payment = state.client.subscriptions().charge_cycle(&params).await?;
-    Ok((StatusCode::CREATED, Json(StripePaymentResponse::from(payment))))
+    Ok((
+        StatusCode::CREATED,
+        Json(StripePaymentResponse::from(payment)),
+    ))
 }
 
 /// Handles `POST /subscriptions/{id}/refund` via [`some_moyasar::prelude::SubscriptionsService::refund_cycle`].
