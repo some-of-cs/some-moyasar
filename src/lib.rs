@@ -116,6 +116,12 @@ pub mod kernel;
 #[cfg(feature = "core")]
 pub mod prelude;
 
+#[cfg(feature = "core")]
+pub use crate::kernel::{
+    MoyasarClient, MoyasarClientBuilder, MoyasarClientConfig, MoyasarError, PublishableKey,
+    SecretKey,
+};
+
 #[cfg(any(
     feature = "payments",
     feature = "payment-intents",
