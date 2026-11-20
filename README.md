@@ -69,7 +69,7 @@ Building high-concurrency Rust backend systems for Saudi Arabia and GCC commerce
 | `webhook-engine` | **Yes** (via `sources-webhooks`) | `core`, `hmac`, `sha2`, `subtle` | `ConstantTimeSecretVerifier` — Zero-leak constant-time `secret_token` verification & `payment_faild` alias ([Webhook Docs](https://docs.moyasar.com/api/other/webhooks/webhook-reference)) |
 | `sources-webhooks` | **Yes** | `sources`, `webhooks-api`, `webhook-engine` | Umbrella feature enabling all Module 7 source lookup, Apple Pay session, webhooks CRUD, and constant-time verification engine |
 | `stripe-compat` | No | `payments`, `tokens`, `invoices` | `client.refunds()`, `client.customers()`, `client.subscriptions()` — Virtual refund service, token vault, and pro-rata subscription refunds ([Tokenized Cards](https://docs.moyasar.com/guides/tokenization/tokenized-cards)) |
-| `some-payments-trait` (alias `some-payment-trait`) | No | `unified-gateway` (`core`, `payments`, `payment-intents`, `tokens`, `webhook-engine`) | Implements `UnifiedPaymentGateway`, `PaymentCapability`, `PayoutCapability`, `WebhookCapability`, `WebhookVerifier`, and `PayoutEngine` traits for [`some-payment`](https://github.com/some-of-cs/some-payment) |
+| `some-payments-trait` (alias `some-payment-trait`) | No | `unified-gateway` (`core`, `payments`, `payment-intents`, `tokens`, `payouts`, `webhook-engine`) | Implements `UnifiedPaymentGateway`, `PaymentCapability`, `PayoutCapability`, `SplitSettlementCapability` (`v0.9.0`), `WebhookCapability`, `WebhookVerifier`, and `PayoutEngine` traits with `payouts` support for [`some-payment`](https://github.com/some-of-cs/some-payment) ecosystem interoperability |
 | `async-stream` | No | `core` | Enables asynchronous `Stream` auto-pagination over `Paginator` |
 | `test-utils` | No | `core`, `wiremock` | Provides `MoyasarMockServer` and deterministic JSON fixtures for all 11+1 webhook events, STC Pay, SADAD (`007`), and ISO 8583 codes |
 | `full` | No | All of the above | Enables every Moyasar API resource, webhook engine, auto-pagination stream, and [`some-payment`](https://github.com/some-of-cs/some-payment) adapter |
@@ -280,10 +280,10 @@ All 8 SDK modules (`v0.1.0` through `v0.8.0`) and all 4 framework reference serv
 | **Module 6: Settlements, Transfers & Ledger** | `v0.6.0` | `settlements-ledger` (`settlements`) | `SettlementsService` (lines & merchant balance), `TransfersService`, `InternalTransactionsService` | [#114](https://github.com/some-of-cs/some-moyasar/pull/114) | **Merged / Completed (`v0.8.0` Stable)** |
 | **Module 7: Sources, Apple Pay & Webhooks** | `v0.7.0` | `sources`, `webhooks-api`, `webhook-engine`, `sources-webhooks` | `SourcesService` (BIN/IIN lookup), `ApplePayService`, `WebhooksService` CRUD, `ConstantTimeSecretVerifier` & `InMemoryDeduplicator` | [#131](https://github.com/some-of-cs/some-moyasar/pull/131) | **Merged / Completed (`v0.8.0` Stable)** |
 | **Module 8: Cross-Cutting Hardening & DX** | `v0.8.0` | `stripe-compat`, `unified-gateway`, `some-payment-trait`, `test-utils`, `full` | `RefundsService`, `CustomersService`, `SubscriptionsService`, `InMemoryCustomerVault`, `UnifiedPaymentGateway`, `MoyasarMockServer`, security & DX hardening | [#152](https://github.com/some-of-cs/some-moyasar/pull/152) | **Merged / Completed (`v0.8.0` Stable)** |
-| **Axum 0.8 Reference Server** | `v0.8.0` | `full`, `test-utils` | `axum_server` (`examples/axum/`) & E2E suite `axum_integration` (`axum_e2e`) across all 18 services | [#193](https://github.com/some-of-cs/some-moyasar/pull/193), [#207](https://github.com/some-of-cs/some-moyasar/pull/207) | **Merged / Completed (`v0.8.0` Stable)** |
-| **Actix-Web 4 Reference Server** | `v0.8.0` | `full`, `test-utils` | `actix_server` (`examples/actix/`) & E2E suite `actix_integration` (`actix_e2e`) across all 18 services | [#194](https://github.com/some-of-cs/some-moyasar/pull/194), [#206](https://github.com/some-of-cs/some-moyasar/pull/206) | **Merged / Completed (`v0.8.0` Stable)** |
-| **Rocket.rs 0.5 Reference Server** | `v0.8.0` | `full`, `test-utils` | `rocket_server` (`examples/rocket/`) & E2E suite `rocket_integration` (`rocket_e2e`) across all 18 services | [#212](https://github.com/some-of-cs/some-moyasar/pull/212) | **Merged / Completed (`v0.8.0` Stable)** |
-| **Tonic 0.12 gRPC Reference Server** | `v0.8.0` | `full`, `test-utils` | `tonic_grpc_server` (`examples/tonic/`) & E2E suite `tonic_integration` (`tonic_e2e`) across all 18 services | [#200](https://github.com/some-of-cs/some-moyasar/pull/200), [#218](https://github.com/some-of-cs/some-moyasar/pull/218) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Axum 0.8 Reference Server** | `v0.8.0` | `full`, `test-utils` | `axum_server` (`examples/axum/`) & E2E suite `axum_integration` across all 18 services | [#193](https://github.com/some-of-cs/some-moyasar/pull/193), [#207](https://github.com/some-of-cs/some-moyasar/pull/207) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Actix-Web 4 Reference Server** | `v0.8.0` | `full`, `test-utils` | `actix_server` (`examples/actix/`) & E2E suite `actix_integration` across all 18 services | [#194](https://github.com/some-of-cs/some-moyasar/pull/194), [#206](https://github.com/some-of-cs/some-moyasar/pull/206) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Rocket.rs 0.5 Reference Server** | `v0.8.0` | `full`, `test-utils` | `rocket_server` (`examples/rocket/`) & E2E suite `rocket_integration` across all 18 services | [#212](https://github.com/some-of-cs/some-moyasar/pull/212) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Tonic 0.12 gRPC Reference Server** | `v0.8.0` | `full`, `test-utils` | `tonic_grpc_server` (`examples/tonic/`) & E2E suite `tonic_integration` across all 18 services | [#200](https://github.com/some-of-cs/some-moyasar/pull/200), [#218](https://github.com/some-of-cs/some-moyasar/pull/218) | **Merged / Completed (`v0.8.0` Stable)** |
 
 ---
 
@@ -293,10 +293,10 @@ Production-grade reference servers and wire-level E2E test suites (`MoyasarMockS
 
 | Web / RPC Framework | Example Target (`examples/`) | E2E Test Suite (`tests/`) | Run Example Server | Run E2E Test Suite |
 | :--- | :--- | :--- | :--- | :--- |
-| **Axum 0.8** | `axum_server` | `axum_integration` (`axum_e2e`) | `cargo run --example axum_server --features full` | `cargo test --test axum_integration --features "full,test-utils"` |
-| **Actix-Web 4** | `actix_server` | `actix_integration` (`actix_e2e`) | `cargo run --example actix_server --features full` | `cargo test --test actix_integration --features "full,test-utils"` |
-| **Rocket.rs 0.5** | `rocket_server` | `rocket_integration` (`rocket_e2e`) | `cargo run --example rocket_server --features full` | `cargo test --test rocket_integration --features "full,test-utils"` |
-| **Tonic 0.12 gRPC** | `tonic_grpc_server` | `tonic_integration` (`tonic_e2e`) | `cargo run --example tonic_grpc_server --features full` | `cargo test --test tonic_integration --features "full,test-utils"` |
+| **Axum 0.8** | `axum_server` | `axum_integration` | `cargo run --example axum_server --features full` | `cargo test --test axum_integration --features "full,test-utils"` |
+| **Actix-Web 4** | `actix_server` | `actix_integration` | `cargo run --example actix_server --features full` | `cargo test --test actix_integration --features "full,test-utils"` |
+| **Rocket.rs 0.5** | `rocket_server` | `rocket_integration` | `cargo run --example rocket_server --features full` | `cargo test --test rocket_integration --features "full,test-utils"` |
+| **Tonic 0.12 gRPC** | `tonic_grpc_server` | `tonic_integration` | `cargo run --example tonic_grpc_server --features full` | `cargo test --test tonic_integration --features "full,test-utils"` |
 
 ```bash
 # Run any reference server (requires MOYASAR_SECRET_KEY and MOYASAR_WEBHOOK_SECRET in env)
@@ -305,16 +305,11 @@ cargo run --example actix_server --features full
 cargo run --example rocket_server --features full
 cargo run --example tonic_grpc_server --features full
 
-# Run framework E2E integration suites (axum_e2e, actix_e2e, rocket_e2e, tonic_e2e)
+# Run framework E2E integration suites
 cargo test --test axum_integration --features "full,test-utils"
 cargo test --test actix_integration --features "full,test-utils"
 cargo test --test rocket_integration --features "full,test-utils"
 cargo test --test tonic_integration --features "full,test-utils"
-# Or by suite alias:
-# cargo test --test axum_e2e --features "full,test-utils"
-# cargo test --test actix_e2e --features "full,test-utils"
-# cargo test --test rocket_e2e --features "full,test-utils"
-# cargo test --test tonic_e2e --features "full,test-utils"
 ```
 
 ---
@@ -325,6 +320,7 @@ cargo test --test tonic_integration --features "full,test-utils"
 
 - Routing Saudi Arabia (`SA`) checkouts and SARIE/IPS disbursements to **`some-moyasar`**, Egypt (`EG`) checkouts and mobile wallet cash-ins to **[`some-paymob`](https://github.com/some-of-cs/some-paymob)**, and global (`US`/`EU`/`GB`) checkouts to **[`some-stripe`](https://github.com/some-of-cs/some-stripe)**.
 - Composing **[`some-stripe`](https://github.com/some-of-cs/some-stripe)** Identity KYC (`VerificationSession`) with **`some-moyasar`** Mada/STC Pay payment collection and SARIE vendor payouts in a single unified workflow.
+- Importing core client and key types directly from the crate root (`use some_moyasar::{MoyasarClient, SecretKey as MoyasarSecretKey};`) alongside `v0.9.0` `payouts` and `SplitSettlementCapability` support for seamless [`some-payment`](https://github.com/some-of-cs/some-payment) adapter integration.
 
 ---
 
