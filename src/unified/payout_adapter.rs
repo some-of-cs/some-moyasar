@@ -84,6 +84,26 @@ impl fmt::Debug for UnifiedPayoutDestination {
     }
 }
 
+/// Beneficiary country and city for a bank account payout destination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BankLocation {
+    /// Two-letter ISO 3166-1 alpha-2 country code (e.g., `"SA"`).
+    pub country: String,
+    /// Beneficiary city name (e.g., `"Riyadh"`).
+    pub city: String,
+}
+
+impl BankLocation {
+    /// Creates a new [`BankLocation`] from an ISO 3166-1 alpha-2 `country` code and `city`.
+    #[must_use]
+    pub fn new(country: impl Into<String>, city: impl Into<String>) -> Self {
+        Self {
+            country: country.into(),
+            city: city.into(),
+        }
+    }
+}
+
 impl UnifiedPayoutDestination {
     /// Constructs a [`UnifiedPayoutDestination::Bank`] destination.
     #[must_use]
@@ -91,15 +111,14 @@ impl UnifiedPayoutDestination {
         iban: impl Into<String>,
         name: impl Into<String>,
         mobile: impl Into<String>,
-        country: impl Into<String>,
-        city: impl Into<String>,
+        location: BankLocation,
     ) -> Self {
         Self::Bank {
             iban: iban.into(),
             name: name.into(),
             mobile: mobile.into(),
-            country: country.into(),
-            city: city.into(),
+            country: location.country,
+            city: location.city,
         }
     }
 
@@ -197,16 +216,16 @@ impl UnifiedPayoutRequest {
     }
 
     fn into_create_params(self) -> Result<CreatePayoutParams, MoyasarError> {
-        let source_id = PayoutAccountId::new(self.source_account_id)?;
-        let purpose = parse_payout_purpose(&self.purpose)?;
+        let source_id = PayoutAccountId::new(self.source_account_id.as_str())?;
+        let entry = self.into_bulk_entry()?;
         Ok(CreatePayoutParams {
             source_id,
-            sequence_number: self.sequence_number,
-            amount: self.amount_minor,
-            purpose,
-            destination: self.destination.into_moyasar(),
-            comment: self.comment,
-            metadata: self.metadata,
+            sequence_number: entry.sequence_number,
+            amount: entry.amount,
+            purpose: entry.purpose,
+            destination: entry.destination,
+            comment: entry.comment,
+            metadata: entry.metadata,
         })
     }
 
@@ -284,17 +303,20 @@ pub trait PayoutCapability: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<UnifiedPayoutResponse, Self::Error>> + Send + 'a>>;
 }
 
+type PayoutFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, MoyasarError>> + Send + 'a>>;
+
 impl PayoutCapability for MoyasarClient<SecretKey> {
     type Error = MoyasarError;
 
     fn disburse<'a>(
         &'a self,
         request: UnifiedPayoutRequest,
-    ) -> Pin<Box<dyn Future<Output = Result<UnifiedPayoutResponse, Self::Error>> + Send + 'a>> {
+    ) -> PayoutFuture<'a, UnifiedPayoutResponse> {
         Box::pin(async move {
-            let params = request.into_create_params()?;
-            let payout = self.payouts().create(&params).await?;
-            Ok(map_unified_payout(payout))
+            self.payouts()
+                .create(&request.into_create_params()?)
+                .await
+                .map(map_unified_payout)
         })
     }
 
@@ -302,8 +324,7 @@ impl PayoutCapability for MoyasarClient<SecretKey> {
         &'a self,
         source_account_id: &'a str,
         requests: Vec<UnifiedPayoutRequest>,
-    ) -> Pin<Box<dyn Future<Output = Result<UnifiedBulkPayoutResponse, Self::Error>> + Send + 'a>>
-    {
+    ) -> PayoutFuture<'a, UnifiedBulkPayoutResponse> {
         Box::pin(async move {
             let source_id = PayoutAccountId::new(source_account_id)?;
             let entries = requests
@@ -317,14 +338,12 @@ impl PayoutCapability for MoyasarClient<SecretKey> {
         })
     }
 
-    fn payout_status<'a>(
-        &'a self,
-        payout_id: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<UnifiedPayoutResponse, Self::Error>> + Send + 'a>> {
+    fn payout_status<'a>(&'a self, payout_id: &'a str) -> PayoutFuture<'a, UnifiedPayoutResponse> {
         Box::pin(async move {
-            let id = PayoutId::new(payout_id)?;
-            let payout = self.payouts().retrieve(&id).await?;
-            Ok(map_unified_payout(payout))
+            self.payouts()
+                .retrieve(&PayoutId::new(payout_id)?)
+                .await
+                .map(map_unified_payout)
         })
     }
 }
@@ -338,25 +357,18 @@ fn parse_payout_purpose(raw: &str) -> Result<PayoutPurpose, MoyasarError> {
     })
 }
 
-fn payout_channel_str(channel: PayoutChannel) -> &'static str {
-    PAYOUT_CHANNEL_STRINGS
+fn lookup_label<T: PartialEq>(table: &[(T, &'static str)], key: &T) -> &'static str {
+    table
         .iter()
-        .find(|(variant, _)| *variant == channel)
-        .map_or("unknown", |(_, label)| *label)
-}
-
-fn payout_status_str(status: PayoutStatus) -> &'static str {
-    PAYOUT_STATUS_STRINGS
-        .iter()
-        .find(|(variant, _)| *variant == status)
+        .find(|(variant, _)| variant == key)
         .map_or("unknown", |(_, label)| *label)
 }
 
 fn map_unified_payout(payout: Payout) -> UnifiedPayoutResponse {
     UnifiedPayoutResponse {
         id: payout.id.as_str().to_owned(),
-        channel: payout_channel_str(payout.channel).to_owned(),
-        status: payout_status_str(payout.status).to_owned(),
+        channel: lookup_label(PAYOUT_CHANNEL_STRINGS, &payout.channel).to_owned(),
+        status: lookup_label(PAYOUT_STATUS_STRINGS, &payout.status).to_owned(),
         amount_minor: payout.amount,
         message: payout.message,
         failure_reason: payout.failure_reason,
@@ -414,8 +426,7 @@ mod tests {
             "SA0380000000608010167519",
             "Acme Logistics LLC",
             "0512345678",
-            "SA",
-            "Riyadh",
+            BankLocation::new("SA", "Riyadh"),
         );
         let debug_str = format!("{dest:?}");
         assert!(!debug_str.contains("SA0380000000608010167519"));

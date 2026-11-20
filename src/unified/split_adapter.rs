@@ -316,13 +316,8 @@ mod tests {
             .unwrap()
     }
 
-    #[tokio::test]
-    async fn create_split_payment_dispatches_validated_splits() {
-        let server = MockServer::start().await;
+    async fn mount_split_payment_mock(server: &MockServer, vendor_id: Uuid, platform_id: Uuid) {
         let now = Utc::now().to_rfc3339();
-        let vendor_id = Uuid::from_u128(0x1111);
-        let platform_id = Uuid::from_u128(0x2222);
-
         Mock::given(method("POST"))
             .and(path("/v1/payments"))
             .and(body_partial_json(json!({
@@ -367,8 +362,16 @@ mod tests {
                 "updated_at": now
             })))
             .expect(1)
-            .mount(&server)
+            .mount(server)
             .await;
+    }
+
+    #[tokio::test]
+    async fn create_split_payment_dispatches_validated_splits() {
+        let server = MockServer::start().await;
+        let vendor_id = Uuid::from_u128(0x1111);
+        let platform_id = Uuid::from_u128(0x2222);
+        mount_split_payment_mock(&server, vendor_id, platform_id).await;
 
         let client = test_client(&server.uri());
         let req = UnifiedSplitPaymentRequest::new(

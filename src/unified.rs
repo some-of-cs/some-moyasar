@@ -8,8 +8,8 @@ pub mod router;
 pub mod split_adapter;
 
 pub use payout_adapter::{
-    PayoutCapability, UnifiedBulkPayoutResponse, UnifiedPayoutDestination, UnifiedPayoutRequest,
-    UnifiedPayoutResponse,
+    BankLocation, PayoutCapability, UnifiedBulkPayoutResponse, UnifiedPayoutDestination,
+    UnifiedPayoutRequest, UnifiedPayoutResponse,
 };
 pub use router::MoyasarGatewayAdapter;
 pub use split_adapter::{
@@ -50,7 +50,10 @@ pub const WEBHOOK_SIGNATURE_HEADER: &str = "x-moyasar-signature";
 pub const WEBHOOK_SECRET_TOKEN_HEADER: &str = "x-moyasar-secret-token";
 
 /// Cross-gateway request parameters for creating a hosted/client-secret payment intent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Customer PII (`customer_email`, `customer_phone`) is redacted as `"[REDACTED]"` in
+/// [`core::fmt::Debug`] output.
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct UnifiedIntentRequest<'a> {
     /// Intent amount in minor units (`u64`).
     pub amount_minor: u64,
@@ -70,6 +73,24 @@ pub struct UnifiedIntentRequest<'a> {
     pub customer_phone: Option<&'a str>,
     /// Optional caller-supplied UUID idempotency key (`given_id`).
     pub idempotency_key: Option<Uuid>,
+}
+
+impl core::fmt::Debug for UnifiedIntentRequest<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let redacted_email = self.customer_email.map(|_| "[REDACTED]");
+        let redacted_phone = self.customer_phone.map(|_| "[REDACTED]");
+        f.debug_struct("UnifiedIntentRequest")
+            .field("amount_minor", &self.amount_minor)
+            .field("currency", &self.currency)
+            .field("description", &self.description)
+            .field("callback_url", &self.callback_url)
+            .field("order_reference", &self.order_reference)
+            .field("buyer_country", &self.buyer_country)
+            .field("customer_email", &redacted_email)
+            .field("customer_phone", &redacted_phone)
+            .field("idempotency_key", &self.idempotency_key)
+            .finish()
+    }
 }
 
 impl<'a> UnifiedIntentRequest<'a> {
@@ -906,5 +927,21 @@ mod tests {
         let intent = client.create_intent(req).await.unwrap();
         assert_eq!(intent.id, "pi_rich_01");
         assert_eq!(intent.amount_minor, 25_000);
+    }
+
+    #[test]
+    fn unified_intent_request_debug_redacts_customer_pii() {
+        let req = UnifiedIntentRequest::new(25_000, "SAR", "https://example.com/cb")
+            .customer_email("buyer@example.com")
+            .customer_phone("+966512345678");
+        let rendered = format!("{req:?}");
+        assert!(!rendered.contains("buyer@example.com"));
+        assert!(!rendered.contains("+966512345678"));
+        assert!(rendered.contains("[REDACTED]"));
+
+        let minimal = UnifiedIntentRequest::new(10_000, "SAR", "https://example.com/cb");
+        let minimal_rendered = format!("{minimal:?}");
+        assert!(minimal_rendered.contains("customer_email: None"));
+        assert!(minimal_rendered.contains("customer_phone: None"));
     }
 }
