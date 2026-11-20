@@ -1,4 +1,4 @@
-//! # some-moyasar (`v0.8.0`)
+//! # some-moyasar (`v0.9.0`)
 //!
 //! Idiomatic, microkernel-architected Rust SDK and constant-time webhook verification engine
 //! for the [Moyasar Payment Gateway](https://docs.moyasar.com/api/api-introduction).
@@ -22,7 +22,7 @@
 //!   `given_id` tokens into mutating JSON request payloads so transient 5xx and network timeouts
 //!   can be retried safely without double-charging customers.
 //!
-//! ## Complete 18-Service Accessor & Engine Matrix (Modules 1–8, `v0.1.0`–`v0.8.0`)
+//! ## Complete 18-Service Accessor & Engine Matrix (Modules 1–9, `v0.1.0`–`v0.9.0`)
 //!
 //! | # | Module & Version | Accessor / Entrypoint | Service / Engine Type | Feature Flag | Key Requirement |
 //! | :- | :--- | :--- | :--- | :--- | :--- |

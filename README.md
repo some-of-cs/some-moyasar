@@ -18,7 +18,7 @@
 [Quick Start](#quick-start) •
 [Webhook Security](#constant-time-webhook-verification-engine) •
 [API Coverage](#complete-moyasar-services--api-coverage) •
-[Roadmap (v0.1–v0.8)](#development-status--release-roadmap-v010--v080) •
+[Roadmap (v0.1–v0.9)](#development-status--release-roadmap-v010--v090) •
 [Framework Servers](#framework-reference-servers--e2e-suites) •
 [some-payment Ecosystem](#cross-gateway-interoperability-with-some-payment) •
 [Sponsors](#backers--corporate-sponsors)
@@ -82,7 +82,7 @@ Building high-concurrency Rust backend systems for Saudi Arabia and GCC commerce
 
 ```toml
 [dependencies]
-some-moyasar = "0.8.0"
+some-moyasar = "0.9.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -90,7 +90,7 @@ tokio = { version = "1", features = ["full"] }
 
 ```toml
 [dependencies]
-some-moyasar = { version = "0.8.0", features = [
+some-moyasar = { version = "0.9.0", features = [
     "full",
     "stripe-compat",
     "some-payment-trait"
@@ -266,9 +266,9 @@ fn verify_moyasar_webhook(raw_body: &[u8], shared_secret: &str) {
 
 ---
 
-## Development Status & Release Roadmap (v0.1.0 – v0.8.0)
+## Development Status & Release Roadmap (v0.1.0 – v0.9.0)
 
-All 8 SDK modules (`v0.1.0` through `v0.8.0`) and all 4 framework reference servers + E2E integration suites covering all 18 crate services are **Merged / Completed (`v0.8.0` Stable)**:
+All 9 SDK modules (`v0.1.0` through `v0.9.0`) and all 4 framework reference servers + E2E integration suites covering all 18 crate services are **Merged / Completed (`v0.9.0` Stable)**:
 
 | Milestone / Module | Version | Feature Flags | Scope & Services | PR(s) | Status |
 | :--- | :---: | :--- | :--- | :---: | :---: |
@@ -280,6 +280,7 @@ All 8 SDK modules (`v0.1.0` through `v0.8.0`) and all 4 framework reference serv
 | **Module 6: Settlements, Transfers & Ledger** | `v0.6.0` | `settlements-ledger` (`settlements`) | `SettlementsService` (lines & merchant balance), `TransfersService`, `InternalTransactionsService` | [#114](https://github.com/some-of-cs/some-moyasar/pull/114) | **Merged / Completed (`v0.8.0` Stable)** |
 | **Module 7: Sources, Apple Pay & Webhooks** | `v0.7.0` | `sources`, `webhooks-api`, `webhook-engine`, `sources-webhooks` | `SourcesService` (BIN/IIN lookup), `ApplePayService`, `WebhooksService` CRUD, `ConstantTimeSecretVerifier` & `InMemoryDeduplicator` | [#131](https://github.com/some-of-cs/some-moyasar/pull/131) | **Merged / Completed (`v0.8.0` Stable)** |
 | **Module 8: Cross-Cutting Hardening & DX** | `v0.8.0` | `stripe-compat`, `unified-gateway`, `some-payment-trait`, `test-utils`, `full` | `RefundsService`, `CustomersService`, `SubscriptionsService`, `InMemoryCustomerVault`, `UnifiedPaymentGateway`, `MoyasarMockServer`, security & DX hardening | [#152](https://github.com/some-of-cs/some-moyasar/pull/152) | **Merged / Completed (`v0.8.0` Stable)** |
+| **Module 9: `some-payment` Readiness & Security Hardening** | `v0.9.0` | `core`, `unified-gateway`, `some-payment-trait`, `payouts` | Fail-closed webhook secret (`SEC-01`), `BackoffPolicy` + `Retry-After`, `Policy::none()` redirects, async `PayoutCapability`, `SplitSettlementCapability`, native `secret_token` `WebhookCapability`, crate-root exports | [#226](https://github.com/some-of-cs/some-moyasar/pull/226) | **Merged / Completed (`v0.9.0` Stable)** |
 | **Axum 0.8 Reference Server** | `v0.8.0` | `full`, `test-utils` | `axum_server` (`examples/axum/`) & E2E suite `axum_integration` across all 18 services | [#193](https://github.com/some-of-cs/some-moyasar/pull/193), [#207](https://github.com/some-of-cs/some-moyasar/pull/207) | **Merged / Completed (`v0.8.0` Stable)** |
 | **Actix-Web 4 Reference Server** | `v0.8.0` | `full`, `test-utils` | `actix_server` (`examples/actix/`) & E2E suite `actix_integration` across all 18 services | [#194](https://github.com/some-of-cs/some-moyasar/pull/194), [#206](https://github.com/some-of-cs/some-moyasar/pull/206) | **Merged / Completed (`v0.8.0` Stable)** |
 | **Rocket.rs 0.5 Reference Server** | `v0.8.0` | `full`, `test-utils` | `rocket_server` (`examples/rocket/`) & E2E suite `rocket_integration` across all 18 services | [#212](https://github.com/some-of-cs/some-moyasar/pull/212) | **Merged / Completed (`v0.8.0` Stable)** |
