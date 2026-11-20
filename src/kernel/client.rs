@@ -287,6 +287,7 @@ impl<K: AuthKey> MoyasarClientBuilder<K> {
             .timeout(self.config.timeout)
             .default_headers(headers)
             .https_only(key.mode() == AuthMode::Live)
+            .redirect(reqwest::redirect::Policy::none())
             .build()?;
 
         Ok(MoyasarClient(Arc::new(ClientInner {
@@ -410,6 +411,41 @@ mod tests {
                 .expect_err("empty webhook secret must fail build");
             assert!(matches!(err, MoyasarError::InvalidWebhookSecret));
         }
+    }
+
+    #[tokio::test]
+    async fn does_not_follow_http_redirects() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/redirect-source"))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .insert_header("location", format!("{}/v1/redirect-target", server.uri())),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/redirect-target"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let client = MoyasarClient::builder("sk_test_no_redirect")
+            .base_url(server.uri())
+            .build()
+            .expect("client builds");
+        let resp = client
+            .http()
+            .get(format!("{}/v1/redirect-source", client.base_url()))
+            .send()
+            .await
+            .expect("receives raw 302 response");
+        assert_eq!(resp.status().as_u16(), 302);
     }
 
     #[tokio::test]
