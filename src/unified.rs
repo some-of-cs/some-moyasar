@@ -1,13 +1,25 @@
 //! Unified cross-gateway payment trait adapter for `MoyasarClient`.
 
+/// Orthogonal [`PayoutCapability`] adapter backed by `client.payouts()`.
+pub mod payout_adapter;
 /// Ergonomic [`MoyasarGatewayAdapter`] router wrapper for [`MoyasarClient`].
 pub mod router;
-pub use router::MoyasarGatewayAdapter;
+/// Orthogonal [`SplitSettlementCapability`] adapter backed by `client.payments().create(...)`.
+pub mod split_adapter;
 
-use std::future::Future;
-use std::pin::Pin;
+pub use payout_adapter::{
+    PayoutCapability, UnifiedBulkPayoutResponse, UnifiedPayoutDestination, UnifiedPayoutRequest,
+    UnifiedPayoutResponse,
+};
+pub use router::MoyasarGatewayAdapter;
+pub use split_adapter::{
+    SplitSettlementCapability, UnifiedSplitPaymentRequest, UnifiedSplitPaymentResponse,
+    UnifiedSplitRecipientRole, UnifiedSplitRule,
+};
 
 use std::fmt::Write as _;
+use std::future::Future;
+use std::pin::Pin;
 
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
@@ -18,9 +30,10 @@ use subtle::ConstantTimeEq;
 use uuid::Uuid;
 use zeroize::Zeroize;
 
-use crate::kernel::auth::{AuthKey, SecretKey};
+use crate::kernel::auth::SecretKey;
 use crate::kernel::client::MoyasarClient;
 use crate::kernel::error::MoyasarError;
+use crate::kernel::metadata::Metadata;
 use crate::kernel::types::Currency;
 use crate::resources::payment_intents::CreatePaymentIntentParams;
 use crate::resources::payments::{
@@ -47,6 +60,16 @@ pub struct UnifiedIntentRequest<'a> {
     pub description: Option<&'a str>,
     /// Redirect callback URL (`https://...`).
     pub callback_url: &'a str,
+    /// Optional merchant order reference forwarded in intent metadata.
+    pub order_reference: Option<&'a str>,
+    /// Optional ISO 3166-1 alpha-2 buyer country code forwarded in intent metadata.
+    pub buyer_country: Option<&'a str>,
+    /// Optional customer email address forwarded in intent metadata.
+    pub customer_email: Option<&'a str>,
+    /// Optional customer phone number forwarded in intent metadata.
+    pub customer_phone: Option<&'a str>,
+    /// Optional caller-supplied UUID idempotency key (`given_id`).
+    pub idempotency_key: Option<Uuid>,
 }
 
 impl<'a> UnifiedIntentRequest<'a> {
@@ -58,6 +81,11 @@ impl<'a> UnifiedIntentRequest<'a> {
             currency,
             description: None,
             callback_url,
+            order_reference: None,
+            buyer_country: None,
+            customer_email: None,
+            customer_phone: None,
+            idempotency_key: None,
         }
     }
 
@@ -65,6 +93,41 @@ impl<'a> UnifiedIntentRequest<'a> {
     #[must_use]
     pub const fn description(mut self, description: &'a str) -> Self {
         self.description = Some(description);
+        self
+    }
+
+    /// Attaches an optional merchant order reference forwarded via metadata.
+    #[must_use]
+    pub const fn order_reference(mut self, order_reference: &'a str) -> Self {
+        self.order_reference = Some(order_reference);
+        self
+    }
+
+    /// Attaches an optional buyer ISO 3166-1 alpha-2 country code forwarded via metadata.
+    #[must_use]
+    pub const fn buyer_country(mut self, buyer_country: &'a str) -> Self {
+        self.buyer_country = Some(buyer_country);
+        self
+    }
+
+    /// Attaches an optional customer email forwarded via metadata.
+    #[must_use]
+    pub const fn customer_email(mut self, customer_email: &'a str) -> Self {
+        self.customer_email = Some(customer_email);
+        self
+    }
+
+    /// Attaches an optional customer phone number forwarded via metadata.
+    #[must_use]
+    pub const fn customer_phone(mut self, customer_phone: &'a str) -> Self {
+        self.customer_phone = Some(customer_phone);
+        self
+    }
+
+    /// Attaches an explicit UUID idempotency key (`given_id`).
+    #[must_use]
+    pub const fn idempotency_key(mut self, idempotency_key: Uuid) -> Self {
+        self.idempotency_key = Some(idempotency_key);
         self
     }
 }
@@ -192,29 +255,43 @@ pub trait UnifiedPaymentGateway: Send + Sync {
         amount_minor: Option<u64>,
     ) -> Pin<Box<dyn Future<Output = Result<UnifiedReversalResponse, Self::Error>> + Send + 'a>>;
 
-    /// Verifies and parses an inbound webhook payload using constant-time comparison.
+    /// Verifies and parses an inbound webhook payload requiring `x-moyasar-signature` HMAC-SHA256.
     fn verify_webhook(
         &self,
         headers: &http::HeaderMap,
         raw_body: &[u8],
     ) -> Result<UnifiedWebhookEvent, Self::Error>;
+
+    /// Verifies and parses a native Moyasar webhook JSON payload using constant-time Double-HMAC
+    /// verification over the body's `secret_token` and replay-window validation.
+    fn verify_webhook_payload(&self, raw_body: &[u8]) -> Result<UnifiedWebhookEvent, Self::Error>;
 }
 
 /// Companion `some-payment` capability marker trait for payment operations.
 pub trait PaymentCapability: UnifiedPaymentGateway {}
 impl<T: UnifiedPaymentGateway + ?Sized> PaymentCapability for T {}
 
-/// Companion `some-payment` capability marker trait for webhook verification.
-pub trait WebhookCapability: UnifiedPaymentGateway {}
+/// Companion `some-payment` capability trait for webhook verification and normalization.
+pub trait WebhookCapability: UnifiedPaymentGateway {
+    /// Verifies and normalizes an inbound webhook, using `x-moyasar-signature` HMAC-SHA256 when
+    /// that header is present or falling back to native Moyasar `secret_token` payload
+    /// verification when no signature header is supplied.
+    fn verify_and_normalize(
+        &self,
+        headers: &http::HeaderMap,
+        raw_body: &[u8],
+    ) -> Result<UnifiedWebhookEvent, Self::Error> {
+        if headers.contains_key(WEBHOOK_SIGNATURE_HEADER) {
+            return self.verify_webhook(headers, raw_body);
+        }
+        self.verify_webhook_payload(raw_body)
+    }
+}
 impl<T: UnifiedPaymentGateway + ?Sized> WebhookCapability for T {}
 
 /// Companion `some-payment` trait alias for constant-time webhook verification.
 pub trait WebhookVerifier: UnifiedPaymentGateway {}
 impl<T: UnifiedPaymentGateway + ?Sized> WebhookVerifier for T {}
-
-/// Companion `some-payment` capability marker trait for payout operations.
-pub trait PayoutCapability: Send + Sync {}
-impl PayoutCapability for MoyasarClient<SecretKey> {}
 
 /// Companion `some-payment` trait alias for payout engines.
 pub trait PayoutEngine: PayoutCapability {}
@@ -228,12 +305,7 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
         request: UnifiedIntentRequest<'a>,
     ) -> Pin<Box<dyn Future<Output = Result<UnifiedIntentResponse, Self::Error>> + Send + 'a>> {
         Box::pin(async move {
-            let cur: Currency = request.currency.parse()?;
-            let mut params =
-                CreatePaymentIntentParams::new(request.amount_minor, cur, request.callback_url);
-            if let Some(desc) = request.description {
-                params = params.description(desc);
-            }
+            let params = build_intent_params(request)?;
             let intent = self.payment_intents().create(params).await?;
             Ok(UnifiedIntentResponse {
                 id: intent.id.as_str().to_owned(),
@@ -289,13 +361,14 @@ impl UnifiedPaymentGateway for MoyasarClient<SecretKey> {
     ) -> Result<UnifiedWebhookEvent, Self::Error> {
         let sig = header_str(headers, WEBHOOK_SIGNATURE_HEADER)
             .ok_or(MoyasarError::InvalidWebhookSignature)?;
-        let secret = resolved_webhook_secret(self);
+        let secret = resolved_webhook_secret(self)?;
         verify_webhook_signature(raw_body, sig, secret)?;
-        let verifier = ConstantTimeSecretVerifier::new(secret, REPLAY_TOLERANCE);
-        let event = verifier
-            .verify_and_construct(raw_body)
-            .map_err(|_| MoyasarError::InvalidWebhookSecret)?;
-        Ok(map_unified_webhook_event(&event))
+        verify_body_with_secret(secret, raw_body)
+    }
+
+    fn verify_webhook_payload(&self, raw_body: &[u8]) -> Result<UnifiedWebhookEvent, Self::Error> {
+        let secret = resolved_webhook_secret(self)?;
+        verify_body_with_secret(secret, raw_body)
     }
 }
 
@@ -313,8 +386,9 @@ impl MoyasarClient<SecretKey> {
     ///
     /// # Errors
     ///
-    /// Returns [`MoyasarError::InvalidWebhookSecret`] if the `x-moyasar-secret-token` header is
-    /// missing or mismatches the configured secret, or if payload verification fails.
+    /// Returns [`MoyasarError::InvalidWebhookSecret`] if no webhook secret is configured on the
+    /// client, if the `x-moyasar-secret-token` header is missing or mismatches the configured
+    /// secret, or if payload verification fails.
     pub fn verify_webhook_with_secret_token(
         &self,
         headers: &http::HeaderMap,
@@ -322,14 +396,54 @@ impl MoyasarClient<SecretKey> {
     ) -> Result<UnifiedWebhookEvent, MoyasarError> {
         let token = header_str(headers, WEBHOOK_SECRET_TOKEN_HEADER)
             .ok_or(MoyasarError::InvalidWebhookSecret)?;
-        let secret = resolved_webhook_secret(self);
+        let secret = resolved_webhook_secret(self)?;
         verify_static_secret_token(token, secret)?;
-        let verifier = ConstantTimeSecretVerifier::new(secret, REPLAY_TOLERANCE);
-        let event = verifier
-            .verify_and_construct(raw_body)
-            .map_err(|_| MoyasarError::InvalidWebhookSecret)?;
-        Ok(map_unified_webhook_event(&event))
+        verify_body_with_secret(secret, raw_body)
     }
+}
+
+fn build_intent_params(
+    request: UnifiedIntentRequest<'_>,
+) -> Result<CreatePaymentIntentParams, MoyasarError> {
+    let cur: Currency = request.currency.parse()?;
+    let mut params =
+        CreatePaymentIntentParams::new(request.amount_minor, cur, request.callback_url);
+    if let Some(desc) = request.description {
+        params = params.description(desc);
+    }
+    if let Some(key) = request.idempotency_key {
+        params = params.given_id(key);
+    }
+    if let Some(meta) = build_intent_metadata(&request)? {
+        params = params.metadata(meta);
+    }
+    Ok(params)
+}
+
+fn build_intent_metadata(
+    request: &UnifiedIntentRequest<'_>,
+) -> Result<Option<Metadata>, MoyasarError> {
+    let entries = [
+        ("order_reference", request.order_reference),
+        ("buyer_country", request.buyer_country),
+        ("customer_email", request.customer_email),
+        ("customer_phone", request.customer_phone),
+    ];
+    let mut meta = Metadata::new();
+    for (key, value) in entries {
+        if let Some(val) = value {
+            meta.insert(key, val)?;
+        }
+    }
+    Ok((!meta.is_empty()).then_some(meta))
+}
+
+fn verify_body_with_secret(secret: &str, raw_body: &[u8]) -> Result<UnifiedWebhookEvent, MoyasarError> {
+    let verifier = ConstantTimeSecretVerifier::from_secret(secret)?;
+    let event = verifier
+        .verify_and_construct(raw_body)
+        .map_err(|_| MoyasarError::InvalidWebhookSecret)?;
+    Ok(map_unified_webhook_event(&event))
 }
 
 #[cfg(feature = "env-keys")]
@@ -358,14 +472,7 @@ fn resolve_signing_secret(secret: &str) -> Option<zeroize::Zeroizing<String>> {
     Some(zeroize::Zeroizing::new(secret.to_owned()))
 }
 
-/// Computes the lowercase hex-encoded HMAC-SHA256 signature of `payload` keyed by `secret`
-/// (resolving `"$VAR_NAME"` or `"${VAR_NAME}"` behind the scenes when `env-keys` is enabled).
-#[must_use]
-pub fn compute_webhook_signature(payload: &[u8], secret: &str) -> String {
-    let resolved = resolve_signing_secret(secret);
-    let key_bytes = resolved
-        .as_ref()
-        .map_or(secret.as_bytes(), |s| s.as_bytes());
+fn compute_hmac_sha256_hex(payload: &[u8], key_bytes: &[u8]) -> String {
     let mut mac =
         Hmac::<Sha256>::new_from_slice(key_bytes).expect("HMAC-SHA256 accepts keys of any size");
     mac.update(payload);
@@ -375,6 +482,31 @@ pub fn compute_webhook_signature(payload: &[u8], secret: &str) -> String {
         let _ = write!(&mut hex, "{b:02x}");
     }
     hex
+}
+
+/// Fallibly computes the lowercase hex-encoded HMAC-SHA256 signature of `payload` keyed by
+/// `secret` (resolving `"$VAR_NAME"` or `"${VAR_NAME}"` when `env-keys` is enabled).
+///
+/// Fails closed with [`MoyasarError::InvalidWebhookSecret`] if `secret` is empty or refers to an
+/// unresolved environment variable.
+///
+/// # Errors
+///
+/// Returns [`MoyasarError::InvalidWebhookSecret`] when `secret` cannot be resolved to a non-empty
+/// signing key.
+pub fn try_compute_webhook_signature(payload: &[u8], secret: &str) -> Result<String, MoyasarError> {
+    let resolved = resolve_signing_secret(secret).ok_or(MoyasarError::InvalidWebhookSecret)?;
+    Ok(compute_hmac_sha256_hex(payload, resolved.as_bytes()))
+}
+
+/// Computes the lowercase hex-encoded HMAC-SHA256 signature of `payload` keyed by `secret`
+/// (resolving `"$VAR_NAME"` or `"${VAR_NAME}"` behind the scenes when `env-keys` is enabled).
+///
+/// Returns an empty string instead of signing with literal `"$VAR"` bytes when `secret` is empty
+/// or unresolved. Prefer [`try_compute_webhook_signature`] for explicit error handling.
+#[must_use]
+pub fn compute_webhook_signature(payload: &[u8], secret: &str) -> String {
+    try_compute_webhook_signature(payload, secret).unwrap_or_default()
 }
 
 /// Verifies a hex-encoded HMAC-SHA256 `signature_header` (with optional `sha256=` prefix)
@@ -396,7 +528,7 @@ pub fn verify_webhook_signature(
         .strip_prefix("sha256=")
         .unwrap_or(trimmed)
         .to_ascii_lowercase();
-    let mut expected = compute_webhook_signature(payload, resolved.as_str());
+    let mut expected = compute_hmac_sha256_hex(payload, resolved.as_bytes());
     let matched = candidate.as_bytes().ct_eq(expected.as_bytes()).unwrap_u8() == 1;
     expected.zeroize();
     if !matched {
@@ -406,8 +538,9 @@ pub fn verify_webhook_signature(
 }
 
 fn verify_static_secret_token(token: &str, secret: &str) -> Result<(), MoyasarError> {
+    let resolved = resolve_signing_secret(secret).ok_or(MoyasarError::InvalidWebhookSecret)?;
     let mut provided = ConstantTimeSecretVerifier::compute_digest(token.as_bytes());
-    let mut expected = ConstantTimeSecretVerifier::compute_digest(secret.as_bytes());
+    let mut expected = ConstantTimeSecretVerifier::compute_digest(resolved.as_bytes());
     let matched = provided.ct_eq(&expected).unwrap_u8() == 1;
     provided.zeroize();
     expected.zeroize();
@@ -425,11 +558,12 @@ fn header_str<'a>(headers: &'a http::HeaderMap, name: &str) -> Option<&'a str> {
         .filter(|s| !s.is_empty())
 }
 
-fn resolved_webhook_secret(client: &MoyasarClient<SecretKey>) -> &str {
+fn resolved_webhook_secret(client: &MoyasarClient<SecretKey>) -> Result<&str, MoyasarError> {
     client
         .webhook_secret()
         .map(ExposeSecret::expose_secret)
-        .unwrap_or_else(|| client.key().expose_secret())
+        .filter(|s| !s.trim().is_empty())
+        .ok_or(MoyasarError::InvalidWebhookSecret)
 }
 
 fn map_unified_webhook_event(event: &WebhookEvent) -> UnifiedWebhookEvent {
@@ -488,7 +622,7 @@ fn build_reversal_response(
 mod tests {
     use chrono::Utc;
     use serde_json::{Value, json};
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_partial_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -647,5 +781,127 @@ mod tests {
             .verify_webhook_with_secret_token(&bad_token_headers, &raw_bytes)
             .expect_err("mismatched x-moyasar-secret-token must fail");
         assert!(matches!(bad_err, MoyasarError::InvalidWebhookSecret));
+    }
+
+    #[test]
+    fn sec_01_webhook_verification_fails_closed_without_webhook_secret() {
+        let api_key = "sk_test_never_use_as_webhook_secret";
+        let client = MoyasarClient::new(SecretKey::new(api_key).unwrap()).unwrap();
+        let now = Utc::now().to_rfc3339();
+        let payload = json!({
+            "id": Uuid::new_v4(),
+            "type": "payment_paid",
+            "created_at": now,
+            "secret_token": api_key,
+            "live": false,
+            "data": {"id": "pay_sec01"}
+        });
+        let raw_bytes = payload.to_string().into_bytes();
+        let sig = compute_webhook_signature(&raw_bytes, api_key);
+        let mut headers = http::HeaderMap::new();
+        headers.insert(WEBHOOK_SIGNATURE_HEADER, sig.parse().unwrap());
+
+        assert!(matches!(
+            client.verify_webhook(&headers, &raw_bytes),
+            Err(MoyasarError::InvalidWebhookSecret)
+        ));
+        assert!(matches!(
+            client.verify_webhook_payload(&raw_bytes),
+            Err(MoyasarError::InvalidWebhookSecret)
+        ));
+
+        let mut token_headers = http::HeaderMap::new();
+        token_headers.insert(WEBHOOK_SECRET_TOKEN_HEADER, api_key.parse().unwrap());
+        assert!(matches!(
+            client.verify_webhook_with_secret_token(&token_headers, &raw_bytes),
+            Err(MoyasarError::InvalidWebhookSecret)
+        ));
+
+        assert!(matches!(
+            try_compute_webhook_signature(&raw_bytes, "$UNRESOLVED_WEBHOOK_SECRET_XYZ"),
+            Err(MoyasarError::InvalidWebhookSecret)
+        ));
+        assert!(compute_webhook_signature(&raw_bytes, "$UNRESOLVED_WEBHOOK_SECRET_XYZ").is_empty());
+    }
+
+    #[test]
+    fn verify_and_normalize_supports_native_moyasar_payload_without_hmac_header() {
+        let client = MoyasarClient::builder(SecretKey::new("sk_test_native_wh").unwrap())
+            .webhook_secret("whsec_native_secret")
+            .build()
+            .unwrap();
+        let now = Utc::now().to_rfc3339();
+        let payload = json!({
+            "id": Uuid::new_v4(),
+            "type": "payment_paid",
+            "created_at": now,
+            "secret_token": "whsec_native_secret",
+            "live": false,
+            "data": {"id": "pay_native_01"}
+        });
+        let raw_bytes = payload.to_string().into_bytes();
+
+        let empty_headers = http::HeaderMap::new();
+        let evt = client
+            .verify_and_normalize(&empty_headers, &raw_bytes)
+            .expect("native Moyasar secret_token payload should verify");
+        assert_eq!(evt.event_type, "payment_paid");
+
+        let direct = client
+            .verify_webhook_payload(&raw_bytes)
+            .expect("verify_webhook_payload should verify native payload");
+        assert_eq!(direct.id, evt.id);
+    }
+
+    #[tokio::test]
+    async fn rich_intent_request_forwards_metadata_and_idempotency_key() {
+        let server = MockServer::start().await;
+        let now = Utc::now().to_rfc3339();
+        let idem = Uuid::new_v4();
+
+        Mock::given(method("POST"))
+            .and(path("/v1/payment_intents"))
+            .and(body_partial_json(json!({
+                "amount": 25000,
+                "currency": "SAR",
+                "given_id": idem,
+                "metadata": {
+                    "order_reference": "ORD-9001",
+                    "buyer_country": "SA",
+                    "customer_email": "buyer@example.com",
+                    "customer_phone": "+966512345678"
+                }
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+                "id": "pi_rich_01",
+                "status": "created",
+                "amount": 25000,
+                "amount_format": "250.00 SAR",
+                "currency": "SAR",
+                "client_secret": "pi_secret_rich",
+                "expires_at": now,
+                "created_at": now,
+                "updated_at": now
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = MoyasarClient::builder(SecretKey::new("sk_test_rich_intent").unwrap())
+            .base_url(server.uri())
+            .build()
+            .unwrap();
+
+        let req = UnifiedIntentRequest::new(25_000, "SAR", "https://example.com/cb")
+            .description("Rich Order")
+            .order_reference("ORD-9001")
+            .buyer_country("SA")
+            .customer_email("buyer@example.com")
+            .customer_phone("+966512345678")
+            .idempotency_key(idem);
+
+        let intent = client.create_intent(req).await.unwrap();
+        assert_eq!(intent.id, "pi_rich_01");
+        assert_eq!(intent.amount_minor, 25_000);
     }
 }
