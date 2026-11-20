@@ -256,7 +256,7 @@ async fn stripe_compat_subscriptions_charge_cycle_and_inactive_token_guard() {
         period_start: start,
         period_end: start + ChronoDuration::days(30),
     };
-    let params = SubscriptionCycleChargeParams::from_cycle(&sub, &cycle);
+    let params = SubscriptionCycleChargeParams::try_from_cycle(&sub, &cycle).unwrap();
     let p1 = client.subscriptions().charge_cycle(params).await.unwrap();
     let p2 = client.subscriptions().charge_cycle(&params).await.unwrap();
     assert_eq!(p1.id, "pay_sub_4");

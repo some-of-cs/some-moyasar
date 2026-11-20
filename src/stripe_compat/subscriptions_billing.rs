@@ -52,6 +52,10 @@ impl<'a> SubscriptionCycleChargeParams<'a> {
     ///
     /// Panics if `cycle.id` does not match `SubscriptionCycleId::new(&subscription.id, cycle.cycle_index)`.
     /// Use [`Self::try_from_cycle`] for fallible validation.
+    #[deprecated(
+        since = "0.9.0",
+        note = "panics on mismatched cycle.id; use fallible `try_from_cycle` instead"
+    )]
     #[must_use]
     pub fn from_cycle(subscription: &'a Subscription, cycle: &'a SubscriptionCycle) -> Self {
         Self::try_from_cycle(subscription, cycle)
@@ -218,6 +222,31 @@ mod tests {
             period_end: now,
         };
         assert!(SubscriptionCycleChargeParams::try_from_cycle(&sub_a, &cycle_b).is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "cycle.id must belong to the provided subscription")]
+    #[allow(deprecated)]
+    fn deprecated_from_cycle_panics_on_mismatched_subscription() {
+        use chrono::Utc;
+
+        let now = Utc::now();
+        let sub_a = Subscription {
+            id: "sub_A".to_owned(),
+            customer_id: "cus_1".to_owned(),
+            token_id: TokenId::new("token_a").unwrap(),
+            current_cycle: 1,
+        };
+        let cycle_b = SubscriptionCycle {
+            id: SubscriptionCycleId::new("sub_B", 1),
+            cycle_index: 1,
+            amount: 20000,
+            currency: Currency::SAR,
+            payment_id: None,
+            period_start: now,
+            period_end: now,
+        };
+        let _ = SubscriptionCycleChargeParams::from_cycle(&sub_a, &cycle_b);
     }
 
     #[tokio::test]

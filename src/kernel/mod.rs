@@ -1,6 +1,7 @@
 //! Core microkernel and transport layer for `some-moyasar`.
 
 pub mod auth;
+pub mod backoff;
 pub mod client;
 #[cfg(feature = "env-keys")]
 pub mod env;
@@ -18,6 +19,7 @@ pub use auth::{
     AuthKey, AuthMode, PublishableAuthKey, PublishableKey, SecretAuthKey, SecretKey,
     serialize_opt_secret, serialize_secret,
 };
+pub use backoff::{BackoffPolicy, backoff_duration, parse_retry_after_secs};
 pub use client::{
     ClientInner, DEFAULT_BASE_URL, IntoClientKey, IntoPublishableClientKey, MoyasarClient,
     MoyasarClientBuilder, MoyasarClientConfig, validate_https_url as validate_client_base_url,
@@ -33,8 +35,8 @@ pub use paginator_stream::Paginator;
 pub use response_code::{FieldError, ResponseCode, deserialize_field_errors};
 pub use transport::{
     API_VERSION, MAX_RESPONSE_BODY_BYTES, MOYASAR_VERSION_HEADER, build_default_headers,
-    decode_json_response, encode_basic_auth, execute_with_retry, read_bounded_response_text,
-    send_get_json, send_with_retry,
+    decode_json_response, encode_basic_auth, execute_with_retry, execute_with_retry_policy,
+    parse_retry_after, read_bounded_response_text, send_get_json, send_with_retry,
 };
 pub use types::{
     Amount, Currency, RecipientType, is_valid_id_char, is_valid_path_segment, is_valid_prefixed_id,

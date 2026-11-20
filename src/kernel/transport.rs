@@ -1,6 +1,7 @@
 //! HTTP Basic Auth header encoding, API version pinning (`2024-01-01`), and retry transport.
 
 use std::future::Future;
+use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
@@ -9,6 +10,7 @@ use serde::de::DeserializeOwned;
 use zeroize::Zeroize;
 
 use crate::kernel::auth::{AuthKey, PublishableKey, SecretKey};
+use crate::kernel::backoff::{BackoffPolicy, parse_retry_after_secs};
 use crate::kernel::error::MoyasarError;
 
 /// Pinned Moyasar API version header value.
@@ -65,9 +67,58 @@ pub fn build_default_headers(key: &dyn AuthKey) -> Result<HeaderMap, MoyasarErro
     Ok(headers)
 }
 
+/// Parses a numeric `Retry-After` HTTP response header into a bounded [`Duration`].
+#[must_use]
+pub fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
+    parse_retry_after_secs(headers)
+}
+
+/// Executes an async request factory up to `max_network_retries` additional times
+/// using the provided [`BackoffPolicy`] and runtime-agnostic async `sleep_fn`.
+///
+/// Returns immediately on success or non-retryable (e.g., 4xx) errors.
+pub async fn execute_with_retry_policy<T, F, Fut, S, SFut>(
+    max_network_retries: u32,
+    policy: BackoffPolicy,
+    mut operation: F,
+    mut sleep_fn: S,
+) -> Result<T, MoyasarError>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, MoyasarError>>,
+    S: FnMut(Duration) -> SFut,
+    SFut: Future<Output = ()>,
+{
+    let mut attempt: u32 = 0;
+    loop {
+        match operation().await {
+            Ok(value) => return Ok(value),
+            Err(err) if attempt < max_network_retries && err.is_retryable() => {
+                wait_backoff(policy.delay_for_attempt(attempt), &mut sleep_fn).await;
+                attempt = attempt.saturating_add(1);
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+async fn wait_backoff<S, SFut>(delay: Duration, sleep_fn: &mut S)
+where
+    S: FnMut(Duration) -> SFut,
+    SFut: Future<Output = ()>,
+{
+    if !delay.is_zero() {
+        sleep_fn(delay).await;
+    }
+}
+
 /// Executes an async request factory up to `max_network_retries` additional times
 /// when [`MoyasarError::is_retryable`] is `true`, returning immediately on success
 /// or non-retryable (e.g., 4xx) errors.
+///
+/// Uses [`BackoffPolicy::default`] with a runtime-agnostic yield hook so callers
+/// outside a Tokio timer context (such as `futures::executor::block_on`) never panic.
+/// Call [`execute_with_retry_policy`] to supply a runtime timer such as `tokio::time::sleep`.
 ///
 /// # Examples
 ///
@@ -90,22 +141,21 @@ pub fn build_default_headers(key: &dyn AuthKey) -> Result<HeaderMap, MoyasarErro
 /// ```
 pub async fn execute_with_retry<T, F, Fut>(
     max_network_retries: u32,
-    mut operation: F,
+    operation: F,
 ) -> Result<T, MoyasarError>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = Result<T, MoyasarError>>,
 {
-    let mut retries_left = max_network_retries;
-    loop {
-        match operation().await {
-            Ok(value) => return Ok(value),
-            Err(err) if retries_left > 0 && err.is_retryable() => {
-                retries_left -= 1;
-            }
-            Err(err) => return Err(err),
-        }
-    }
+    execute_with_retry_policy(
+        max_network_retries,
+        BackoffPolicy::default(),
+        operation,
+        |_delay| async {
+            std::thread::yield_now();
+        },
+    )
+    .await
 }
 
 /// Alias for [`execute_with_retry`] that dispatches an async request factory with bounded retries.
@@ -210,9 +260,53 @@ impl TryFrom<&PublishableKey> for HeaderValue {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    use http::header::RETRY_AFTER;
+
     use super::*;
     use crate::kernel::error::ApiErrorType;
-    use std::sync::atomic::{AtomicU32, Ordering};
+
+    #[test]
+    fn parse_retry_after_delegates_to_backoff_parser() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(parse_retry_after(&headers), None);
+        headers.insert(RETRY_AFTER, HeaderValue::from_static("4"));
+        assert_eq!(parse_retry_after(&headers), Some(Duration::from_secs(4)));
+    }
+
+    #[tokio::test]
+    async fn execute_with_retry_policy_records_bounded_backoff_delays() {
+        let attempts = AtomicU32::new(0);
+        let recorded_delays = Mutex::new(Vec::new());
+        let policy = BackoffPolicy::new(Duration::from_millis(50), Duration::from_secs(2), 0);
+
+        let value = execute_with_retry_policy(
+            3,
+            policy,
+            || async {
+                let current = attempts.fetch_add(1, Ordering::SeqCst);
+                if current < 2 {
+                    Err(MoyasarError::Timeout)
+                } else {
+                    Ok("ok")
+                }
+            },
+            |delay| {
+                recorded_delays.lock().expect("lock delays").push(delay);
+                async {}
+            },
+        )
+        .await
+        .expect("recovers on third attempt");
+
+        assert_eq!(value, "ok");
+        assert_eq!(
+            *recorded_delays.lock().expect("lock delays"),
+            vec![Duration::from_millis(50), Duration::from_millis(100)]
+        );
+    }
 
     #[test]
     fn encodes_basic_auth_with_trailing_colon() {
