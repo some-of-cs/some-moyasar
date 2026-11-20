@@ -41,7 +41,7 @@ use crate::resources::payments::{
     is_void_fallback_eligible, remaining_refundable_amount, validate_refund_amount,
 };
 use crate::resources::tokens::{TokenId, require_active_token};
-use crate::webhook_engine::{ConstantTimeSecretVerifier, REPLAY_TOLERANCE, WebhookEvent};
+use crate::webhook_engine::{ConstantTimeSecretVerifier, WebhookEvent};
 
 /// Inbound HTTP header carrying the hex-encoded HMAC-SHA256 payload signature.
 pub const WEBHOOK_SIGNATURE_HEADER: &str = "x-moyasar-signature";
