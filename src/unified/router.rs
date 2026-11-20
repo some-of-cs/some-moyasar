@@ -67,7 +67,8 @@ impl PayoutCapability for MoyasarGatewayAdapter {
         &'a self,
         source_account_id: &'a str,
         requests: Vec<UnifiedPayoutRequest>,
-    ) -> Pin<Box<dyn Future<Output = Result<UnifiedBulkPayoutResponse, Self::Error>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<UnifiedBulkPayoutResponse, Self::Error>> + Send + 'a>>
+    {
         self.client.disburse_bulk(source_account_id, requests)
     }
 
@@ -85,9 +86,8 @@ impl SplitSettlementCapability for MoyasarGatewayAdapter {
     fn create_split_payment<'a>(
         &'a self,
         request: UnifiedSplitPaymentRequest,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<UnifiedSplitPaymentResponse, Self::Error>> + Send + 'a>,
-    > {
+    ) -> Pin<Box<dyn Future<Output = Result<UnifiedSplitPaymentResponse, Self::Error>> + Send + 'a>>
+    {
         self.client.create_split_payment(request)
     }
 }

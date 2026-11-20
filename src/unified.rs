@@ -438,7 +438,10 @@ fn build_intent_metadata(
     Ok((!meta.is_empty()).then_some(meta))
 }
 
-fn verify_body_with_secret(secret: &str, raw_body: &[u8]) -> Result<UnifiedWebhookEvent, MoyasarError> {
+fn verify_body_with_secret(
+    secret: &str,
+    raw_body: &[u8],
+) -> Result<UnifiedWebhookEvent, MoyasarError> {
     let verifier = ConstantTimeSecretVerifier::from_secret(secret)?;
     let event = verifier
         .verify_and_construct(raw_body)

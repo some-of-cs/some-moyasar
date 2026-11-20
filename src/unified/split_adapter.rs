@@ -112,8 +112,11 @@ impl UnifiedSplitRule {
     /// Converts this unified split rule into a Moyasar [`PaymentSplitRequest`].
     #[must_use]
     pub fn into_moyasar(self) -> PaymentSplitRequest {
-        let mut req =
-            PaymentSplitRequest::new(self.amount_minor, self.role.into_moyasar(), self.recipient_id);
+        let mut req = PaymentSplitRequest::new(
+            self.amount_minor,
+            self.role.into_moyasar(),
+            self.recipient_id,
+        );
         req.reference = self.reference;
         req.description = self.description;
         req.fee_source = self.fee_source;
@@ -237,9 +240,7 @@ pub trait SplitSettlementCapability: Send + Sync {
     fn create_split_payment<'a>(
         &'a self,
         request: UnifiedSplitPaymentRequest,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<UnifiedSplitPaymentResponse, Self::Error>> + Send + 'a>,
-    >;
+    ) -> Pin<Box<dyn Future<Output = Result<UnifiedSplitPaymentResponse, Self::Error>> + Send + 'a>>;
 }
 
 impl SplitSettlementCapability for MoyasarClient<SecretKey> {
@@ -248,9 +249,8 @@ impl SplitSettlementCapability for MoyasarClient<SecretKey> {
     fn create_split_payment<'a>(
         &'a self,
         request: UnifiedSplitPaymentRequest,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<UnifiedSplitPaymentResponse, Self::Error>> + Send + 'a>,
-    > {
+    ) -> Pin<Box<dyn Future<Output = Result<UnifiedSplitPaymentResponse, Self::Error>> + Send + 'a>>
+    {
         Box::pin(async move {
             let params = build_split_payment_params(request)?;
             let payment = self.payments().create(&params).await?;

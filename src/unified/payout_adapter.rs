@@ -302,7 +302,8 @@ impl PayoutCapability for MoyasarClient<SecretKey> {
         &'a self,
         source_account_id: &'a str,
         requests: Vec<UnifiedPayoutRequest>,
-    ) -> Pin<Box<dyn Future<Output = Result<UnifiedBulkPayoutResponse, Self::Error>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<UnifiedBulkPayoutResponse, Self::Error>> + Send + 'a>>
+    {
         Box::pin(async move {
             let source_id = PayoutAccountId::new(source_account_id)?;
             let entries = requests
