@@ -237,7 +237,9 @@ fn validate_webhook_id(webhook_id: &str) -> Result<&str, MoyasarError> {
     Ok(trimmed)
 }
 
-fn first_non_empty_trimmed_str<'a>(candidates: &[Option<&'a serde_json::Value>]) -> Option<&'a str> {
+fn first_non_empty_trimmed_str<'a>(
+    candidates: &[Option<&'a serde_json::Value>],
+) -> Option<&'a str> {
     candidates
         .iter()
         .flatten()
