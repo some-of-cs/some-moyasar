@@ -271,14 +271,23 @@ fn validate_checkout_url(invoice_url: Option<&str>) -> Result<String, MoyasarErr
             )
         })?;
 
-    let has_whitespace = raw_url.chars().any(char::is_whitespace);
-    if remainder.is_empty() || remainder.starts_with('/') || has_whitespace {
-        return Err(MoyasarError::invalid_request(
-            "invoice checkout URL must include a valid host without whitespace",
-        ));
-    }
+    validate_url_authority(raw_url, remainder)?;
 
     Ok(raw_url.to_owned())
+}
+
+fn validate_url_authority(raw_url: &str, remainder: &str) -> Result<(), MoyasarError> {
+    if remainder.is_empty() || remainder.starts_with('/') {
+        return Err(MoyasarError::invalid_request(
+            "invoice checkout URL must include a non-empty host",
+        ));
+    }
+    if raw_url.chars().any(char::is_whitespace) {
+        return Err(MoyasarError::invalid_request(
+            "invoice checkout URL must not contain any whitespace",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -308,14 +317,26 @@ mod tests {
 
     #[test]
     fn tc_9_1_5_detects_intent_not_fulfillable_case_insensitively() {
-        assert!(is_intent_not_fulfillable(Some("intent_not_fulfillable"), None));
-        assert!(is_intent_not_fulfillable(Some("INTENT_NOT_FULFILLABLE"), None));
-        assert!(is_intent_not_fulfillable(None, Some("Intent_Not_Fulfillable")));
+        assert!(is_intent_not_fulfillable(
+            Some("intent_not_fulfillable"),
+            None
+        ));
+        assert!(is_intent_not_fulfillable(
+            Some("INTENT_NOT_FULFILLABLE"),
+            None
+        ));
+        assert!(is_intent_not_fulfillable(
+            None,
+            Some("Intent_Not_Fulfillable")
+        ));
         assert!(is_intent_not_fulfillable(
             Some("api_error"),
             Some(" intent_not_fulfillable "),
         ));
-        assert!(!is_intent_not_fulfillable(Some("intent_not_cancelable"), Some("400")));
+        assert!(!is_intent_not_fulfillable(
+            Some("intent_not_cancelable"),
+            Some("400")
+        ));
         assert!(!is_intent_not_fulfillable(None, None));
     }
 
