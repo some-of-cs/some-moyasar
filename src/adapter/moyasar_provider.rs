@@ -27,11 +27,13 @@ use super::mapper;
 
 const MOYASAR_PROVIDER_SLUG: &str = "moyasar";
 
-struct MutationSpec<'a> {
-    op: SecretOnlyOperation,
-    reference: &'a ProviderReference,
-    action: &'static str,
-    amount: Option<&'a Money>,
+fn mutation_action(op: SecretOnlyOperation) -> Result<&'static str, PaymentError> {
+    match op {
+        SecretOnlyOperation::Capture => Ok("capture"),
+        SecretOnlyOperation::Void => Ok("void"),
+        SecretOnlyOperation::Refund => Ok("refund"),
+        _ => Err(PaymentError::configuration("unsupported payment mutation")),
+    }
 }
 
 /// Optional [`PaymentProvider`] adapter backed by Moyasar REST API v1 and `some-moyasar`'s
@@ -134,14 +136,30 @@ impl MoyasarProvider {
         mapper::parse_payment_result(self.id(), self.livemode(), payload, order_id)
     }
 
-    async fn post_payment_mutation(&self, spec: MutationSpec<'_>) -> Result<Value, PaymentError> {
-        self.require_secret(spec.op)?;
-        let payment_uuid = mapper::extract_payment_uuid(self.id(), spec.reference)?;
-        let partial = validate_partial_amount(spec.amount.map(Money::amount))
+    async fn post_mutation(
+        &self,
+        op: SecretOnlyOperation,
+        reference: &ProviderReference,
+        amount: Option<&Money>,
+    ) -> Result<Value, PaymentError> {
+        self.require_secret(op)?;
+        let action = mutation_action(op)?;
+        let payment_uuid = mapper::extract_payment_uuid(self.id(), reference)?;
+        let partial = validate_partial_amount(amount.map(Money::amount))
             .map_err(|err| mapper::map_local_error(self.id(), err))?;
         let body = build_mutation_body(partial);
-        let path = format!("/payments/{payment_uuid}/{}", spec.action);
+        let path = format!("/payments/{payment_uuid}/{action}");
         self.send_post(&path, body.as_ref()).await
+    }
+
+    async fn mutate_payment(
+        &self,
+        op: SecretOnlyOperation,
+        reference: &ProviderReference,
+        amount: Option<&Money>,
+    ) -> Result<PaymentResult, PaymentError> {
+        let payload = self.post_mutation(op, reference, amount).await?;
+        self.parse_payment_result(&payload, reference.order_id())
     }
 
     async fn send_request(&self, req: reqwest::RequestBuilder) -> Result<Value, PaymentError> {
@@ -273,39 +291,28 @@ impl PaymentProvider for MoyasarProvider {
 
     async fn capture(&self, req: &CaptureRequest) -> Result<PaymentResult, PaymentError> {
         req.validate()?;
-        let payload = self
-            .post_payment_mutation(MutationSpec {
-                op: SecretOnlyOperation::Capture,
-                reference: &req.reference,
-                action: "capture",
-                amount: req.amount.as_ref(),
-            })
-            .await?;
-        self.parse_payment_result(&payload, req.reference.order_id())
+        self.mutate_payment(
+            SecretOnlyOperation::Capture,
+            &req.reference,
+            req.amount.as_ref(),
+        )
+        .await
     }
 
     async fn void_payment(&self, req: &VoidRequest) -> Result<PaymentResult, PaymentError> {
         req.validate()?;
-        let payload = self
-            .post_payment_mutation(MutationSpec {
-                op: SecretOnlyOperation::Void,
-                reference: &req.reference,
-                action: "void",
-                amount: None,
-            })
-            .await?;
-        self.parse_payment_result(&payload, req.reference.order_id())
+        self.mutate_payment(SecretOnlyOperation::Void, &req.reference, None)
+            .await
     }
 
     async fn refund(&self, req: &RefundRequest) -> Result<RefundResult, PaymentError> {
         req.validate()?;
         let payload = self
-            .post_payment_mutation(MutationSpec {
-                op: SecretOnlyOperation::Refund,
-                reference: &req.reference,
-                action: "refund",
-                amount: req.amount.as_ref(),
-            })
+            .post_mutation(
+                SecretOnlyOperation::Refund,
+                &req.reference,
+                req.amount.as_ref(),
+            )
             .await?;
         mapper::parse_refund_result(self.id(), &payload, req)
     }
