@@ -38,6 +38,50 @@ use crate::kernel::MoyasarError;
 
 const MOYASAR_SLUG: &str = "moyasar";
 
+const STATUS_MAP: &[(MappedPaymentStatus, PaymentStatus)] = &[
+    (MappedPaymentStatus::Initiated, PaymentStatus::Initiated),
+    (
+        MappedPaymentStatus::RequiresAction,
+        PaymentStatus::RequiresAction,
+    ),
+    (MappedPaymentStatus::Authorized, PaymentStatus::Authorized),
+    (MappedPaymentStatus::Captured, PaymentStatus::Captured),
+    (MappedPaymentStatus::Paid, PaymentStatus::Paid),
+    (MappedPaymentStatus::Refunded, PaymentStatus::Refunded),
+    (MappedPaymentStatus::Voided, PaymentStatus::Voided),
+    (MappedPaymentStatus::Failed, PaymentStatus::Failed),
+    (
+        MappedPaymentStatus::SetupCompleted,
+        PaymentStatus::SetupCompleted,
+    ),
+];
+
+const WEBHOOK_STATUS_MAP: &[(NormalizedMoyasarEvent, PaymentStatus)] = &[
+    (NormalizedMoyasarEvent::PaymentPaid, PaymentStatus::Paid),
+    (NormalizedMoyasarEvent::PaymentFailed, PaymentStatus::Failed),
+    (
+        NormalizedMoyasarEvent::PaymentAuthorized,
+        PaymentStatus::Authorized,
+    ),
+    (
+        NormalizedMoyasarEvent::PaymentCaptured,
+        PaymentStatus::Captured,
+    ),
+    (
+        NormalizedMoyasarEvent::PaymentRefunded,
+        PaymentStatus::Refunded,
+    ),
+    (NormalizedMoyasarEvent::PaymentVoided, PaymentStatus::Voided),
+    (
+        NormalizedMoyasarEvent::PaymentAbandoned,
+        PaymentStatus::Canceled,
+    ),
+    (
+        NormalizedMoyasarEvent::PaymentVerified,
+        PaymentStatus::SetupCompleted,
+    ),
+];
+
 /// Configuration for [`MoyasarProvider`] with key-prefix validation and secret redaction.
 ///
 /// ```
@@ -58,7 +102,7 @@ pub struct MoyasarProviderConfig {
 }
 
 impl MoyasarProviderConfig {
-    /// Creates a config validated via [`detect_key_mode`] (`allow_raw_cards = false` by default).
+    /// Creates a config validated via [`detect_key_mode`] (`allow_raw_cards = false`).
     ///
     /// # Errors
     ///
@@ -120,7 +164,7 @@ impl fmt::Debug for MoyasarProviderConfig {
     }
 }
 
-/// Optional [`PaymentProvider`] adapter backed by Moyasar REST API v1 and offline alignment guards.
+/// Optional [`PaymentProvider`] adapter backed by Moyasar REST API v1.
 ///
 /// ```
 /// use some_moyasar::adapter::moyasar_provider::MoyasarProvider;
@@ -210,10 +254,11 @@ impl MoyasarProvider {
         path: &str,
         body: Option<&Value>,
     ) -> Result<Value, PaymentError> {
+        let url = format!("{}{path}", self.config.base_url);
         let mut req = self
             .config
             .http_client
-            .request(method, format!("{}{path}", self.config.base_url))
+            .request(method, url)
             .basic_auth(self.config.api_key.expose_secret(), Some(""));
         if let Some(payload) = body {
             req = req.json(payload);
@@ -228,14 +273,14 @@ impl MoyasarProvider {
                 message: "Moyasar transport failure".to_owned(),
             })?;
         let status = resp.status();
-        let retry_after = resp
+        let retry = resp
             .headers()
             .get("retry-after")
             .and_then(|v| v.to_str().ok())
             .and_then(|s| s.trim().parse::<u64>().ok());
         let text = resp.text().await.unwrap_or_default();
         if !status.is_success() {
-            return Err(self.classify_http_error(status.as_u16(), &text, retry_after));
+            return Err(self.classify_http_error(status.as_u16(), &text, retry));
         }
         serde_json::from_str(&text).map_err(|_| PaymentError::ProviderError {
             provider: self.provider_id.clone(),
@@ -258,19 +303,14 @@ impl MoyasarProvider {
             .payment_id()
             .ok_or_else(|| PaymentError::validation("ProviderReference requires payment_id"))?;
         let uuid = validate_uuid_id(raw_id, "payment_id").map_err(|e| self.map_err(e))?;
-        let partial = validate_partial_amount(amount.map(Money::amount))
-            .map_err(|e| self.map_err(e))?;
+        let partial =
+            validate_partial_amount(amount.map(Money::amount)).map_err(|e| self.map_err(e))?;
         let body = build_mutation_body(partial);
         let path = format!("/payments/{uuid}/{suffix}");
         self.send_json(Method::POST, &path, body.as_ref()).await
     }
 
-    fn classify_http_error(
-        &self,
-        status: u16,
-        body: &str,
-        retry_after: Option<u64>,
-    ) -> PaymentError {
+    fn classify_http_error(&self, status: u16, body: &str, retry: Option<u64>) -> PaymentError {
         let parsed = serde_json::from_str::<Value>(body).ok();
         let err_type = parsed.as_ref().and_then(|v| v.get("type")?.as_str());
         let err_code = parsed.as_ref().and_then(|v| v.get("code")?.as_str());
@@ -279,44 +319,53 @@ impl MoyasarProvider {
             .and_then(|v| v.get("message")?.as_str())
             .map_or_else(|| format!("Moyasar HTTP {status}"), str::to_owned);
         let c = map_moyasar_error(Some(status), err_type, err_code);
-        self.map_classified(c, msg, retry_after)
+        self.map_flow_err(&c, &msg)
+            .unwrap_or_else(|| self.map_sys_err(c, msg, retry))
     }
 
-    fn map_classified(
+    fn map_flow_err(&self, c: &ClassifiedMoyasarError, msg: &str) -> Option<PaymentError> {
+        let p = self.provider_id.clone();
+        match c.class {
+            MoyasarErrorClass::ThreeDsFailed => Some(PaymentError::ThreeDsFailed {
+                provider: p,
+                code: c.vendor_code.clone(),
+                message: msg.to_owned(),
+            }),
+            MoyasarErrorClass::AuthenticationError => Some(PaymentError::AuthenticationError {
+                provider: p,
+                message: msg.to_owned(),
+            }),
+            MoyasarErrorClass::ValidationError => Some(PaymentError::validation(msg)),
+            MoyasarErrorClass::CardDeclined => Some(PaymentError::CardDeclined {
+                provider: p,
+                decline_code: c.vendor_code.clone(),
+                advice_code: None,
+                message: msg.to_owned(),
+            }),
+            _ => None,
+        }
+    }
+
+    fn map_sys_err(
         &self,
         c: ClassifiedMoyasarError,
         message: String,
-        retry_after: Option<u64>,
+        retry: Option<u64>,
     ) -> PaymentError {
-        let p = self.provider_id.clone();
+        let provider = self.provider_id.clone();
         match c.class {
-            MoyasarErrorClass::ThreeDsFailed => PaymentError::ThreeDsFailed {
-                provider: p,
-                code: c.vendor_code,
-                message,
-            },
-            MoyasarErrorClass::AuthenticationError => {
-                PaymentError::AuthenticationError { provider: p, message }
-            }
-            MoyasarErrorClass::ValidationError => PaymentError::ValidationError { message },
-            MoyasarErrorClass::CardDeclined => PaymentError::CardDeclined {
-                provider: p,
-                decline_code: c.vendor_code,
-                advice_code: None,
-                message,
-            },
             MoyasarErrorClass::RateLimited => PaymentError::RateLimited {
-                provider: p,
-                retry_after_secs: retry_after,
+                provider,
+                retry_after_secs: retry,
             },
             MoyasarErrorClass::ProviderUnavailable => PaymentError::ProviderUnavailable {
-                provider: p,
+                provider,
                 http_status: c.http_status,
                 indeterminate: c.indeterminate,
                 message,
             },
-            MoyasarErrorClass::ProviderError => PaymentError::ProviderError {
-                provider: p,
+            _ => PaymentError::ProviderError {
+                provider,
                 http_status: c.http_status,
                 vendor_code: c.vendor_code,
                 message,
@@ -347,9 +396,13 @@ impl MoyasarProvider {
         if let Some(order) = order_id {
             rb = rb.order_id(order);
         }
+        let status = STATUS_MAP
+            .iter()
+            .find(|(s, _)| *s == outcome.status)
+            .map_or(PaymentStatus::Initiated, |(_, d)| *d);
         Ok(PaymentResult {
             reference: rb.build()?,
-            status: to_payment_status(outcome.status),
+            status,
             money: Money::new(raw.amount, &raw.currency)?,
             captured_amount: raw.captured,
             refunded_amount: raw.refunded,
@@ -359,31 +412,37 @@ impl MoyasarProvider {
         })
     }
 
-    fn parse_refund(
-        &self,
-        payload: Value,
-        req: &RefundRequest,
-    ) -> Result<RefundResult, PaymentError> {
-        let raw: RawPayment = self.decode(payload, "refund")?;
-        let status = if raw.status.eq_ignore_ascii_case("failed") {
-            RefundStatus::Failed
-        } else {
-            RefundStatus::Succeeded
-        };
-        let money = match req.amount.as_ref() {
-            Some(p) => p.clone(),
-            None => Money::new(
-                raw.refunded.filter(|&v| v > 0).unwrap_or(raw.amount),
-                &raw.currency,
-            )?,
-        };
-        Ok(RefundResult {
-            refund_id: raw.id,
-            payment_reference: req.reference.clone(),
-            status,
-            money,
-            reason_detail: None,
+    fn validate_create(&self, req: &CreatePaymentRequest) -> Result<Value, PaymentError> {
+        let source_type = resolve_source(req);
+        if let Some(st) = source_type {
+            let policy = RawCardPolicy {
+                allow_raw_cards: self.config.allow_raw_cards,
+            };
+            guard_raw_pan(st, policy).map_err(|e| self.map_err(e))?;
+        }
+        let splits: Vec<SplitCheckItem> = req
+            .splits
+            .iter()
+            .map(|s| SplitCheckItem {
+                recipient_id: s.recipient_id.clone(),
+                amount: s.amount,
+            })
+            .collect();
+        validate_moyasar_preflight(&MoyasarPreflightInput {
+            payment_id: None,
+            amount: req.money.amount(),
+            manual_capture: matches!(req.capture_mode, CaptureMode::Manual),
+            source_type,
+            metadata: &req.metadata,
+            splits: &splits,
         })
+        .map_err(|e| self.map_err(e))?;
+        let given_id = req
+            .idempotency_key
+            .as_deref()
+            .map(|raw| validate_given_id(raw).map_err(|e| self.map_err(e)))
+            .transpose()?;
+        Ok(build_payment_json(req, source_type, given_id))
     }
 }
 
@@ -423,36 +482,7 @@ impl PaymentProvider for MoyasarProvider {
         req: &CreatePaymentRequest,
     ) -> Result<PaymentResult, PaymentError> {
         req.validate()?;
-        let source_type = resolve_source(req);
-        if let Some(st) = source_type {
-            let policy = RawCardPolicy {
-                allow_raw_cards: self.config.allow_raw_cards,
-            };
-            guard_raw_pan(st, policy).map_err(|e| self.map_err(e))?;
-        }
-        let splits: Vec<SplitCheckItem> = req
-            .splits
-            .iter()
-            .map(|s| SplitCheckItem {
-                recipient_id: s.recipient_id.clone(),
-                amount: s.amount,
-            })
-            .collect();
-        validate_moyasar_preflight(&MoyasarPreflightInput {
-            payment_id: None,
-            amount: req.money.amount(),
-            manual_capture: matches!(req.capture_mode, CaptureMode::Manual),
-            source_type,
-            metadata: &req.metadata,
-            splits: &splits,
-        })
-        .map_err(|e| self.map_err(e))?;
-        let given_id = req
-            .idempotency_key
-            .as_deref()
-            .map(|raw| validate_given_id(raw).map_err(|e| self.map_err(e)))
-            .transpose()?;
-        let body = build_payment_json(req, source_type, given_id);
+        let body = self.validate_create(req)?;
         let payload = self.send_json(Method::POST, "/payments", Some(&body)).await?;
         self.parse_payment(payload, Some(&req.order_id))
     }
@@ -557,7 +587,26 @@ impl PaymentProvider for MoyasarProvider {
                 req.amount.as_ref(),
             )
             .await?;
-        self.parse_refund(p, req)
+        let raw: RawPayment = self.decode(p, "refund")?;
+        let status = if raw.status.eq_ignore_ascii_case("failed") {
+            RefundStatus::Failed
+        } else {
+            RefundStatus::Succeeded
+        };
+        let money = match req.amount.as_ref() {
+            Some(m) => m.clone(),
+            None => Money::new(
+                raw.refunded.filter(|&v| v > 0).unwrap_or(raw.amount),
+                &raw.currency,
+            )?,
+        };
+        Ok(RefundResult {
+            refund_id: raw.id,
+            payment_reference: req.reference.clone(),
+            status,
+            money,
+            reason_detail: None,
+        })
     }
 
     async fn parse_and_verify_webhook(
@@ -572,9 +621,15 @@ impl PaymentProvider for MoyasarProvider {
         let v = verify_and_scrub_moyasar_webhook(&raw.raw_body, secret.expose_secret())
             .map_err(|e| self.map_err(e))?;
         let norm = normalize_moyasar_event(&v.event_type);
+        let status = norm.and_then(|e| {
+            WEBHOOK_STATUS_MAP
+                .iter()
+                .find(|(s, _)| *s == e)
+                .map(|(_, st)| *st)
+        });
         let verification_challenge = if norm == Some(NormalizedMoyasarEvent::WebhookVerification) {
-            let ch = extract_verification_challenge(&v.raw_redacted)
-                .map_err(|e| self.map_err(e))?;
+            let ch =
+                extract_verification_challenge(&v.raw_redacted).map_err(|e| self.map_err(e))?;
             Some(VerificationChallenge {
                 webhook_id: ch.webhook_id.clone(),
                 verification_code: ch.verification_code.clone(),
@@ -599,7 +654,7 @@ impl PaymentProvider for MoyasarProvider {
             livemode: v.livemode,
             requires_hydration: false,
             reference,
-            status: norm.and_then(to_webhook_status),
+            status,
             money,
             verification_challenge,
             raw_redacted: v.raw_redacted,
@@ -696,20 +751,6 @@ fn build_payment_json(
     body
 }
 
-fn to_payment_status(mapped: MappedPaymentStatus) -> PaymentStatus {
-    match mapped {
-        MappedPaymentStatus::Initiated => PaymentStatus::Initiated,
-        MappedPaymentStatus::RequiresAction => PaymentStatus::RequiresAction,
-        MappedPaymentStatus::Authorized => PaymentStatus::Authorized,
-        MappedPaymentStatus::Captured => PaymentStatus::Captured,
-        MappedPaymentStatus::Paid => PaymentStatus::Paid,
-        MappedPaymentStatus::Refunded => PaymentStatus::Refunded,
-        MappedPaymentStatus::Voided => PaymentStatus::Voided,
-        MappedPaymentStatus::Failed => PaymentStatus::Failed,
-        MappedPaymentStatus::SetupCompleted => PaymentStatus::SetupCompleted,
-    }
-}
-
 fn to_next_action(action: MappedNextAction) -> NextAction {
     match action {
         MappedNextAction::Redirect { url } => NextAction::Redirect { url },
@@ -723,20 +764,6 @@ fn to_next_action(action: MappedNextAction) -> NextAction {
             bill_reference,
             instructions_url,
         },
-    }
-}
-
-fn to_webhook_status(event: NormalizedMoyasarEvent) -> Option<PaymentStatus> {
-    match event {
-        NormalizedMoyasarEvent::PaymentPaid => Some(PaymentStatus::Paid),
-        NormalizedMoyasarEvent::PaymentFailed => Some(PaymentStatus::Failed),
-        NormalizedMoyasarEvent::PaymentAuthorized => Some(PaymentStatus::Authorized),
-        NormalizedMoyasarEvent::PaymentCaptured => Some(PaymentStatus::Captured),
-        NormalizedMoyasarEvent::PaymentRefunded => Some(PaymentStatus::Refunded),
-        NormalizedMoyasarEvent::PaymentVoided => Some(PaymentStatus::Voided),
-        NormalizedMoyasarEvent::PaymentAbandoned => Some(PaymentStatus::Canceled),
-        NormalizedMoyasarEvent::PaymentVerified => Some(PaymentStatus::SetupCompleted),
-        _ => None,
     }
 }
 
