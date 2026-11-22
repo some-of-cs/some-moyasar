@@ -113,12 +113,13 @@ pub struct IntentCheckoutInput<'a> {
 
 impl fmt::Debug for IntentCheckoutInput<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IntentCheckoutInput")
-            .field("intent_id", &self.intent_id)
-            .field("client_secret", &"[REDACTED]")
-            .field("amount", &self.amount)
-            .field("currency", &self.currency)
-            .finish()
+        RedactedIntentDebug {
+            name: "IntentCheckoutInput",
+            intent_id: self.intent_id,
+            amount: self.amount,
+            currency: self.currency,
+        }
+        .write(f)
     }
 }
 
@@ -159,7 +160,26 @@ pub struct IntentCheckoutOutcome {
 
 impl fmt::Debug for IntentCheckoutOutcome {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IntentCheckoutOutcome")
+        RedactedIntentDebug {
+            name: "IntentCheckoutOutcome",
+            intent_id: &self.intent_id,
+            amount: self.amount,
+            currency: &self.currency,
+        }
+        .write(f)
+    }
+}
+
+struct RedactedIntentDebug<'a> {
+    name: &'static str,
+    intent_id: &'a str,
+    amount: u64,
+    currency: &'a str,
+}
+
+impl RedactedIntentDebug<'_> {
+    fn write(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct(self.name)
             .field("intent_id", &self.intent_id)
             .field("client_secret", &"[REDACTED]")
             .field("amount", &self.amount)
@@ -506,63 +526,33 @@ mod tests {
     #[test]
     fn tc_9_1_5_validates_id_amount_and_currency_for_both_mappers() {
         let valid_url = Some("https://invoice.moyasar.com/inv_1");
-        let bad_invoices = [
-            InvoiceCheckoutInput {
-                invoice_id: "",
+        for (invoice_id, amount, currency) in [
+            ("", 100, "SAR"),
+            ("inv_1", 0, "SAR"),
+            ("inv_1", 100, "SA"),
+            ("inv_1", 100, "123"),
+        ] {
+            let input = InvoiceCheckoutInput {
+                invoice_id,
                 invoice_url: valid_url,
-                amount: 100,
-                currency: "SAR",
-            },
-            InvoiceCheckoutInput {
-                invoice_id: "inv_1",
-                invoice_url: valid_url,
-                amount: 0,
-                currency: "SAR",
-            },
-            InvoiceCheckoutInput {
-                invoice_id: "inv_1",
-                invoice_url: valid_url,
-                amount: 100,
-                currency: "SA",
-            },
-            InvoiceCheckoutInput {
-                invoice_id: "inv_1",
-                invoice_url: valid_url,
-                amount: 100,
-                currency: "123",
-            },
-        ];
-        for input in bad_invoices {
+                amount,
+                currency,
+            };
             assert!(map_invoice_checkout(input).is_err());
         }
 
-        let bad_intents = [
-            IntentCheckoutInput {
-                intent_id: "",
-                client_secret: "pi_secret_abc",
-                amount: 100,
-                currency: "SAR",
-            },
-            IntentCheckoutInput {
-                intent_id: "pi_1",
-                client_secret: "pi_secret_",
-                amount: 100,
-                currency: "SAR",
-            },
-            IntentCheckoutInput {
-                intent_id: "pi_1",
-                client_secret: "pi_secret_abc",
-                amount: 0,
-                currency: "SAR",
-            },
-            IntentCheckoutInput {
-                intent_id: "pi_1",
-                client_secret: "pi_secret_abc",
-                amount: 100,
-                currency: "EURO",
-            },
-        ];
-        for input in bad_intents {
+        for (intent_id, client_secret, amount, currency) in [
+            ("", "pi_secret_abc", 100, "SAR"),
+            ("pi_1", "pi_secret_", 100, "SAR"),
+            ("pi_1", "pi_secret_abc", 0, "SAR"),
+            ("pi_1", "pi_secret_abc", 100, "EURO"),
+        ] {
+            let input = IntentCheckoutInput {
+                intent_id,
+                client_secret,
+                amount,
+                currency,
+            };
             assert!(map_intent_result(input).is_err());
         }
     }
