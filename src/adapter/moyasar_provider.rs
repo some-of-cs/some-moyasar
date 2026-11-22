@@ -135,10 +135,13 @@ impl MoyasarProviderConfig {
         Ok(Self {
             api_key: SecretString::from(raw_key),
             webhook_secret: None,
-            base_url: MOYASAR_API_BASE_URL.to_owned(),
+            base_url: String::new(),
             http_client: reqwest::Client::new(),
             allow_raw_cards: false,
-        })
+        }
+        .with_base_url(MOYASAR_API_BASE_URL)
+        .with_http_client(reqwest::Client::new())
+        .with_allow_raw_cards(false))
     }
 
     /// Configures the shared webhook secret used for constant-time `secret_token` verification.
@@ -271,12 +274,12 @@ impl MoyasarProvider {
         match err {
             MoyasarError::InvalidKey | MoyasarError::KeyTypeMismatch => {
                 PaymentError::AuthenticationError {
-                    provider: self.provider_id.clone(),
+                    provider: self.id().clone(),
                     message: err.to_string(),
                 }
             }
             MoyasarError::InvalidWebhookSecret => PaymentError::WebhookVerificationFailed {
-                provider: self.provider_id.clone(),
+                provider: self.id().clone(),
                 reason: err.to_string(),
             },
             other => PaymentError::validation(other.to_string()),
@@ -285,7 +288,7 @@ impl MoyasarProvider {
 
     fn shape_error(&self, kind: &str) -> PaymentError {
         PaymentError::ProviderError {
-            provider: self.provider_id.clone(),
+            provider: self.id().clone(),
             http_status: None,
             vendor_code: None,
             message: format!("unexpected Moyasar {kind} response shape"),
@@ -439,7 +442,7 @@ impl MoyasarProvider {
             return Err(self.classify_http_error(status.as_u16(), &body, retry_after));
         }
         serde_json::from_str(&body).map_err(|_| PaymentError::ProviderError {
-            provider: self.provider_id.clone(),
+            provider: self.id().clone(),
             http_status: Some(status.as_u16()),
             vendor_code: None,
             message: "invalid JSON response from Moyasar".to_owned(),
@@ -468,7 +471,7 @@ impl MoyasarProvider {
         classified: &ClassifiedMoyasarError,
         message: &str,
     ) -> Option<PaymentError> {
-        let provider = self.provider_id.clone();
+        let provider = self.id().clone();
         match classified.class {
             MoyasarErrorClass::ThreeDsFailed => Some(PaymentError::ThreeDsFailed {
                 provider,
@@ -501,7 +504,7 @@ impl MoyasarProvider {
         if let Some(err) = self.map_client_or_flow_error(&classified, &message) {
             return err;
         }
-        let provider = self.provider_id.clone();
+        let provider = self.id().clone();
         match classified.class {
             MoyasarErrorClass::RateLimited => PaymentError::RateLimited {
                 provider,
@@ -529,7 +532,7 @@ impl MoyasarProvider {
             "Moyasar transport failure"
         };
         PaymentError::ProviderUnavailable {
-            provider: self.provider_id.clone(),
+            provider: self.id().clone(),
             http_status: None,
             indeterminate: true,
             message: message.to_owned(),
@@ -559,7 +562,7 @@ impl MoyasarProvider {
             .ok_or_else(|| self.shape_error("payment"))?;
         let outcome = map_moyasar_status(&self.payment_snapshot(status_raw, payload.get("source")))
             .map_err(|err| self.map_local_error(err))?;
-        let mut ref_builder = ProviderReference::builder(self.provider_id.clone()).payment_id(id);
+        let mut ref_builder = ProviderReference::builder(self.id().clone()).payment_id(id);
         if let Some(order) = order_id {
             ref_builder = ref_builder.order_id(order);
         }
@@ -571,7 +574,7 @@ impl MoyasarProvider {
             refunded_amount: payload.get("refunded").and_then(Value::as_u64),
             next_action: outcome.next_action.map(|a| self.map_next_action(a)),
             checkout_url: None,
-            livemode: self.livemode,
+            livemode: self.livemode(),
         })
     }
 
@@ -643,7 +646,7 @@ impl MoyasarProvider {
             currency,
         })
         .map_err(|err| self.map_local_error(err))?;
-        let reference = ProviderReference::builder(self.provider_id.clone())
+        let reference = ProviderReference::builder(self.id().clone())
             .checkout_session_id(&outcome.invoice_id)
             .order_id(order_id)
             .build()?;
@@ -657,7 +660,7 @@ impl MoyasarProvider {
                 url: outcome.checkout_url.clone(),
             }),
             checkout_url: Some(outcome.checkout_url),
-            livemode: self.livemode,
+            livemode: self.livemode(),
         })
     }
 
@@ -728,7 +731,7 @@ impl MoyasarProvider {
             return (None, None);
         };
         let reference = data.get("id").and_then(Value::as_str).and_then(|pid| {
-            ProviderReference::builder(self.provider_id.clone())
+            ProviderReference::builder(self.id().clone())
                 .payment_id(pid)
                 .build()
                 .ok()
@@ -745,7 +748,7 @@ impl MoyasarProvider {
 impl fmt::Debug for MoyasarProvider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MoyasarProvider")
-            .field("provider_id", &self.provider_id)
+            .field("provider_id", &self.id())
             .field("api_key", &"[REDACTED]")
             .field(
                 "webhook_secret",
@@ -887,7 +890,7 @@ impl PaymentProvider for MoyasarProvider {
             self.extract_challenge_if_handshake(normalized, &verified.raw_redacted)?;
         let (reference, money) = self.extract_webhook_context(&verified.raw_redacted);
         Ok(NormalizedWebhookEvent {
-            provider_id: self.provider_id.clone(),
+            provider_id: self.id().clone(),
             event_id: verified.event_id,
             event_type: verified.event_type,
             livemode: verified.livemode,
