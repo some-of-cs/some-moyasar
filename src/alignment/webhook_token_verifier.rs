@@ -260,97 +260,74 @@ mod tests {
 
     #[test]
     fn tc_9_2_1_live_false_and_missing_live_default_to_test_mode() {
-        let live_false = br#"{
-            "id": "evt_test_1",
-            "type": "payment_failed",
-            "live": false,
-            "secret_token": "wh_secret_123"
-        }"#;
-        let verified_false =
-            verify_and_scrub_moyasar_webhook(live_false, CANARY_SECRET).expect("live=false");
-        assert!(!verified_false.livemode);
-
-        let missing_live = br#"{
-            "id": "evt_test_2",
-            "type": "payment_failed",
-            "secret_token": "wh_secret_123"
-        }"#;
-        let verified_missing =
-            verify_and_scrub_moyasar_webhook(missing_live, CANARY_SECRET).expect("missing live");
-        assert!(!verified_missing.livemode);
+        let cases: &[(&str, &[u8])] = &[
+            (
+                "live=false",
+                br#"{"id":"evt_test_1","type":"payment_failed","live":false,"secret_token":"wh_secret_123"}"#,
+            ),
+            (
+                "missing live",
+                br#"{"id":"evt_test_2","type":"payment_failed","secret_token":"wh_secret_123"}"#,
+            ),
+        ];
+        for (label, raw) in cases {
+            let verified = verify_and_scrub_moyasar_webhook(raw, CANARY_SECRET).expect(label);
+            assert!(!verified.livemode, "{label} must resolve to livemode=false");
+        }
     }
 
     #[test]
-    fn tc_9_2_1_wrong_secret_token_rejected_without_leaking_secret() {
-        let body = br#"{
-            "id": "evt_002",
-            "type": "payment_paid",
-            "live": true,
-            "secret_token": "wrong_secret_xyz"
-        }"#;
-        let err = verify_and_scrub_moyasar_webhook(body, CANARY_SECRET)
-            .expect_err("wrong secret must fail");
-        assert!(matches!(err, MoyasarError::InvalidWebhookSecret));
-
-        let rendered = format!("{err} | {err:?}");
-        assert!(!rendered.contains(CANARY_SECRET));
-        assert!(!rendered.contains("wrong_secret_xyz"));
+    fn tc_9_2_1_rejects_wrong_missing_and_empty_secrets_without_leaking() {
+        let cases: &[(&str, &[u8], &str)] = &[
+            (
+                "wrong secret_token",
+                br#"{"id":"evt_002","type":"payment_paid","live":true,"secret_token":"wrong_secret_xyz"}"#,
+                CANARY_SECRET,
+            ),
+            (
+                "missing secret_token",
+                br#"{"id":"evt_003","type":"payment_paid","live":false}"#,
+                CANARY_SECRET,
+            ),
+            (
+                "empty expected_secret",
+                br#"{"id":"evt_004","type":"payment_paid","live":false,"secret_token":"wh_secret_123"}"#,
+                "",
+            ),
+        ];
+        for (label, raw, secret) in cases {
+            let err = verify_and_scrub_moyasar_webhook(raw, secret).expect_err(label);
+            assert!(
+                matches!(err, MoyasarError::InvalidWebhookSecret),
+                "{label} must return InvalidWebhookSecret"
+            );
+            let rendered = format!("{err} | {err:?}");
+            assert!(!rendered.contains(CANARY_SECRET));
+            assert!(!rendered.contains("wrong_secret_xyz"));
+        }
     }
 
     #[test]
-    fn tc_9_2_1_missing_secret_token_rejected() {
-        let body = br#"{
-            "id": "evt_003",
-            "type": "payment_paid",
-            "live": false
-        }"#;
-        let err = verify_and_scrub_moyasar_webhook(body, CANARY_SECRET)
-            .expect_err("missing secret_token must fail");
-        assert!(matches!(err, MoyasarError::InvalidWebhookSecret));
-    }
-
-    #[test]
-    fn tc_9_2_1_empty_expected_secret_rejected() {
-        let body = br#"{
-            "id": "evt_004",
-            "type": "payment_paid",
-            "live": false,
-            "secret_token": "wh_secret_123"
-        }"#;
-        let err = verify_and_scrub_moyasar_webhook(body, "")
-            .expect_err("empty expected secret must fail");
-        assert!(matches!(err, MoyasarError::InvalidWebhookSecret));
-    }
-
-    #[test]
-    fn tc_9_2_1_rejects_empty_non_object_and_missing_metadata_payloads() {
-        let empty_err =
-            verify_and_scrub_moyasar_webhook(b"", CANARY_SECRET).expect_err("empty body");
-        assert!(matches!(empty_err, MoyasarError::Api { .. }));
-
-        let array_err =
-            verify_and_scrub_moyasar_webhook(b"[1, 2, 3]", CANARY_SECRET).expect_err("json array");
-        assert!(matches!(array_err, MoyasarError::Api { .. }));
-
-        let invalid_json_err =
-            verify_and_scrub_moyasar_webhook(b"{invalid", CANARY_SECRET).expect_err("bad json");
-        assert!(matches!(invalid_json_err, MoyasarError::Api { .. }));
-
-        let missing_id = br#"{
-            "id": "",
-            "type": "payment_paid",
-            "secret_token": "wh_secret_123"
-        }"#;
-        let id_err =
-            verify_and_scrub_moyasar_webhook(missing_id, CANARY_SECRET).expect_err("empty id");
-        assert!(matches!(id_err, MoyasarError::Api { .. }));
-
-        let missing_type = br#"{
-            "id": "evt_005",
-            "secret_token": "wh_secret_123"
-        }"#;
-        let type_err = verify_and_scrub_moyasar_webhook(missing_type, CANARY_SECRET)
-            .expect_err("missing type");
-        assert!(matches!(type_err, MoyasarError::Api { .. }));
+    fn tc_9_2_1_rejects_malformed_and_incomplete_payloads() {
+        let cases: &[(&str, &[u8])] = &[
+            ("empty body", b""),
+            ("json array", b"[1, 2, 3]"),
+            ("invalid json", b"{invalid"),
+            (
+                "empty id",
+                br#"{"id":"","type":"payment_paid","secret_token":"wh_secret_123"}"#,
+            ),
+            (
+                "missing type",
+                br#"{"id":"evt_005","secret_token":"wh_secret_123"}"#,
+            ),
+        ];
+        for (label, raw) in cases {
+            let err = verify_and_scrub_moyasar_webhook(raw, CANARY_SECRET).expect_err(label);
+            assert!(
+                matches!(err, MoyasarError::Api { .. }),
+                "{label} must return InvalidRequestError"
+            );
+        }
     }
 }
