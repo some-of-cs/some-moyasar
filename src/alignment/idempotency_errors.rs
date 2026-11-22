@@ -17,7 +17,10 @@ use crate::kernel::error::MoyasarError;
 /// Static lookup table mapping normalized Moyasar error types and codes to semantic classes.
 const ERROR_CODE_TABLE: &[(&str, MoyasarErrorClass)] = &[
     ("3ds_auth_error", MoyasarErrorClass::ThreeDsFailed),
-    ("authentication_error", MoyasarErrorClass::AuthenticationError),
+    (
+        "authentication_error",
+        MoyasarErrorClass::AuthenticationError,
+    ),
     ("invalid_request_error", MoyasarErrorClass::ValidationError),
     ("validation_error", MoyasarErrorClass::ValidationError),
     ("card_declined", MoyasarErrorClass::CardDeclined),
@@ -269,8 +272,16 @@ mod tests {
         let cases = [
             (Some(401), Some("3ds_auth_error"), None),
             (Some(400), Some("3ds_auth_error"), None),
-            (Some(401), Some("authentication_error"), Some("3ds_auth_error")),
-            (Some(400), Some("invalid_request_error"), Some("3DS_AUTH_ERROR")),
+            (
+                Some(401),
+                Some("authentication_error"),
+                Some("3ds_auth_error"),
+            ),
+            (
+                Some(400),
+                Some("invalid_request_error"),
+                Some("3DS_AUTH_ERROR"),
+            ),
             (Some(403), None, Some("  3ds_auth_error  ")),
         ];
 
