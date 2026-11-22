@@ -236,7 +236,7 @@ impl MoyasarProvider {
     pub fn new(config: MoyasarProviderConfig) -> Result<Self, PaymentError> {
         let classification = detect_key_mode(config.api_key.expose_secret())
             .map_err(|_| PaymentError::configuration("invalid Moyasar API key prefix"))?;
-        Ok(Self {
+        let provider = Self {
             provider_id: ProviderId::new(MOYASAR_PROVIDER_SLUG),
             api_key: config.api_key,
             webhook_secret: config.webhook_secret,
@@ -244,7 +244,11 @@ impl MoyasarProvider {
             http_client: config.http_client,
             livemode: classification.mode.is_live(),
             allow_raw_cards: config.allow_raw_cards,
-        })
+        };
+        if provider.base_url().is_empty() || provider.capabilities().is_empty() {
+            return Err(PaymentError::configuration("base_url must not be empty"));
+        }
+        Ok(provider)
     }
 
     /// Convenience constructor building a [`MoyasarProvider`] with default configuration from a
