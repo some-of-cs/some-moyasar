@@ -247,58 +247,51 @@ const KNOWN_STATUSES: &[(&str, MappedPaymentStatus)] = &[
 ];
 
 fn non_empty_trimmed(value: Option<&str>) -> Option<String> {
-    value.map(str::trim).filter(|item| !item.is_empty()).map(str::to_owned)
+    value
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_owned)
 }
 
-fn map_stcpay_initiated(snapshot: &MoyasarPaymentSnapshot<'_>) -> MoyasarStatusOutcome {
-    match non_empty_trimmed(snapshot.transaction_url) {
-        Some(submission_url) => MoyasarStatusOutcome {
-            status: MappedPaymentStatus::RequiresAction,
-            next_action: Some(MappedNextAction::OtpChallenge { submission_url }),
-        },
-        None => MoyasarStatusOutcome {
-            status: MappedPaymentStatus::Initiated,
-            next_action: None,
-        },
+fn initiated_outcome(next_action: Option<MappedNextAction>) -> MoyasarStatusOutcome {
+    let status = if next_action.is_some() {
+        MappedPaymentStatus::RequiresAction
+    } else {
+        MappedPaymentStatus::Initiated
+    };
+    MoyasarStatusOutcome {
+        status,
+        next_action,
     }
 }
 
-fn map_sadad_initiated(snapshot: &MoyasarPaymentSnapshot<'_>) -> MoyasarStatusOutcome {
-    match non_empty_trimmed(snapshot.bill_reference) {
-        Some(bill_reference) => MoyasarStatusOutcome {
-            status: MappedPaymentStatus::RequiresAction,
-            next_action: Some(MappedNextAction::OfflineBill {
-                bill_reference,
-                instructions_url: non_empty_trimmed(snapshot.transaction_url),
-            }),
-        },
-        None => MoyasarStatusOutcome {
-            status: MappedPaymentStatus::Initiated,
-            next_action: None,
-        },
-    }
+fn otp_action(url: Option<String>) -> Option<MappedNextAction> {
+    url.map(|submission_url| MappedNextAction::OtpChallenge { submission_url })
 }
 
-fn map_redirect_or_initiated(snapshot: &MoyasarPaymentSnapshot<'_>) -> MoyasarStatusOutcome {
-    match non_empty_trimmed(snapshot.transaction_url) {
-        Some(url) => MoyasarStatusOutcome {
-            status: MappedPaymentStatus::RequiresAction,
-            next_action: Some(MappedNextAction::Redirect { url }),
-        },
-        None => MoyasarStatusOutcome {
-            status: MappedPaymentStatus::Initiated,
-            next_action: None,
-        },
-    }
+fn sadad_action(bill_ref: Option<String>, url: Option<String>) -> Option<MappedNextAction> {
+    bill_ref.map(|bill_reference| MappedNextAction::OfflineBill {
+        bill_reference,
+        instructions_url: url,
+    })
+}
+
+fn redirect_action(url: Option<String>) -> Option<MappedNextAction> {
+    url.map(|url| MappedNextAction::Redirect { url })
 }
 
 fn map_initiated_status(snapshot: &MoyasarPaymentSnapshot<'_>) -> MoyasarStatusOutcome {
-    let source = snapshot.source_type.map(|raw| raw.trim().to_ascii_lowercase());
-    match source.as_deref() {
-        Some("stcpay") => map_stcpay_initiated(snapshot),
-        Some("sadad" | "sadadbill") => map_sadad_initiated(snapshot),
-        _ => map_redirect_or_initiated(snapshot),
-    }
+    let source = snapshot
+        .source_type
+        .map(|raw| raw.trim().to_ascii_lowercase());
+    let tx_url = non_empty_trimmed(snapshot.transaction_url);
+    let bill_ref = non_empty_trimmed(snapshot.bill_reference);
+    let next_action = match source.as_deref() {
+        Some("stcpay") => otp_action(tx_url),
+        Some("sadad" | "sadadbill") => sadad_action(bill_ref, tx_url),
+        _ => redirect_action(tx_url),
+    };
+    initiated_outcome(next_action)
 }
 
 /// Maps a [`MoyasarPaymentSnapshot`] into a normalized [`MoyasarStatusOutcome`].
