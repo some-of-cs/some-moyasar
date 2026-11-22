@@ -27,6 +27,13 @@ use super::mapper;
 
 const MOYASAR_PROVIDER_SLUG: &str = "moyasar";
 
+struct MutationSpec<'a> {
+    op: SecretOnlyOperation,
+    reference: &'a ProviderReference,
+    action: &'static str,
+    amount: Option<&'a Money>,
+}
+
 /// Optional [`PaymentProvider`] adapter backed by Moyasar REST API v1 and `some-moyasar`'s
 /// offline alignment guards.
 ///
@@ -117,6 +124,24 @@ impl MoyasarProvider {
         require_secret_key(self.api_key.expose_secret(), op)
             .map(|_| ())
             .map_err(|err| mapper::map_local_error(self.id(), err))
+    }
+
+    fn parse_payment_result(
+        &self,
+        payload: &Value,
+        order_id: Option<&str>,
+    ) -> Result<PaymentResult, PaymentError> {
+        mapper::parse_payment_result(self.id(), self.livemode(), payload, order_id)
+    }
+
+    async fn post_payment_mutation(&self, spec: MutationSpec<'_>) -> Result<Value, PaymentError> {
+        self.require_secret(spec.op)?;
+        let payment_uuid = mapper::extract_payment_uuid(self.id(), spec.reference)?;
+        let partial = validate_partial_amount(spec.amount.map(Money::amount))
+            .map_err(|err| mapper::map_local_error(self.id(), err))?;
+        let body = build_mutation_body(partial);
+        let path = format!("/payments/{payment_uuid}/{}", spec.action);
+        self.send_post(&path, body.as_ref()).await
     }
 
     async fn send_request(&self, req: reqwest::RequestBuilder) -> Result<Value, PaymentError> {
@@ -220,7 +245,7 @@ impl PaymentProvider for MoyasarProvider {
             .transpose()?;
         let body = mapper::build_create_payment_body(req, source_type, given_id);
         let payload = self.send_post("/payments", Some(&body)).await?;
-        mapper::parse_payment_result(self.id(), self.livemode(), &payload, Some(&req.order_id))
+        self.parse_payment_result(&payload, Some(&req.order_id))
     }
 
     async fn get_payment(
@@ -230,7 +255,7 @@ impl PaymentProvider for MoyasarProvider {
         self.require_secret(SecretOnlyOperation::RetrievePayment)?;
         let payment_uuid = mapper::extract_payment_uuid(self.id(), reference)?;
         let payload = self.send_get(&format!("/payments/{payment_uuid}")).await?;
-        mapper::parse_payment_result(self.id(), self.livemode(), &payload, reference.order_id())
+        self.parse_payment_result(&payload, reference.order_id())
     }
 
     async fn create_checkout(
@@ -247,47 +272,40 @@ impl PaymentProvider for MoyasarProvider {
     }
 
     async fn capture(&self, req: &CaptureRequest) -> Result<PaymentResult, PaymentError> {
-        self.require_secret(SecretOnlyOperation::Capture)?;
         req.validate()?;
-        let payment_uuid = mapper::extract_payment_uuid(self.id(), &req.reference)?;
-        let partial = validate_partial_amount(req.amount.as_ref().map(Money::amount))
-            .map_err(|err| mapper::map_local_error(self.id(), err))?;
-        let body = build_mutation_body(partial);
         let payload = self
-            .send_post(&format!("/payments/{payment_uuid}/capture"), body.as_ref())
+            .post_payment_mutation(MutationSpec {
+                op: SecretOnlyOperation::Capture,
+                reference: &req.reference,
+                action: "capture",
+                amount: req.amount.as_ref(),
+            })
             .await?;
-        mapper::parse_payment_result(
-            self.id(),
-            self.livemode(),
-            &payload,
-            req.reference.order_id(),
-        )
+        self.parse_payment_result(&payload, req.reference.order_id())
     }
 
     async fn void_payment(&self, req: &VoidRequest) -> Result<PaymentResult, PaymentError> {
-        self.require_secret(SecretOnlyOperation::Void)?;
         req.validate()?;
-        let payment_uuid = mapper::extract_payment_uuid(self.id(), &req.reference)?;
         let payload = self
-            .send_post(&format!("/payments/{payment_uuid}/void"), None)
+            .post_payment_mutation(MutationSpec {
+                op: SecretOnlyOperation::Void,
+                reference: &req.reference,
+                action: "void",
+                amount: None,
+            })
             .await?;
-        mapper::parse_payment_result(
-            self.id(),
-            self.livemode(),
-            &payload,
-            req.reference.order_id(),
-        )
+        self.parse_payment_result(&payload, req.reference.order_id())
     }
 
     async fn refund(&self, req: &RefundRequest) -> Result<RefundResult, PaymentError> {
-        self.require_secret(SecretOnlyOperation::Refund)?;
         req.validate()?;
-        let payment_uuid = mapper::extract_payment_uuid(self.id(), &req.reference)?;
-        let partial = validate_partial_amount(req.amount.as_ref().map(Money::amount))
-            .map_err(|err| mapper::map_local_error(self.id(), err))?;
-        let body = build_mutation_body(partial);
         let payload = self
-            .send_post(&format!("/payments/{payment_uuid}/refund"), body.as_ref())
+            .post_payment_mutation(MutationSpec {
+                op: SecretOnlyOperation::Refund,
+                reference: &req.reference,
+                action: "refund",
+                amount: req.amount.as_ref(),
+            })
             .await?;
         mapper::parse_refund_result(self.id(), &payload, req)
     }
@@ -326,6 +344,15 @@ mod tests {
             .payment_id(VALID_UUID)
             .build()
             .expect("valid reference")
+    }
+
+    fn raw_webhook(body: &str) -> RawWebhookRequest {
+        RawWebhookRequest {
+            raw_body: body.as_bytes().to_vec(),
+            headers: BTreeMap::new(),
+            query_params: BTreeMap::new(),
+            method: HttpMethod::Post,
+        }
     }
 
     #[test]
@@ -466,14 +493,8 @@ mod tests {
             "secret_token": "wh_secret_canary_777",
             "data": { "id": VALID_UUID, "amount": 2500, "currency": "SAR" }
         })
-        .to_string()
-        .into_bytes();
-        let raw_faild = RawWebhookRequest {
-            raw_body: faild_body,
-            headers: BTreeMap::new(),
-            query_params: BTreeMap::new(),
-            method: HttpMethod::Post,
-        };
+        .to_string();
+        let raw_faild = raw_webhook(&faild_body);
         let event = provider
             .parse_and_verify_webhook(&raw_faild)
             .await
@@ -494,14 +515,8 @@ mod tests {
             "secret_token": "wh_secret_canary_777",
             "data": { "webhook_id": "wh_live_42", "verification_code": "123456" }
         })
-        .to_string()
-        .into_bytes();
-        let raw_hs = RawWebhookRequest {
-            raw_body: handshake_body,
-            headers: BTreeMap::new(),
-            query_params: BTreeMap::new(),
-            method: HttpMethod::Post,
-        };
+        .to_string();
+        let raw_hs = raw_webhook(&handshake_body);
         let hs = provider
             .parse_and_verify_webhook(&raw_hs)
             .await
