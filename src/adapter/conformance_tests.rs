@@ -155,8 +155,8 @@ fn tc_capabilities_match_moyasar_contract() {
     let caps = provider.capabilities();
     let required = PaymentCapabilities::NATIVE_CREATE_IDEMPOTENCY
         | PaymentCapabilities::WEBHOOK_VERIFICATION_HANDSHAKE;
-    let forbidden = PaymentCapabilities::NATIVE_MUTATION_IDEMPOTENCY
-        | PaymentCapabilities::VOID_SETTLED_WINDOW;
+    let forbidden =
+        PaymentCapabilities::NATIVE_MUTATION_IDEMPOTENCY | PaymentCapabilities::VOID_SETTLED_WINDOW;
 
     assert!(caps.contains(required));
     assert!(!caps.intersects(forbidden));
