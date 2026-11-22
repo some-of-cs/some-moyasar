@@ -173,7 +173,7 @@ pub fn map_invoice_checkout(
     amount: u64,
     currency: &str,
 ) -> Result<InvoiceCheckoutOutcome, MoyasarError> {
-    let invoice_id = validate_non_empty_id(invoice_id, "invoice_id")?;
+    let invoice_id = validate_non_empty_id(invoice_id, IdField::Invoice)?;
     let checkout_url = validate_checkout_url(invoice_url)?;
     let amount = validate_positive_amount(amount)?;
     let currency = validate_currency(currency)?;
@@ -211,7 +211,7 @@ pub fn map_intent_result(
     amount: u64,
     currency: &str,
 ) -> Result<IntentCheckoutOutcome, MoyasarError> {
-    let intent_id = validate_non_empty_id(intent_id, "intent_id")?;
+    let intent_id = validate_non_empty_id(intent_id, IdField::Intent)?;
     validate_intent_secret(client_secret)?;
     let amount = validate_positive_amount(amount)?;
     let currency = validate_currency(currency)?;
@@ -224,14 +224,29 @@ pub fn map_intent_result(
     })
 }
 
+#[derive(Clone, Copy)]
+enum IdField {
+    Invoice,
+    Intent,
+}
+
+impl IdField {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Invoice => "invoice_id",
+            Self::Intent => "intent_id",
+        }
+    }
+}
+
 fn matches_intent_not_fulfillable(value: Option<&str>) -> bool {
     value.is_some_and(|raw| raw.trim().eq_ignore_ascii_case(INTENT_NOT_FULFILLABLE_CODE))
 }
 
-fn validate_non_empty_id(value: &str, field_name: &str) -> Result<String, MoyasarError> {
+fn validate_non_empty_id(value: &str, field: IdField) -> Result<String, MoyasarError> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        let message = format!("{field_name} must not be empty");
+        let message = format!("{} must not be empty", field.label());
         return Err(MoyasarError::invalid_request(message));
     }
     Ok(trimmed.to_owned())
@@ -271,18 +286,18 @@ fn validate_checkout_url(invoice_url: Option<&str>) -> Result<String, MoyasarErr
             )
         })?;
 
-    validate_url_authority(raw_url, remainder)?;
+    validate_url_authority(remainder)?;
 
     Ok(raw_url.to_owned())
 }
 
-fn validate_url_authority(raw_url: &str, remainder: &str) -> Result<(), MoyasarError> {
+fn validate_url_authority(remainder: &str) -> Result<(), MoyasarError> {
     if remainder.is_empty() || remainder.starts_with('/') {
         return Err(MoyasarError::invalid_request(
             "invoice checkout URL must include a non-empty host",
         ));
     }
-    if raw_url.chars().any(char::is_whitespace) {
+    if remainder.chars().any(char::is_whitespace) {
         return Err(MoyasarError::invalid_request(
             "invoice checkout URL must not contain any whitespace",
         ));
