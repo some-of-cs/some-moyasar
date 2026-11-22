@@ -17,7 +17,11 @@ const PAYMENT_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
 const GIVEN_UUID: &str = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
 const WEBHOOK_CANARY: &str = "wh_secret_canary_999";
 
-fn build_provider(api_key: &str, base_url: Option<String>, allow_raw_cards: bool) -> MoyasarProvider {
+fn build_provider(
+    api_key: &str,
+    base_url: Option<String>,
+    allow_raw_cards: bool,
+) -> MoyasarProvider {
     let mut config = MoyasarProviderConfig::new(api_key)
         .expect("valid api key")
         .with_webhook_secret(WEBHOOK_CANARY)
