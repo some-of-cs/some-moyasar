@@ -124,3 +124,15 @@ Under the `some-divide-and-conquer` dynamic decomposition engine ([`DECOMPOSITIO
 1. **Base Branch Scaffolding**: Before spawning unit worktrees, the Module/Story Leader provisions `Cargo.toml`, `src/lib.rs`, `src/kernel/mod.rs`, `src/resources/mod.rs`, and the domain's `mod.rs` + `service.rs` facade on the base branch.
 2. **Disjoint File Ownership (Invariant 2)**: Every unit $u_i \in \{1..K\}$ owns an exclusive set of production `.rs` files and never appends to a sibling unit's file in the same wave.
 3. **Pure Deliverable Production Only (Invariant 1)**: Every unit ships real production Rust code plus colocated `#[cfg(test)]` unit tests; story-wide integration wire tests execute after all $K$ units merge into the story branch.
+
+---
+
+## Module 9 — `some-payment` Orchestrator Alignment & Optional Adapter (9 Units)
+
+- **Module Execution Prompt:** [`module-9-some-payment-alignment/README.md`](./module-9-some-payment-alignment/README.md)
+- **Branch:** `feat/module-9-some-payment-alignment` | **Merge Order Position:** 9th (After `some-payment` Module 1 `some-payment-core` merges to `main`; prerequisite for `some-payment` Module 4)
+
+| Story ID | Title | $S_{\text{story}}$ | Parallel Units ($K$) | Specification File |
+| :--- | :--- | :---: | :---: | :--- |
+| `US-9.1.0` | Moyasar Pre-Integration Hardening (Key-Prefix Mode & `pk_`/`sk_` Scope Guards, Raw-PAN Default-Deny, HTTP 201 Status/NextAction, Pre-Flight Rules & `given_id`) | `2.65` | `5` | [`us-9.1.0-moyasar-core-hardening-and-preflight-rules.md`](./module-9-some-payment-alignment/us-9.1.0-moyasar-core-hardening-and-preflight-rules.md) |
+| `US-9.2.0` | Constant-Time `secret_token` Webhook Verification/Scrubbing, Handshake & Optional `some-payment-adapter` | `2.45` | `4` | [`us-9.2.0-moyasar-webhook-scrubbing-and-adapter.md`](./module-9-some-payment-alignment/us-9.2.0-moyasar-webhook-scrubbing-and-adapter.md) |

@@ -25,6 +25,11 @@ Execute Module 9 (`some-payment` Orchestrator Alignment & Optional Adapter) on h
 ### 1. Architecture, Scope & Feature/Deliverable Contract
 - Module branch: `feat/module-9-some-payment-alignment` (base: `main`).
 - Feature flags / Deliverable boundaries: Hardens `some-moyasar` (`v0.9.0` -> `v0.10.0`) against all P0/P1 items in `some-payment/docs/sdk-implementation.md` and adds optional `some-payment-adapter = ["dep:some-payment-core", "unified-gateway", "invoices"]` feature while preserving standalone microkernel builds.
+- **Upstream `some-payment-core` Contract (Merged on `some-of-cs/some-payment` `main` at `b8e2ca4`)**:
+  - Add optional dependency in `Cargo.toml`:
+    `some-payment-core = { git = "https://github.com/some-of-cs/some-payment", package = "some-payment-core", optional = true }`
+  - Implement `some_payment_core::PaymentProvider` (`id`, `capabilities`, `create_payment`, `get_payment`, `create_checkout`, `capture`, `void_payment`, `refund`, `parse_and_verify_webhook`) behind `#[cfg(feature = "some-payment-adapter")]`.
+  - Use exact `some-payment-core` types: `Money`, `CurrencyCode`, `ProviderId`, `ProviderReference`, `PaymentError` (redacted `Debug` & `Display`, `is_definitive_client_rejection` excludes `ProviderUnavailable` and HTTP `408`/`429`), `PaymentCapabilities` (14 flags), `CreatePaymentRequest`, `CheckoutSessionRequest`, `CaptureRequest`, `VoidRequest`, `RefundRequest`, `PaymentResult`, `RefundResult`, `PaymentStatus`, `NextAction` (`ZeroizeOnDrop`), `RawWebhookRequest` (redacted `Debug`, zeroized on drop), `NormalizedWebhookEvent`, and `VerificationChallenge`.
 - Specifications to implement 100% (every Acceptance Criterion `AC-*` and Test Case `TC-*`):
   1. `docs/user-stories/module-9-some-payment-alignment/us-9.1.0-moyasar-core-hardening-and-preflight-rules.md`
   2. `docs/user-stories/module-9-some-payment-alignment/us-9.2.0-moyasar-webhook-scrubbing-and-adapter.md`
