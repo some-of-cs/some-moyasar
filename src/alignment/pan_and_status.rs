@@ -352,6 +352,30 @@ mod tests {
     use super::*;
     use crate::kernel::ApiErrorType;
 
+    fn make_snapshot<'a>(
+        status: &'a str,
+        source_type: Option<&'a str>,
+        transaction_url: Option<&'a str>,
+        bill_reference: Option<&'a str>,
+    ) -> MoyasarPaymentSnapshot<'a> {
+        MoyasarPaymentSnapshot {
+            status,
+            source_type,
+            transaction_url,
+            bill_reference,
+        }
+    }
+
+    fn assert_mapped(
+        snapshot: &MoyasarPaymentSnapshot<'_>,
+        expected_status: MappedPaymentStatus,
+        expected_action: Option<MappedNextAction>,
+    ) {
+        let outcome = map_moyasar_status(snapshot).expect("snapshot should map");
+        assert_eq!(outcome.status, expected_status);
+        assert_eq!(outcome.next_action, expected_action);
+    }
+
     #[test]
     fn default_deny_rejects_raw_creditcard_pan_locally() {
         let policy = RawCardPolicy::default_deny();
@@ -414,12 +438,7 @@ mod tests {
 
     #[test]
     fn http_201_failed_status_maps_to_failed_never_paid() {
-        let snapshot = MoyasarPaymentSnapshot {
-            status: "failed",
-            source_type: Some("token"),
-            transaction_url: None,
-            bill_reference: None,
-        };
+        let snapshot = make_snapshot("failed", Some("token"), None, None);
         let outcome = map_moyasar_status(&snapshot).expect("failed status should map");
         assert_eq!(outcome.status, MappedPaymentStatus::Failed);
         assert_ne!(outcome.status, MappedPaymentStatus::Paid);
@@ -429,39 +448,27 @@ mod tests {
     #[test]
     fn initiated_stcpay_maps_to_otp_challenge_never_redirect() {
         let otp_url = "https://api.moyasar.com/v1/stc_pays/otp-submit";
-        let snapshot = MoyasarPaymentSnapshot {
-            status: "initiated",
-            source_type: Some("stcpay"),
-            transaction_url: Some(otp_url),
-            bill_reference: None,
-        };
-        let outcome = map_moyasar_status(&snapshot).expect("stcpay initiated should map");
-        assert_eq!(outcome.status, MappedPaymentStatus::RequiresAction);
-        assert_eq!(
-            outcome.next_action,
+        let snapshot = make_snapshot("initiated", Some("stcpay"), Some(otp_url), None);
+        assert_mapped(
+            &snapshot,
+            MappedPaymentStatus::RequiresAction,
             Some(MappedNextAction::OtpChallenge {
                 submission_url: otp_url.to_owned(),
-            })
+            }),
         );
     }
 
     #[test]
     fn initiated_creditcard_and_token_map_to_redirect() {
-        let challenge_url = "https://api.moyasar.com/v1/3ds/challenge";
+        let url = "https://api.moyasar.com/v1/3ds/challenge";
         for source in ["creditcard", "token", "applepay"] {
-            let snapshot = MoyasarPaymentSnapshot {
-                status: "initiated",
-                source_type: Some(source),
-                transaction_url: Some(challenge_url),
-                bill_reference: None,
-            };
-            let outcome = map_moyasar_status(&snapshot).expect("3DS redirect should map");
-            assert_eq!(outcome.status, MappedPaymentStatus::RequiresAction);
-            assert_eq!(
-                outcome.next_action,
+            let snapshot = make_snapshot("initiated", Some(source), Some(url), None);
+            assert_mapped(
+                &snapshot,
+                MappedPaymentStatus::RequiresAction,
                 Some(MappedNextAction::Redirect {
-                    url: challenge_url.to_owned(),
-                })
+                    url: url.to_owned(),
+                }),
             );
         }
     }
@@ -469,71 +476,41 @@ mod tests {
     #[test]
     fn initiated_sadadbill_and_sadad_map_to_offline_bill() {
         let url = "https://moyasar.com/sadad/instructions/900123";
+        let bill = "SADAD-900123";
         for source in ["sadadbill", "sadad", " SADADBILL "] {
-            let snapshot = MoyasarPaymentSnapshot {
-                status: "initiated",
-                source_type: Some(source),
-                transaction_url: Some(url),
-                bill_reference: Some("SADAD-900123"),
-            };
-            let outcome = map_moyasar_status(&snapshot).expect("sadad initiated should map");
-            assert_eq!(outcome.status, MappedPaymentStatus::RequiresAction);
-            assert_eq!(
-                outcome.next_action,
+            let snapshot = make_snapshot("initiated", Some(source), Some(url), Some(bill));
+            assert_mapped(
+                &snapshot,
+                MappedPaymentStatus::RequiresAction,
                 Some(MappedNextAction::OfflineBill {
-                    bill_reference: "SADAD-900123".to_owned(),
+                    bill_reference: bill.to_owned(),
                     instructions_url: Some(url.to_owned()),
-                })
+                }),
             );
         }
-        let no_instructions = MoyasarPaymentSnapshot {
-            status: "initiated",
-            source_type: Some("sadadbill"),
-            transaction_url: None,
-            bill_reference: Some("SADAD-900124"),
-        };
-        let outcome = map_moyasar_status(&no_instructions).expect("sadad without URL should map");
-        assert_eq!(outcome.status, MappedPaymentStatus::RequiresAction);
-        assert_eq!(
-            outcome.next_action,
+        let no_url = make_snapshot("initiated", Some("sadadbill"), None, Some("SADAD-900124"));
+        assert_mapped(
+            &no_url,
+            MappedPaymentStatus::RequiresAction,
             Some(MappedNextAction::OfflineBill {
                 bill_reference: "SADAD-900124".to_owned(),
                 instructions_url: None,
-            })
+            }),
         );
     }
 
     #[test]
     fn initiated_without_action_payload_remains_initiated() {
         for source in [Some("stcpay"), Some("sadadbill"), Some("creditcard"), None] {
-            let snapshot = MoyasarPaymentSnapshot {
-                status: "initiated",
-                source_type: source,
-                transaction_url: Some("   "),
-                bill_reference: None,
-            };
-            let outcome = map_moyasar_status(&snapshot).expect("initiated fallback should map");
-            assert_eq!(outcome.status, MappedPaymentStatus::Initiated);
-            assert_eq!(outcome.next_action, None);
+            let snapshot = make_snapshot("initiated", source, Some("   "), None);
+            assert_mapped(&snapshot, MappedPaymentStatus::Initiated, None);
         }
     }
 
     #[test]
-    fn verified_maps_to_setup_completed() {
-        let snapshot = MoyasarPaymentSnapshot {
-            status: "verified",
-            source_type: Some("token"),
-            transaction_url: None,
-            bill_reference: None,
-        };
-        let outcome = map_moyasar_status(&snapshot).expect("verified should map");
-        assert_eq!(outcome.status, MappedPaymentStatus::SetupCompleted);
-        assert_eq!(outcome.next_action, None);
-    }
-
-    #[test]
-    fn known_lifecycle_statuses_map_accurately() {
+    fn verified_and_lifecycle_statuses_map_accurately() {
         let cases = [
+            ("verified", MappedPaymentStatus::SetupCompleted),
             ("paid", MappedPaymentStatus::Paid),
             (" PAID ", MappedPaymentStatus::Paid),
             ("authorized", MappedPaymentStatus::Authorized),
@@ -541,30 +518,17 @@ mod tests {
             ("refunded", MappedPaymentStatus::Refunded),
             ("voided", MappedPaymentStatus::Voided),
             ("failed", MappedPaymentStatus::Failed),
-            ("verified", MappedPaymentStatus::SetupCompleted),
         ];
         for (raw_status, expected) in cases {
-            let snapshot = MoyasarPaymentSnapshot {
-                status: raw_status,
-                source_type: Some("token"),
-                transaction_url: None,
-                bill_reference: None,
-            };
-            let outcome = map_moyasar_status(&snapshot).expect("known status should map");
-            assert_eq!(outcome.status, expected);
-            assert_eq!(outcome.next_action, None);
+            let snapshot = make_snapshot(raw_status, Some("token"), None, None);
+            assert_mapped(&snapshot, expected, None);
         }
     }
 
     #[test]
     fn unknown_status_returns_invalid_request_error() {
         for unknown in ["pending", "", "   ", "settled_unexpected"] {
-            let snapshot = MoyasarPaymentSnapshot {
-                status: unknown,
-                source_type: Some("token"),
-                transaction_url: None,
-                bill_reference: None,
-            };
+            let snapshot = make_snapshot(unknown, Some("token"), None, None);
             let err = map_moyasar_status(&snapshot)
                 .expect_err("unknown payment status must return an error");
             assert!(matches!(
