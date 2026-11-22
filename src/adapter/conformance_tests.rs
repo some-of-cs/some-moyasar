@@ -17,18 +17,26 @@ const PAYMENT_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
 const GIVEN_UUID: &str = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
 const WEBHOOK_CANARY: &str = "wh_secret_canary_999";
 
-fn build_provider(
-    api_key: &str,
-    base_url: Option<String>,
-    allow_raw_cards: bool,
-) -> MoyasarProvider {
-    let mut config = MoyasarProviderConfig::new(api_key)
+fn server_provider(api_key: &str, base_url: &str) -> MoyasarProvider {
+    let config = MoyasarProviderConfig::new(api_key)
         .expect("valid api key")
         .with_webhook_secret(WEBHOOK_CANARY)
-        .with_allow_raw_cards(allow_raw_cards);
-    if let Some(url) = base_url {
-        config = config.with_base_url(url);
-    }
+        .with_base_url(base_url);
+    MoyasarProvider::new(config).expect("valid provider")
+}
+
+fn raw_card_provider(base_url: &str) -> MoyasarProvider {
+    let config = MoyasarProviderConfig::new("sk_test_conformance_key")
+        .expect("valid api key")
+        .with_base_url(base_url)
+        .with_allow_raw_cards(true);
+    MoyasarProvider::new(config).expect("valid provider")
+}
+
+fn webhook_provider() -> MoyasarProvider {
+    let config = MoyasarProviderConfig::new("sk_test_conformance_key")
+        .expect("valid api key")
+        .with_webhook_secret(WEBHOOK_CANARY);
     MoyasarProvider::new(config).expect("valid provider")
 }
 
@@ -66,26 +74,24 @@ fn base_checkout_request(amount: u64, order_id: &str) -> CheckoutSessionRequest 
     }
 }
 
-fn webhook_request(
-    event_id: &str,
-    event_type: &str,
-    live: bool,
-    secret_token: &str,
-    data: Value,
-) -> RawWebhookRequest {
-    let payload = json!({
-        "id": event_id,
-        "type": event_type,
-        "live": live,
-        "secret_token": secret_token,
-        "data": data,
-    });
+fn raw_webhook_from(payload: &Value) -> RawWebhookRequest {
     RawWebhookRequest {
         raw_body: payload.to_string().into_bytes(),
         headers: BTreeMap::new(),
         query_params: BTreeMap::new(),
         method: HttpMethod::Post,
     }
+}
+
+fn webhook_request(event_type: &str, live: bool, data: Value) -> RawWebhookRequest {
+    let payload = json!({
+        "id": format!("evt_{event_type}"),
+        "type": event_type,
+        "live": live,
+        "secret_token": WEBHOOK_CANARY,
+        "data": data,
+    });
+    raw_webhook_from(&payload)
 }
 
 async fn run_create_payment_case(
@@ -101,7 +107,11 @@ async fn run_create_payment_case(
         .mount(&server)
         .await;
 
-    let provider = build_provider("sk_test_conformance_key", Some(server.uri()), allow_raw_cards);
+    let provider = if allow_raw_cards {
+        raw_card_provider(&server.uri())
+    } else {
+        server_provider("sk_test_conformance_key", &server.uri())
+    };
     let mut req = CreatePaymentRequest::new(Money::new(10_000, "SAR").expect("money"), "ORD-CASE");
     req.payment_token = Some("tok_test_conformance".to_owned());
     if let Some(st) = source_type {
@@ -156,7 +166,7 @@ async fn tc_create_payment_paid_sar_halalas_forwards_given_id() {
         .mount(&server)
         .await;
 
-    let provider = build_provider("sk_test_conformance_key", Some(server.uri()), false);
+    let provider = server_provider("sk_test_conformance_key", &server.uri());
     let mut req = CreatePaymentRequest::new(Money::new(10_000, "SAR").expect("money"), "ORD-PAID");
     req.payment_token = Some("tok_test_conformance".to_owned());
     req.idempotency_key = Some(GIVEN_UUID.to_owned());
@@ -200,35 +210,30 @@ async fn tc_create_payment_initiated_stcpay_maps_to_otp_challenge() {
 
 #[tokio::test]
 async fn tc_create_payment_initiated_token_and_creditcard_map_to_redirect() {
-    let token_url = "https://api.moyasar.com/v1/3ds/token-challenge";
-    let token_body = payment_json(
-        "initiated",
-        10_000,
-        json!({ "type": "token", "transaction_url": token_url }),
-    );
-    let token_res = run_create_payment_case(None, false, token_body).await;
-    assert_eq!(token_res.status, PaymentStatus::RequiresAction);
-    assert_eq!(
-        token_res.next_action,
-        Some(NextAction::Redirect {
-            url: token_url.to_owned(),
-        })
-    );
-
-    let card_url = "https://api.moyasar.com/v1/3ds/card-challenge";
-    let card_body = payment_json(
-        "initiated",
-        10_000,
-        json!({ "type": "creditcard", "transaction_url": card_url }),
-    );
-    let card_res = run_create_payment_case(Some("creditcard"), true, card_body).await;
-    assert_eq!(card_res.status, PaymentStatus::RequiresAction);
-    assert_eq!(
-        card_res.next_action,
-        Some(NextAction::Redirect {
-            url: card_url.to_owned(),
-        })
-    );
+    let cases = [
+        (None, false, "token", "https://api.moyasar.com/v1/3ds/token"),
+        (
+            Some("creditcard"),
+            true,
+            "creditcard",
+            "https://api.moyasar.com/v1/3ds/card",
+        ),
+    ];
+    for (req_source, allow_raw, resp_source, url) in cases {
+        let body = payment_json(
+            "initiated",
+            10_000,
+            json!({ "type": resp_source, "transaction_url": url }),
+        );
+        let res = run_create_payment_case(req_source, allow_raw, body).await;
+        assert_eq!(res.status, PaymentStatus::RequiresAction);
+        assert_eq!(
+            res.next_action,
+            Some(NextAction::Redirect {
+                url: url.to_owned(),
+            })
+        );
+    }
 }
 
 #[tokio::test]
@@ -276,7 +281,7 @@ async fn tc_error_classification_3ds_auth_error_is_three_ds_failed() {
         .mount(&server)
         .await;
 
-    let provider = build_provider("sk_test_conformance_key", Some(server.uri()), false);
+    let provider = server_provider("sk_test_conformance_key", &server.uri());
     let mut req = CreatePaymentRequest::new(Money::new(10_000, "SAR").expect("money"), "ORD-3DS");
     req.payment_token = Some("tok_test_conformance".to_owned());
 
@@ -309,7 +314,7 @@ async fn tc_create_checkout_posts_invoice_and_returns_redirect() {
         .mount(&server)
         .await;
 
-    let provider = build_provider("sk_test_conformance_key", Some(server.uri()), false);
+    let provider = server_provider("sk_test_conformance_key", &server.uri());
     let req = base_checkout_request(25_000, "ORD-CHK-1");
 
     let res = provider
@@ -347,7 +352,7 @@ async fn tc_capture_full_and_partial_request_bodies() {
         .mount(&server)
         .await;
 
-    let provider = build_provider("sk_test_conformance_key", Some(server.uri()), false);
+    let provider = server_provider("sk_test_conformance_key", &server.uri());
     let full_req = CaptureRequest {
         reference: sample_reference(),
         amount: None,
@@ -376,7 +381,7 @@ async fn tc_void_payment_sends_empty_body() {
     let body = payment_json("voided", 10_000, json!({ "type": "token" }));
     mount_empty_post(&server, &endpoint, body).await;
 
-    let provider = build_provider("sk_test_conformance_key", Some(server.uri()), false);
+    let provider = server_provider("sk_test_conformance_key", &server.uri());
     let req = VoidRequest {
         reference: sample_reference(),
         reason: Some("customer_canceled".to_owned()),
@@ -394,7 +399,7 @@ async fn tc_refund_full_with_reason_sends_empty_body() {
     body["refunded"] = json!(10_000);
     mount_empty_post(&server, &endpoint, body).await;
 
-    let provider = build_provider("sk_test_conformance_key", Some(server.uri()), false);
+    let provider = server_provider("sk_test_conformance_key", &server.uri());
     let req = RefundRequest {
         reference: sample_reference(),
         amount: None,
@@ -417,7 +422,7 @@ async fn tc_get_payment_fetches_by_uuid() {
         .mount(&server)
         .await;
 
-    let provider = build_provider("sk_test_conformance_key", Some(server.uri()), false);
+    let provider = server_provider("sk_test_conformance_key", &server.uri());
     let res = provider
         .get_payment(&sample_reference())
         .await
@@ -430,7 +435,7 @@ async fn tc_get_payment_fetches_by_uuid() {
 #[tokio::test]
 async fn tc_publishable_key_fails_closed_locally_with_zero_http_calls() {
     let server = MockServer::start().await;
-    let provider = build_provider("pk_test_local_guard", Some(server.uri()), false);
+    let provider = server_provider("pk_test_local_guard", &server.uri());
     let reference = sample_reference();
 
     let cap_req = CaptureRequest {
@@ -451,26 +456,16 @@ async fn tc_publishable_key_fails_closed_locally_with_zero_http_calls() {
     };
     let checkout_req = base_checkout_request(5_000, "ORD-PK-GUARD");
 
-    assert!(matches!(
+    let errors = [
         provider.capture(&cap_req).await.unwrap_err(),
-        PaymentError::AuthenticationError { .. }
-    ));
-    assert!(matches!(
         provider.void_payment(&void_req).await.unwrap_err(),
-        PaymentError::AuthenticationError { .. }
-    ));
-    assert!(matches!(
         provider.refund(&refund_req).await.unwrap_err(),
-        PaymentError::AuthenticationError { .. }
-    ));
-    assert!(matches!(
         provider.create_checkout(&checkout_req).await.unwrap_err(),
-        PaymentError::AuthenticationError { .. }
-    ));
-    assert!(matches!(
         provider.get_payment(&reference).await.unwrap_err(),
-        PaymentError::AuthenticationError { .. }
-    ));
+    ];
+    for err in errors {
+        assert!(matches!(err, PaymentError::AuthenticationError { .. }));
+    }
 
     let received = server.received_requests().await.expect("requests");
     assert!(received.is_empty());
@@ -478,12 +473,10 @@ async fn tc_publishable_key_fails_closed_locally_with_zero_http_calls() {
 
 #[tokio::test]
 async fn tc_webhook_valid_live_scrubs_canary_secret() {
-    let provider = build_provider("sk_test_conformance_key", None, false);
+    let provider = webhook_provider();
     let raw = webhook_request(
-        "evt_live_paid_1",
         "payment_paid",
         true,
-        WEBHOOK_CANARY,
         json!({ "id": PAYMENT_UUID, "amount": 10_000, "currency": "SAR" }),
     );
     let event = provider
@@ -497,16 +490,16 @@ async fn tc_webhook_valid_live_scrubs_canary_secret() {
 
 #[tokio::test]
 async fn tc_webhook_wrong_secret_fails_verification() {
-    let provider = build_provider("sk_test_conformance_key", None, false);
-    let raw = webhook_request(
-        "evt_bad_secret_1",
-        "payment_paid",
-        false,
-        "wh_wrong_secret_000",
-        json!({ "id": PAYMENT_UUID, "amount": 10_000, "currency": "SAR" }),
-    );
+    let provider = webhook_provider();
+    let payload = json!({
+        "id": "evt_bad_secret_1",
+        "type": "payment_paid",
+        "live": false,
+        "secret_token": "wh_wrong_secret_000",
+        "data": { "id": PAYMENT_UUID, "amount": 10_000, "currency": "SAR" },
+    });
     let err = provider
-        .parse_and_verify_webhook(&raw)
+        .parse_and_verify_webhook(&raw_webhook_from(&payload))
         .await
         .expect_err("wrong secret must fail");
     assert!(matches!(
@@ -517,12 +510,10 @@ async fn tc_webhook_wrong_secret_fails_verification() {
 
 #[tokio::test]
 async fn tc_webhook_payment_faild_typo_maps_to_failed() {
-    let provider = build_provider("sk_test_conformance_key", None, false);
+    let provider = webhook_provider();
     let raw = webhook_request(
-        "evt_faild_typo_1",
         "payment_faild",
         false,
-        WEBHOOK_CANARY,
         json!({ "id": PAYMENT_UUID, "amount": 5_000, "currency": "SAR" }),
     );
     let event = provider
@@ -535,12 +526,10 @@ async fn tc_webhook_payment_faild_typo_maps_to_failed() {
 
 #[tokio::test]
 async fn tc_webhook_verification_handshake_redacts_debug() {
-    let provider = build_provider("sk_test_conformance_key", None, false);
+    let provider = webhook_provider();
     let raw = webhook_request(
-        "evt_handshake_1",
         "webhook_verification",
         true,
-        WEBHOOK_CANARY,
         json!({ "webhook_id": "wh_handshake_01", "verification_code": "654321" }),
     );
     let event = provider
