@@ -8,8 +8,8 @@
 //! - [`HandshakeChallenge`] (with [`zeroize::ZeroizeOnDrop`] and redacted [`fmt::Debug`]),
 //!   [`validate_verification_code`], and [`extract_verification_challenge`] for offline-validated
 //!   6-digit verification handshake parsing (protecting Moyasar's 5-attempt limit).
-//! - [`verify_webhook`] and [`resend_verification`] async HTTP helpers against Moyasar's
-//!   `/webhooks/{id}/verify` and `/webhooks/{id}/resend_verification` endpoints.
+//! - [`WebhookApiContext`], [`verify_webhook`], and [`resend_verification`] async HTTP helpers
+//!   against Moyasar's `/webhooks/{id}/verify` and `/webhooks/{id}/resend_verification` endpoints.
 
 use std::fmt;
 
@@ -162,6 +162,46 @@ pub fn normalize_moyasar_event(event_type: &str) -> Option<NormalizedMoyasarEven
         .map(|(_, variant)| *variant)
 }
 
+/// Borrowed HTTP client and authentication context for Moyasar webhook handshake API calls.
+///
+/// [`fmt::Debug`] redacts [`secret_key`](Self::secret_key) as `"[REDACTED]"` to prevent
+/// accidental credential leakage in logs.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::alignment::webhook_handshake::WebhookApiContext;
+///
+/// let http = reqwest::Client::new();
+/// let ctx = WebhookApiContext {
+///     http: &http,
+///     base_url: "https://api.moyasar.com/v1",
+///     secret_key: "sk_test_secret_canary",
+/// };
+/// let dbg = format!("{ctx:?}");
+/// assert!(dbg.contains("https://api.moyasar.com/v1"));
+/// assert!(dbg.contains("[REDACTED]"));
+/// assert!(!dbg.contains("sk_test_secret_canary"));
+/// ```
+#[derive(Clone, Copy)]
+pub struct WebhookApiContext<'a> {
+    /// Shared `reqwest` HTTP client used to issue Moyasar API requests.
+    pub http: &'a reqwest::Client,
+    /// Moyasar API base URL (for example, `"https://api.moyasar.com/v1"`).
+    pub base_url: &'a str,
+    /// Merchant Moyasar secret API key (`sk_test_...` or `sk_live_...`).
+    pub secret_key: &'a str,
+}
+
+impl fmt::Debug for WebhookApiContext<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WebhookApiContext")
+            .field("base_url", &self.base_url)
+            .field("secret_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
 /// Parsed webhook verification handshake challenge containing the target webhook ID and its
 /// 6-digit verification code.
 ///
@@ -227,14 +267,19 @@ pub fn validate_verification_code(code: &str) -> Result<(), MoyasarError> {
     ))
 }
 
+fn is_safe_webhook_id_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-')
+}
+
 fn validate_webhook_id(webhook_id: &str) -> Result<&str, MoyasarError> {
     let trimmed = webhook_id.trim();
-    if trimmed.is_empty() {
-        return Err(MoyasarError::invalid_request(
-            "webhook_id must not be empty",
-        ));
+    let valid_len = (1..=128).contains(&trimmed.len());
+    if valid_len && trimmed.bytes().all(is_safe_webhook_id_byte) {
+        return Ok(trimmed);
     }
-    Ok(trimmed)
+    Err(MoyasarError::invalid_request(
+        "webhook_id must be 1..=128 ASCII alphanumeric, '_' or '-' characters",
+    ))
 }
 
 fn first_non_empty_trimmed_str<'a>(
@@ -242,6 +287,7 @@ fn first_non_empty_trimmed_str<'a>(
 ) -> Option<&'a str> {
     candidates
         .iter()
+        .copied()
         .flatten()
         .filter_map(|v| v.as_str().map(str::trim))
         .find(|s| !s.is_empty())
@@ -259,12 +305,14 @@ fn first_str<'a>(candidates: &[Option<&'a serde_json::Value>]) -> Option<&'a str
 ///
 /// Looks up `webhook_id` from `data.webhook_id`, `data.id`, or top-level `webhook_id`, and
 /// `verification_code` from `data.verification_code` or top-level `verification_code`, then
-/// validates the code with [`validate_verification_code`].
+/// validates both the safe ASCII path-segment `webhook_id` and the 6-digit code with
+/// [`validate_verification_code`].
 ///
 /// # Errors
 ///
-/// Returns [`MoyasarError::Api`] with `InvalidRequestError` if `webhook_id` is missing/empty,
-/// `verification_code` is missing, or `verification_code` is not strictly 6 ASCII digits.
+/// Returns [`MoyasarError::Api`] with `InvalidRequestError` if `webhook_id` is missing or fails
+/// path-segment validation, `verification_code` is missing, or `verification_code` is not
+/// strictly 6 ASCII digits.
 ///
 /// # Examples
 ///
@@ -287,12 +335,13 @@ pub fn extract_verification_challenge(
     payload: &serde_json::Value,
 ) -> Result<HandshakeChallenge, MoyasarError> {
     let data = payload.get("data");
-    let webhook_id = first_non_empty_trimmed_str(&[
+    let raw_webhook_id = first_non_empty_trimmed_str(&[
         data.and_then(|d| d.get("webhook_id")),
         data.and_then(|d| d.get("id")),
         payload.get("webhook_id"),
     ])
     .ok_or_else(|| MoyasarError::invalid_request("missing webhook_id in verification payload"))?;
+    let webhook_id = validate_webhook_id(raw_webhook_id)?;
 
     let verification_code = first_str(&[
         data.and_then(|d| d.get("verification_code")),
@@ -319,53 +368,57 @@ async fn map_empty_response(resp: reqwest::Response) -> Result<(), MoyasarError>
     Err(MoyasarError::from_api_response(status.as_u16(), &body))
 }
 
-/// Submits a 6-digit verification code to `POST {base_url}/webhooks/{webhook_id}/verify`.
+/// Submits a 6-digit verification challenge to `POST {base_url}/webhooks/{webhook_id}/verify`.
 ///
-/// Validates `webhook_id` (non-empty) and `verification_code` (strictly 6 ASCII digits) locally
-/// before issuing any HTTP request so invalid codes never burn Moyasar's 5-attempt limit.
+/// Validates `challenge.webhook_id` (safe ASCII path segment) and `challenge.verification_code`
+/// (strictly 6 ASCII digits) locally before issuing any HTTP request so invalid inputs never
+/// cause path injection or burn Moyasar's 5-attempt limit.
 ///
 /// # Errors
 ///
 /// - Returns [`MoyasarError::Api`] (`InvalidRequestError`) locally without making an HTTP call
-///   when `webhook_id` is empty or `verification_code` fails [`validate_verification_code`].
+///   when `challenge.webhook_id` fails path-segment validation or `challenge.verification_code`
+///   fails [`validate_verification_code`].
 /// - Returns [`MoyasarError::Network`] or [`MoyasarError::Timeout`] on transport failures.
 /// - Maps non-2xx API responses via [`MoyasarError::from_api_response`].
 ///
 /// # Examples
 ///
 /// ```
-/// use some_moyasar::alignment::webhook_handshake::verify_webhook;
+/// use some_moyasar::alignment::webhook_handshake::{
+///     HandshakeChallenge, WebhookApiContext, verify_webhook,
+/// };
 ///
 /// let rt = tokio::runtime::Builder::new_current_thread()
 ///     .build()
 ///     .unwrap();
 /// let http = reqwest::Client::new();
+/// let ctx = WebhookApiContext {
+///     http: &http,
+///     base_url: "https://api.moyasar.com/v1",
+///     secret_key: "sk_test_example",
+/// };
+/// let bad = HandshakeChallenge {
+///     webhook_id: "wh_123".to_owned(),
+///     verification_code: "bad".to_owned(),
+/// };
 /// // Local validation rejects malformed codes with zero HTTP calls.
-/// let err = rt.block_on(verify_webhook(
-///     &http,
-///     "https://api.moyasar.com/v1",
-///     "sk_test_example",
-///     "wh_123",
-///     "bad",
-/// ));
-/// assert!(err.is_err());
+/// assert!(rt.block_on(verify_webhook(&ctx, &bad)).is_err());
 /// ```
 pub async fn verify_webhook(
-    http: &reqwest::Client,
-    base_url: &str,
-    secret_key: &str,
-    webhook_id: &str,
-    verification_code: &str,
+    ctx: &WebhookApiContext<'_>,
+    challenge: &HandshakeChallenge,
 ) -> Result<(), MoyasarError> {
-    let webhook_id = validate_webhook_id(webhook_id)?;
-    validate_verification_code(verification_code)?;
+    let webhook_id = validate_webhook_id(&challenge.webhook_id)?;
+    validate_verification_code(&challenge.verification_code)?;
 
-    let base = base_url.trim_end_matches('/');
+    let base = ctx.base_url.trim_end_matches('/');
     let url = format!("{base}/webhooks/{webhook_id}/verify");
-    let resp = http
+    let resp = ctx
+        .http
         .post(url)
-        .basic_auth(secret_key, Some(""))
-        .json(&serde_json::json!({ "verification_code": verification_code }))
+        .basic_auth(ctx.secret_key, Some(""))
+        .json(&serde_json::json!({ "verification_code": &challenge.verification_code }))
         .send()
         .await?;
 
@@ -377,40 +430,39 @@ pub async fn verify_webhook(
 ///
 /// # Errors
 ///
-/// - Returns [`MoyasarError::Api`] (`InvalidRequestError`) locally when `webhook_id` is empty.
+/// - Returns [`MoyasarError::Api`] (`InvalidRequestError`) locally without making an HTTP call
+///   when `webhook_id` is empty or contains unsafe path-segment characters.
 /// - Returns [`MoyasarError::Network`] or [`MoyasarError::Timeout`] on transport failures.
 /// - Maps non-2xx API responses via [`MoyasarError::from_api_response`].
 ///
 /// # Examples
 ///
 /// ```
-/// use some_moyasar::alignment::webhook_handshake::resend_verification;
+/// use some_moyasar::alignment::webhook_handshake::{WebhookApiContext, resend_verification};
 ///
 /// let rt = tokio::runtime::Builder::new_current_thread()
 ///     .build()
 ///     .unwrap();
 /// let http = reqwest::Client::new();
+/// let ctx = WebhookApiContext {
+///     http: &http,
+///     base_url: "https://api.moyasar.com/v1",
+///     secret_key: "sk_test_example",
+/// };
 /// // Local validation rejects empty webhook IDs with zero HTTP calls.
-/// let err = rt.block_on(resend_verification(
-///     &http,
-///     "https://api.moyasar.com/v1",
-///     "sk_test_example",
-///     "   ",
-/// ));
-/// assert!(err.is_err());
+/// assert!(rt.block_on(resend_verification(&ctx, "   ")).is_err());
 /// ```
 pub async fn resend_verification(
-    http: &reqwest::Client,
-    base_url: &str,
-    secret_key: &str,
+    ctx: &WebhookApiContext<'_>,
     webhook_id: &str,
 ) -> Result<(), MoyasarError> {
     let webhook_id = validate_webhook_id(webhook_id)?;
-    let base = base_url.trim_end_matches('/');
+    let base = ctx.base_url.trim_end_matches('/');
     let url = format!("{base}/webhooks/{webhook_id}/resend_verification");
-    let resp = http
+    let resp = ctx
+        .http
         .post(url)
-        .basic_auth(secret_key, Some(""))
+        .basic_auth(ctx.secret_key, Some(""))
         .send()
         .await?;
 
@@ -430,6 +482,13 @@ mod tests {
     fn expected_basic_header(secret_key: &str) -> String {
         let encoded = base64::engine::general_purpose::STANDARD.encode(format!("{secret_key}:"));
         format!("Basic {encoded}")
+    }
+
+    fn test_challenge(webhook_id: &str, verification_code: &str) -> HandshakeChallenge {
+        HandshakeChallenge {
+            webhook_id: webhook_id.to_owned(),
+            verification_code: verification_code.to_owned(),
+        }
     }
 
     #[test]
@@ -511,16 +570,13 @@ mod tests {
         let nested_webhook_id = json!({
             "type": "webhook_verification",
             "data": {
-                "webhook_id": "wh_nested_1",
+                "webhook_id": "wh_nested-1",
                 "verification_code": "123456"
             }
         });
         assert_eq!(
             extract_verification_challenge(&nested_webhook_id).unwrap(),
-            HandshakeChallenge {
-                webhook_id: "wh_nested_1".to_owned(),
-                verification_code: "123456".to_owned(),
-            }
+            test_challenge("wh_nested-1", "123456")
         );
 
         let nested_id = json!({
@@ -532,10 +588,7 @@ mod tests {
         });
         assert_eq!(
             extract_verification_challenge(&nested_id).unwrap(),
-            HandshakeChallenge {
-                webhook_id: "wh_nested_id_2".to_owned(),
-                verification_code: "654321".to_owned(),
-            }
+            test_challenge("wh_nested_id_2", "654321")
         );
 
         let top_level = json!({
@@ -544,10 +597,7 @@ mod tests {
         });
         assert_eq!(
             extract_verification_challenge(&top_level).unwrap(),
-            HandshakeChallenge {
-                webhook_id: "wh_top_3".to_owned(),
-                verification_code: "000999".to_owned(),
-            }
+            test_challenge("wh_top_3", "000999")
         );
 
         let missing_id = json!({ "data": { "verification_code": "123456" } });
@@ -560,18 +610,34 @@ mod tests {
             "data": { "webhook_id": "wh_1", "verification_code": "12345" }
         });
         assert!(extract_verification_challenge(&bad_code).is_err());
+
+        let injected_id = json!({
+            "data": {
+                "webhook_id": "../payments/pay_123/void#",
+                "verification_code": "123456"
+            }
+        });
+        assert!(extract_verification_challenge(&injected_id).is_err());
     }
 
     #[test]
-    fn tc_9_2_2_debug_redacts_verification_code_canary() {
-        let challenge = HandshakeChallenge {
-            webhook_id: "wh_canary_42".to_owned(),
-            verification_code: "987654".to_owned(),
-        };
+    fn tc_9_2_2_debug_redacts_secrets_canary() {
+        let challenge = test_challenge("wh_canary_42", "987654");
         let rendered = format!("{challenge:?}");
         assert!(rendered.contains("wh_canary_42"));
         assert!(rendered.contains("[REDACTED]"));
         assert!(!rendered.contains("987654"));
+
+        let http = reqwest::Client::new();
+        let ctx = WebhookApiContext {
+            http: &http,
+            base_url: "https://api.moyasar.com/v1",
+            secret_key: "sk_test_canary_999",
+        };
+        let ctx_rendered = format!("{ctx:?}");
+        assert!(ctx_rendered.contains("https://api.moyasar.com/v1"));
+        assert!(ctx_rendered.contains("[REDACTED]"));
+        assert!(!ctx_rendered.contains("sk_test_canary_999"));
     }
 
     #[tokio::test]
@@ -590,13 +656,17 @@ mod tests {
 
         let http = reqwest::Client::new();
         let base_url = format!("{}/v1", server.uri());
-        verify_webhook(&http, &base_url, secret, "wh_verify_1", "123456")
-            .await
-            .unwrap();
+        let ctx = WebhookApiContext {
+            http: &http,
+            base_url: &base_url,
+            secret_key: secret,
+        };
+        let challenge = test_challenge("wh_verify_1", "123456");
+        verify_webhook(&ctx, &challenge).await.unwrap();
     }
 
     #[tokio::test]
-    async fn tc_9_2_2_verify_webhook_rejects_bad_code_with_zero_http_calls() {
+    async fn tc_9_2_2_rejects_bad_code_and_path_injection_with_zero_http_calls() {
         let server = MockServer::start().await;
 
         Mock::given(method("POST"))
@@ -607,22 +677,44 @@ mod tests {
 
         let http = reqwest::Client::new();
         let base_url = format!("{}/v1", server.uri());
+        let ctx = WebhookApiContext {
+            http: &http,
+            base_url: &base_url,
+            secret_key: "sk_test_key",
+        };
+        let oversized_id = "a".repeat(129);
 
         assert!(
-            verify_webhook(&http, &base_url, "sk_test_key", "wh_1", "12345")
+            verify_webhook(&ctx, &test_challenge("wh_1", "12345"))
                 .await
                 .is_err()
         );
         assert!(
-            verify_webhook(&http, &base_url, "sk_test_key", "wh_1", "abcdef")
+            verify_webhook(&ctx, &test_challenge("wh_1", "abcdef"))
                 .await
                 .is_err()
         );
         assert!(
-            verify_webhook(&http, &base_url, "sk_test_key", "   ", "123456")
+            verify_webhook(&ctx, &test_challenge("   ", "123456"))
                 .await
                 .is_err()
         );
+        assert!(
+            verify_webhook(&ctx, &test_challenge("../payments/pay_123/void#", "123456"))
+                .await
+                .is_err()
+        );
+        assert!(
+            verify_webhook(&ctx, &test_challenge(&oversized_id, "123456"))
+                .await
+                .is_err()
+        );
+        assert!(
+            resend_verification(&ctx, "../payments/pay_123/void#")
+                .await
+                .is_err()
+        );
+        assert!(resend_verification(&ctx, &oversized_id).await.is_err());
     }
 
     #[tokio::test]
@@ -641,9 +733,13 @@ mod tests {
 
         let http = reqwest::Client::new();
         let base_url = format!("{}/v1", server.uri());
-        let err = verify_webhook(&http, &base_url, "sk_test_key", "wh_bad_code", "111111")
-            .await
-            .unwrap_err();
+        let ctx = WebhookApiContext {
+            http: &http,
+            base_url: &base_url,
+            secret_key: "sk_test_key",
+        };
+        let challenge = test_challenge("wh_bad_code", "111111");
+        let err = verify_webhook(&ctx, &challenge).await.unwrap_err();
         assert!(matches!(
             err,
             MoyasarError::Api {
@@ -678,13 +774,14 @@ mod tests {
 
         let http = reqwest::Client::new();
         let base_url = format!("{}/v1/", server.uri());
-        resend_verification(&http, &base_url, secret, "wh_resend_1")
-            .await
-            .unwrap();
+        let ctx = WebhookApiContext {
+            http: &http,
+            base_url: &base_url,
+            secret_key: secret,
+        };
+        resend_verification(&ctx, "wh_resend_1").await.unwrap();
 
-        let err = resend_verification(&http, &base_url, secret, "wh_missing")
-            .await
-            .unwrap_err();
+        let err = resend_verification(&ctx, "wh_missing").await.unwrap_err();
         assert!(matches!(
             err,
             MoyasarError::Api {
@@ -693,10 +790,6 @@ mod tests {
             }
         ));
 
-        assert!(
-            resend_verification(&http, &base_url, secret, "")
-                .await
-                .is_err()
-        );
+        assert!(resend_verification(&ctx, "").await.is_err());
     }
 }
