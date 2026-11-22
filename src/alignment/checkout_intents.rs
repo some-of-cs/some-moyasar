@@ -243,8 +243,12 @@ pub fn map_invoice_checkout(
     input: InvoiceCheckoutInput<'_>,
 ) -> Result<InvoiceCheckoutOutcome, MoyasarError> {
     let checkout_url = validate_checkout_url(input.invoice_url)?;
-    let (invoice_id, amount, currency) =
-        validate_common_fields(IdField::Invoice, input.invoice_id, input.amount, input.currency)?;
+    let (invoice_id, amount, currency) = validate_common_fields(
+        IdField::Invoice,
+        input.invoice_id,
+        input.amount,
+        input.currency,
+    )?;
 
     Ok(InvoiceCheckoutOutcome {
         invoice_id,
@@ -282,8 +286,12 @@ pub fn map_intent_result(
     input: IntentCheckoutInput<'_>,
 ) -> Result<IntentCheckoutOutcome, MoyasarError> {
     validate_intent_secret(input.client_secret)?;
-    let (intent_id, amount, currency) =
-        validate_common_fields(IdField::Intent, input.intent_id, input.amount, input.currency)?;
+    let (intent_id, amount, currency) = validate_common_fields(
+        IdField::Intent,
+        input.intent_id,
+        input.amount,
+        input.currency,
+    )?;
 
     Ok(IntentCheckoutOutcome {
         intent_id,
