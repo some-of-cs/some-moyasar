@@ -5,10 +5,12 @@
 //! [`some_payment_core::PaymentProvider`] SPI.
 
 use core::fmt;
+use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
 use some_payment_core::{
     CaptureMode, CaptureRequest, CheckoutSessionRequest, CreatePaymentRequest, Money, NextAction,
@@ -268,40 +270,318 @@ impl MoyasarProvider {
         &self.base_url
     }
 
+    fn map_local_error(&self, err: MoyasarError) -> PaymentError {
+        match err {
+            MoyasarError::InvalidKey | MoyasarError::KeyTypeMismatch => {
+                PaymentError::AuthenticationError {
+                    provider: self.provider_id.clone(),
+                    message: err.to_string(),
+                }
+            }
+            MoyasarError::InvalidWebhookSecret => PaymentError::WebhookVerificationFailed {
+                provider: self.provider_id.clone(),
+                reason: err.to_string(),
+            },
+            other => PaymentError::validation(other.to_string()),
+        }
+    }
+
     fn require_secret(&self, op: SecretOnlyOperation) -> Result<(), PaymentError> {
         require_secret_key(self.api_key.expose_secret(), op)
             .map(|_| ())
-            .map_err(|err| map_local_error(&self.provider_id, err))
+            .map_err(|err| self.map_local_error(err))
     }
 
-    fn endpoint(&self, path: &str) -> String {
-        format!("{}{path}", self.base_url)
+    fn extract_payment_uuid(
+        &self,
+        reference: &ProviderReference,
+    ) -> Result<uuid::Uuid, PaymentError> {
+        let raw_id = reference
+            .payment_id()
+            .ok_or_else(|| PaymentError::validation("ProviderReference requires payment_id"))?;
+        validate_uuid_id(raw_id, "payment_id").map_err(|err| self.map_local_error(err))
     }
 
-    async fn send_get(&self, path: &str) -> Result<Value, PaymentError> {
-        let resp = self
-            .http_client
-            .get(self.endpoint(path))
+    fn validate_create_guards(
+        &self,
+        req: &CreatePaymentRequest,
+        source_type: Option<&str>,
+    ) -> Result<(), PaymentError> {
+        let policy = RawCardPolicy {
+            allow_raw_cards: self.allow_raw_cards,
+        };
+        if let Some(st) = source_type {
+            guard_raw_pan(st, policy).map_err(|err| self.map_local_error(err))?;
+        }
+        let splits: Vec<SplitCheckItem> = req
+            .splits
+            .iter()
+            .map(|item| SplitCheckItem {
+                recipient_id: item.recipient_id.clone(),
+                amount: item.amount,
+            })
+            .collect();
+        let preflight = MoyasarPreflightInput {
+            payment_id: None,
+            amount: req.money.amount(),
+            manual_capture: matches!(req.capture_mode, CaptureMode::Manual),
+            source_type,
+            metadata: &req.metadata,
+            splits: &splits,
+        };
+        validate_moyasar_preflight(&preflight).map_err(|err| self.map_local_error(err))
+    }
+
+    async fn send_request(&self, req: reqwest::RequestBuilder) -> Result<Value, PaymentError> {
+        let resp = req
             .basic_auth(self.api_key.expose_secret(), Some(""))
             .send()
             .await
-            .map_err(|err| map_transport_error(&self.provider_id, &err))?;
-        parse_json_response(&self.provider_id, resp).await
+            .map_err(|err| self.map_transport_error(&err))?;
+        self.parse_json_response(resp).await
+    }
+
+    async fn send_get(&self, path: &str) -> Result<Value, PaymentError> {
+        let url = format!("{}{path}", self.base_url);
+        self.send_request(self.http_client.get(url)).await
     }
 
     async fn send_post(&self, path: &str, body: Option<&Value>) -> Result<Value, PaymentError> {
-        let mut builder = self
-            .http_client
-            .post(self.endpoint(path))
-            .basic_auth(self.api_key.expose_secret(), Some(""));
+        let url = format!("{}{path}", self.base_url);
+        let mut builder = self.http_client.post(url);
         if let Some(payload) = body {
             builder = builder.json(payload);
         }
-        let resp = builder
-            .send()
-            .await
-            .map_err(|err| map_transport_error(&self.provider_id, &err))?;
-        parse_json_response(&self.provider_id, resp).await
+        self.send_request(builder).await
+    }
+
+    async fn parse_json_response(&self, resp: reqwest::Response) -> Result<Value, PaymentError> {
+        let status = resp.status();
+        let retry_after = resp
+            .headers()
+            .get("retry-after")
+            .and_then(|val| val.to_str().ok())
+            .and_then(|s| s.trim().parse::<u64>().ok());
+        let body = resp.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(self.classify_http_error(status.as_u16(), &body, retry_after));
+        }
+        serde_json::from_str(&body).map_err(|_| PaymentError::ProviderError {
+            provider: self.provider_id.clone(),
+            http_status: Some(status.as_u16()),
+            vendor_code: None,
+            message: "invalid JSON response from Moyasar".to_owned(),
+        })
+    }
+
+    fn classify_http_error(
+        &self,
+        status: u16,
+        body: &str,
+        retry_after: Option<u64>,
+    ) -> PaymentError {
+        let parsed = serde_json::from_str::<RawMoyasarError>(body).ok();
+        let err_type = parsed.as_ref().and_then(|p| p.error_type.as_deref());
+        let err_code = parsed.as_ref().and_then(|p| p.code.as_deref());
+        let message = parsed
+            .as_ref()
+            .and_then(|p| p.message.clone())
+            .unwrap_or_else(|| format!("Moyasar HTTP {status}"));
+        let classified = map_moyasar_error(Some(status), err_type, err_code);
+        self.map_classified_error(classified, message, retry_after)
+    }
+
+    fn map_client_or_flow_error(
+        &self,
+        classified: &ClassifiedMoyasarError,
+        message: &str,
+    ) -> Option<PaymentError> {
+        let provider = self.provider_id.clone();
+        match classified.class {
+            MoyasarErrorClass::ThreeDsFailed => Some(PaymentError::ThreeDsFailed {
+                provider,
+                code: classified.vendor_code.clone(),
+                message: message.to_owned(),
+            }),
+            MoyasarErrorClass::AuthenticationError => Some(PaymentError::AuthenticationError {
+                provider,
+                message: message.to_owned(),
+            }),
+            MoyasarErrorClass::ValidationError => Some(PaymentError::ValidationError {
+                message: message.to_owned(),
+            }),
+            MoyasarErrorClass::CardDeclined => Some(PaymentError::CardDeclined {
+                provider,
+                decline_code: classified.vendor_code.clone(),
+                advice_code: None,
+                message: message.to_owned(),
+            }),
+            _ => None,
+        }
+    }
+
+    fn map_classified_error(
+        &self,
+        classified: ClassifiedMoyasarError,
+        message: String,
+        retry_after: Option<u64>,
+    ) -> PaymentError {
+        if let Some(err) = self.map_client_or_flow_error(&classified, &message) {
+            return err;
+        }
+        let provider = self.provider_id.clone();
+        match classified.class {
+            MoyasarErrorClass::RateLimited => PaymentError::RateLimited {
+                provider,
+                retry_after_secs: retry_after,
+            },
+            MoyasarErrorClass::ProviderUnavailable => PaymentError::ProviderUnavailable {
+                provider,
+                http_status: classified.http_status,
+                indeterminate: classified.indeterminate,
+                message,
+            },
+            _ => PaymentError::ProviderError {
+                provider,
+                http_status: classified.http_status,
+                vendor_code: classified.vendor_code,
+                message,
+            },
+        }
+    }
+
+    fn map_transport_error(&self, err: &reqwest::Error) -> PaymentError {
+        let message = if err.is_timeout() {
+            "Moyasar request timed out"
+        } else {
+            "Moyasar transport failure"
+        };
+        PaymentError::ProviderUnavailable {
+            provider: self.provider_id.clone(),
+            http_status: None,
+            indeterminate: true,
+            message: message.to_owned(),
+        }
+    }
+
+    fn decode_payload<T: DeserializeOwned>(
+        &self,
+        payload: &Value,
+        kind: &str,
+    ) -> Result<T, PaymentError> {
+        serde_json::from_value(payload.clone()).map_err(|_| PaymentError::ProviderError {
+            provider: self.provider_id.clone(),
+            http_status: None,
+            vendor_code: None,
+            message: format!("unexpected Moyasar {kind} response shape"),
+        })
+    }
+
+    fn parse_payment_result(
+        &self,
+        payload: &Value,
+        order_id: Option<&str>,
+    ) -> Result<PaymentResult, PaymentError> {
+        let raw: RawMoyasarPayment = self.decode_payload(payload, "payment")?;
+        let snapshot = raw.to_snapshot();
+        let outcome = map_moyasar_status(&snapshot).map_err(|err| self.map_local_error(err))?;
+        let mut ref_builder =
+            ProviderReference::builder(self.provider_id.clone()).payment_id(&raw.id);
+        if let Some(order) = order_id {
+            ref_builder = ref_builder.order_id(order);
+        }
+        Ok(PaymentResult {
+            reference: ref_builder.build()?,
+            status: map_status(outcome.status),
+            money: Money::new(raw.amount, &raw.currency)?,
+            captured_amount: raw.captured,
+            refunded_amount: raw.refunded,
+            next_action: outcome.next_action.map(map_next_action),
+            checkout_url: None,
+            livemode: self.livemode,
+        })
+    }
+
+    fn parse_invoice_result(
+        &self,
+        payload: &Value,
+        order_id: &str,
+    ) -> Result<PaymentResult, PaymentError> {
+        let raw: RawMoyasarInvoice = self.decode_payload(payload, "invoice")?;
+        let outcome = map_invoice_checkout(InvoiceCheckoutInput {
+            invoice_id: &raw.id,
+            invoice_url: raw.url.as_deref(),
+            amount: raw.amount,
+            currency: &raw.currency,
+        })
+        .map_err(|err| self.map_local_error(err))?;
+        let reference = ProviderReference::builder(self.provider_id.clone())
+            .checkout_session_id(&outcome.invoice_id)
+            .order_id(order_id)
+            .build()?;
+        Ok(PaymentResult {
+            reference,
+            status: PaymentStatus::RequiresAction,
+            money: Money::new(outcome.amount, &outcome.currency)?,
+            captured_amount: None,
+            refunded_amount: None,
+            next_action: Some(NextAction::Redirect {
+                url: outcome.checkout_url.clone(),
+            }),
+            checkout_url: Some(outcome.checkout_url),
+            livemode: self.livemode,
+        })
+    }
+
+    fn parse_refund_result(
+        &self,
+        payload: &Value,
+        req: &RefundRequest,
+    ) -> Result<RefundResult, PaymentError> {
+        let raw: RawMoyasarPayment = self.decode_payload(payload, "refund")?;
+        let status = if raw.status.eq_ignore_ascii_case("failed") {
+            RefundStatus::Failed
+        } else {
+            RefundStatus::Succeeded
+        };
+        let money = match req.amount.as_ref() {
+            Some(partial) => partial.clone(),
+            None => {
+                let amt = raw.refunded.filter(|&v| v > 0).unwrap_or(raw.amount);
+                Money::new(amt, &raw.currency)?
+            }
+        };
+        Ok(RefundResult {
+            refund_id: raw.id,
+            payment_reference: req.reference.clone(),
+            status,
+            money,
+            reason_detail: None,
+        })
+    }
+
+    fn extract_challenge_if_handshake(
+        &self,
+        event: Option<NormalizedMoyasarEvent>,
+        payload: &Value,
+    ) -> Result<Option<VerificationChallenge>, PaymentError> {
+        if event != Some(NormalizedMoyasarEvent::WebhookVerification) {
+            return Ok(None);
+        }
+        let challenge =
+            extract_verification_challenge(payload).map_err(|err| self.map_local_error(err))?;
+        Ok(Some(VerificationChallenge {
+            webhook_id: challenge.webhook_id,
+            verification_code: challenge.verification_code,
+        }))
+    }
+
+    fn extract_webhook_reference(&self, payload: &Value) -> Option<ProviderReference> {
+        let payment_id = payload.get("data")?.get("id").and_then(Value::as_str)?;
+        ProviderReference::builder(self.provider_id.clone())
+            .payment_id(payment_id)
+            .build()
+            .ok()
     }
 }
 
@@ -348,20 +628,15 @@ impl PaymentProvider for MoyasarProvider {
     ) -> Result<PaymentResult, PaymentError> {
         req.validate()?;
         let source_type = resolve_source_type(req);
-        validate_create_payment_guards(req, source_type, self.allow_raw_cards, &self.provider_id)?;
+        self.validate_create_guards(req, source_type)?;
         let given_id = req
             .idempotency_key
             .as_deref()
-            .map(|raw| validate_given_id(raw).map_err(|err| map_local_error(&self.provider_id, err)))
+            .map(|raw| validate_given_id(raw).map_err(|err| self.map_local_error(err)))
             .transpose()?;
         let body = build_create_payment_body(req, source_type, given_id);
         let payload = self.send_post("/payments", Some(&body)).await?;
-        parse_payment_result(
-            &self.provider_id,
-            &payload,
-            Some(&req.order_id),
-            self.livemode,
-        )
+        self.parse_payment_result(&payload, Some(&req.order_id))
     }
 
     async fn get_payment(
@@ -369,14 +644,9 @@ impl PaymentProvider for MoyasarProvider {
         reference: &ProviderReference,
     ) -> Result<PaymentResult, PaymentError> {
         self.require_secret(SecretOnlyOperation::RetrievePayment)?;
-        let payment_uuid = extract_payment_uuid(reference, &self.provider_id)?;
+        let payment_uuid = self.extract_payment_uuid(reference)?;
         let payload = self.send_get(&format!("/payments/{payment_uuid}")).await?;
-        parse_payment_result(
-            &self.provider_id,
-            &payload,
-            reference.order_id(),
-            self.livemode,
-        )
+        self.parse_payment_result(&payload, reference.order_id())
     }
 
     async fn create_checkout(
@@ -385,57 +655,46 @@ impl PaymentProvider for MoyasarProvider {
     ) -> Result<PaymentResult, PaymentError> {
         self.require_secret(SecretOnlyOperation::CreateInvoice)?;
         req.validate()?;
-        validate_metadata_limits(&req.metadata)
-            .map_err(|err| map_local_error(&self.provider_id, err))?;
+        validate_metadata_limits(&req.metadata).map_err(|err| self.map_local_error(err))?;
         let body = build_invoice_body(req);
         let payload = self.send_post("/invoices", Some(&body)).await?;
-        parse_invoice_result(&self.provider_id, &payload, &req.order_id, self.livemode)
+        self.parse_invoice_result(&payload, &req.order_id)
     }
 
     async fn capture(&self, req: &CaptureRequest) -> Result<PaymentResult, PaymentError> {
         self.require_secret(SecretOnlyOperation::Capture)?;
         req.validate()?;
-        let payment_uuid = extract_payment_uuid(&req.reference, &self.provider_id)?;
+        let payment_uuid = self.extract_payment_uuid(&req.reference)?;
         let partial = validate_partial_amount(req.amount.as_ref().map(Money::amount))
-            .map_err(|err| map_local_error(&self.provider_id, err))?;
+            .map_err(|err| self.map_local_error(err))?;
         let body = build_mutation_body(partial);
         let payload = self
             .send_post(&format!("/payments/{payment_uuid}/capture"), body.as_ref())
             .await?;
-        parse_payment_result(
-            &self.provider_id,
-            &payload,
-            req.reference.order_id(),
-            self.livemode,
-        )
+        self.parse_payment_result(&payload, req.reference.order_id())
     }
 
     async fn void_payment(&self, req: &VoidRequest) -> Result<PaymentResult, PaymentError> {
         self.require_secret(SecretOnlyOperation::Void)?;
         req.validate()?;
-        let payment_uuid = extract_payment_uuid(&req.reference, &self.provider_id)?;
+        let payment_uuid = self.extract_payment_uuid(&req.reference)?;
         let payload = self
             .send_post(&format!("/payments/{payment_uuid}/void"), None)
             .await?;
-        parse_payment_result(
-            &self.provider_id,
-            &payload,
-            req.reference.order_id(),
-            self.livemode,
-        )
+        self.parse_payment_result(&payload, req.reference.order_id())
     }
 
     async fn refund(&self, req: &RefundRequest) -> Result<RefundResult, PaymentError> {
         self.require_secret(SecretOnlyOperation::Refund)?;
         req.validate()?;
-        let payment_uuid = extract_payment_uuid(&req.reference, &self.provider_id)?;
+        let payment_uuid = self.extract_payment_uuid(&req.reference)?;
         let partial = validate_partial_amount(req.amount.as_ref().map(Money::amount))
-            .map_err(|err| map_local_error(&self.provider_id, err))?;
+            .map_err(|err| self.map_local_error(err))?;
         let body = build_mutation_body(partial);
         let payload = self
             .send_post(&format!("/payments/{payment_uuid}/refund"), body.as_ref())
             .await?;
-        parse_refund_result(&self.provider_id, &payload, req)
+        self.parse_refund_result(&payload, req)
     }
 
     async fn parse_and_verify_webhook(
@@ -447,12 +706,17 @@ impl PaymentProvider for MoyasarProvider {
             .as_ref()
             .ok_or_else(|| PaymentError::configuration("webhook_secret is not configured"))?;
         let verified = verify_and_scrub_moyasar_webhook(&raw.raw_body, secret.expose_secret())
-            .map_err(|err| map_local_error(&self.provider_id, err))?;
+            .map_err(|err| self.map_local_error(err))?;
         let normalized = normalize_moyasar_event(&verified.event_type);
-        let status = normalized.and_then(map_webhook_event_status);
+        let status = normalized.and_then(|evt| {
+            WEBHOOK_STATUS_TABLE
+                .iter()
+                .find(|(src, _)| *src == evt)
+                .map(|(_, st)| *st)
+        });
         let verification_challenge =
-            extract_challenge_if_handshake(normalized, &verified.raw_redacted, &self.provider_id)?;
-        let reference = extract_webhook_reference(&self.provider_id, &verified.raw_redacted);
+            self.extract_challenge_if_handshake(normalized, &verified.raw_redacted)?;
+        let reference = self.extract_webhook_reference(&verified.raw_redacted);
         let money = extract_webhook_money(&verified.raw_redacted);
         Ok(NormalizedWebhookEvent {
             provider_id: self.provider_id.clone(),
@@ -498,6 +762,24 @@ struct RawMoyasarPayment {
     source: Option<RawMoyasarSource>,
 }
 
+impl RawMoyasarPayment {
+    fn to_snapshot(&self) -> MoyasarPaymentSnapshot<'_> {
+        let source = self.source.as_ref();
+        let bill_reference = source.and_then(|s| {
+            s.bill_reference
+                .as_deref()
+                .or(s.bill_number.as_deref())
+                .or(s.reference_number.as_deref())
+        });
+        MoyasarPaymentSnapshot {
+            status: &self.status,
+            source_type: source.and_then(|s| s.source_type.as_deref()),
+            transaction_url: source.and_then(|s| s.transaction_url.as_deref()),
+            bill_reference,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct RawMoyasarInvoice {
     id: String,
@@ -517,33 +799,18 @@ fn resolve_source_type(req: &CreatePaymentRequest) -> Option<&str> {
     Some("token")
 }
 
-fn validate_create_payment_guards(
-    req: &CreatePaymentRequest,
-    source_type: Option<&str>,
-    allow_raw_cards: bool,
-    provider_id: &ProviderId,
-) -> Result<(), PaymentError> {
-    let policy = RawCardPolicy { allow_raw_cards };
-    if let Some(st) = source_type {
-        guard_raw_pan(st, policy).map_err(|err| map_local_error(provider_id, err))?;
+fn insert_common_fields(
+    map: &mut Map<String, Value>,
+    money: &Money,
+    description: &str,
+    metadata: &BTreeMap<String, String>,
+) {
+    map.insert("amount".to_owned(), json!(money.amount()));
+    map.insert("currency".to_owned(), json!(money.currency().as_str()));
+    map.insert("description".to_owned(), json!(description));
+    if !metadata.is_empty() {
+        map.insert("metadata".to_owned(), json!(metadata));
     }
-    let splits: Vec<SplitCheckItem> = req
-        .splits
-        .iter()
-        .map(|item| SplitCheckItem {
-            recipient_id: item.recipient_id.clone(),
-            amount: item.amount,
-        })
-        .collect();
-    let preflight = MoyasarPreflightInput {
-        payment_id: None,
-        amount: req.money.amount(),
-        manual_capture: matches!(req.capture_mode, CaptureMode::Manual),
-        source_type,
-        metadata: &req.metadata,
-        splits: &splits,
-    };
-    validate_moyasar_preflight(&preflight).map_err(|err| map_local_error(provider_id, err))
 }
 
 fn build_create_payment_body(
@@ -552,22 +819,28 @@ fn build_create_payment_body(
     given_id: Option<uuid::Uuid>,
 ) -> Value {
     let mut map = Map::new();
-    map.insert("amount".to_owned(), json!(req.money.amount()));
-    map.insert("currency".to_owned(), json!(req.money.currency().as_str()));
     let desc = req.description.as_deref().unwrap_or(&req.order_id);
-    map.insert("description".to_owned(), json!(desc));
+    insert_common_fields(&mut map, &req.money, desc, &req.metadata);
     if let Some(url) = req.callback_url.as_deref() {
         map.insert("callback_url".to_owned(), json!(url));
     }
     if let Some(id) = given_id {
         map.insert("given_id".to_owned(), json!(id.to_string()));
     }
-    if !req.metadata.is_empty() {
-        map.insert("metadata".to_owned(), json!(&req.metadata));
-    }
     map.insert("source".to_owned(), build_payment_source(req, source_type));
     if !req.splits.is_empty() {
-        map.insert("splits".to_owned(), build_splits_json(req));
+        let splits: Vec<Value> = req
+            .splits
+            .iter()
+            .map(|s| {
+                json!({
+                    "recipient_id": s.recipient_id,
+                    "amount": s.amount,
+                    "fee_source": s.fee_source,
+                })
+            })
+            .collect();
+        map.insert("splits".to_owned(), Value::Array(splits));
     }
     Value::Object(map)
 }
@@ -587,293 +860,15 @@ fn build_payment_source(req: &CreatePaymentRequest, source_type: Option<&str>) -
     Value::Object(source)
 }
 
-fn build_splits_json(req: &CreatePaymentRequest) -> Value {
-    let items: Vec<Value> = req
-        .splits
-        .iter()
-        .map(|s| {
-            json!({
-                "recipient_id": s.recipient_id,
-                "amount": s.amount,
-                "fee_source": s.fee_source,
-            })
-        })
-        .collect();
-    Value::Array(items)
-}
-
 fn build_invoice_body(req: &CheckoutSessionRequest) -> Value {
     let mut map = Map::new();
-    map.insert("amount".to_owned(), json!(req.money.amount()));
-    map.insert("currency".to_owned(), json!(req.money.currency().as_str()));
     let desc = req.description.as_deref().unwrap_or(&req.order_id);
-    map.insert("description".to_owned(), json!(desc));
+    insert_common_fields(&mut map, &req.money, desc, &req.metadata);
     map.insert("success_url".to_owned(), json!(&req.success_url));
     if let Some(cancel) = req.cancel_url.as_deref() {
         map.insert("back_url".to_owned(), json!(cancel));
     }
-    if !req.metadata.is_empty() {
-        map.insert("metadata".to_owned(), json!(&req.metadata));
-    }
     Value::Object(map)
-}
-
-fn extract_payment_uuid(
-    reference: &ProviderReference,
-    provider_id: &ProviderId,
-) -> Result<uuid::Uuid, PaymentError> {
-    let raw_id = reference
-        .payment_id()
-        .ok_or_else(|| PaymentError::validation("ProviderReference requires payment_id"))?;
-    validate_uuid_id(raw_id, "payment_id").map_err(|err| map_local_error(provider_id, err))
-}
-
-async fn parse_json_response(
-    provider_id: &ProviderId,
-    resp: reqwest::Response,
-) -> Result<Value, PaymentError> {
-    let status = resp.status();
-    let retry_after = parse_retry_after(&resp);
-    let body = resp.text().await.unwrap_or_default();
-    if !status.is_success() {
-        return Err(classify_http_error(
-            provider_id,
-            status.as_u16(),
-            &body,
-            retry_after,
-        ));
-    }
-    serde_json::from_str(&body).map_err(|_| PaymentError::ProviderError {
-        provider: provider_id.clone(),
-        http_status: Some(status.as_u16()),
-        vendor_code: None,
-        message: "invalid JSON response from Moyasar".to_owned(),
-    })
-}
-
-fn parse_retry_after(resp: &reqwest::Response) -> Option<u64> {
-    resp.headers()
-        .get("retry-after")
-        .and_then(|val| val.to_str().ok())
-        .and_then(|s| s.trim().parse::<u64>().ok())
-}
-
-fn classify_http_error(
-    provider_id: &ProviderId,
-    status: u16,
-    body: &str,
-    retry_after: Option<u64>,
-) -> PaymentError {
-    let parsed = serde_json::from_str::<RawMoyasarError>(body).ok();
-    let err_type = parsed.as_ref().and_then(|p| p.error_type.as_deref());
-    let err_code = parsed.as_ref().and_then(|p| p.code.as_deref());
-    let message = parsed
-        .as_ref()
-        .and_then(|p| p.message.clone())
-        .unwrap_or_else(|| format!("Moyasar HTTP {status}"));
-    let classified = map_moyasar_error(Some(status), err_type, err_code);
-    map_classified_error(provider_id, classified, message, retry_after)
-}
-
-fn map_classified_error(
-    provider_id: &ProviderId,
-    classified: ClassifiedMoyasarError,
-    message: String,
-    retry_after: Option<u64>,
-) -> PaymentError {
-    let provider = provider_id.clone();
-    match classified.class {
-        MoyasarErrorClass::ThreeDsFailed => PaymentError::ThreeDsFailed {
-            provider,
-            code: classified.vendor_code,
-            message,
-        },
-        MoyasarErrorClass::AuthenticationError => {
-            PaymentError::AuthenticationError { provider, message }
-        }
-        MoyasarErrorClass::ValidationError => PaymentError::ValidationError { message },
-        MoyasarErrorClass::CardDeclined => PaymentError::CardDeclined {
-            provider,
-            decline_code: classified.vendor_code,
-            advice_code: None,
-            message,
-        },
-        MoyasarErrorClass::RateLimited => PaymentError::RateLimited {
-            provider,
-            retry_after_secs: retry_after,
-        },
-        MoyasarErrorClass::ProviderUnavailable => PaymentError::ProviderUnavailable {
-            provider,
-            http_status: classified.http_status,
-            indeterminate: classified.indeterminate,
-            message,
-        },
-        MoyasarErrorClass::ProviderError => PaymentError::ProviderError {
-            provider,
-            http_status: classified.http_status,
-            vendor_code: classified.vendor_code,
-            message,
-        },
-    }
-}
-
-fn map_transport_error(provider_id: &ProviderId, err: &reqwest::Error) -> PaymentError {
-    PaymentError::ProviderUnavailable {
-        provider: provider_id.clone(),
-        http_status: None,
-        indeterminate: true,
-        message: if err.is_timeout() {
-            "Moyasar request timed out".to_owned()
-        } else {
-            "Moyasar transport failure".to_owned()
-        },
-    }
-}
-
-fn map_local_error(provider_id: &ProviderId, err: MoyasarError) -> PaymentError {
-    match err {
-        MoyasarError::InvalidKey | MoyasarError::KeyTypeMismatch => {
-            PaymentError::AuthenticationError {
-                provider: provider_id.clone(),
-                message: err.to_string(),
-            }
-        }
-        MoyasarError::InvalidWebhookSecret => PaymentError::WebhookVerificationFailed {
-            provider: provider_id.clone(),
-            reason: err.to_string(),
-        },
-        other => PaymentError::validation(other.to_string()),
-    }
-}
-
-fn parse_payment_result(
-    provider_id: &ProviderId,
-    payload: &Value,
-    order_id: Option<&str>,
-    livemode: bool,
-) -> Result<PaymentResult, PaymentError> {
-    let raw: RawMoyasarPayment =
-        serde_json::from_value(payload.clone()).map_err(|_| PaymentError::ProviderError {
-            provider: provider_id.clone(),
-            http_status: None,
-            vendor_code: None,
-            message: "unexpected Moyasar payment response shape".to_owned(),
-        })?;
-    let snapshot = build_payment_snapshot(&raw);
-    let outcome =
-        map_moyasar_status(&snapshot).map_err(|err| map_local_error(provider_id, err))?;
-    let reference = build_payment_reference(provider_id, &raw.id, order_id)?;
-    let money = Money::new(raw.amount, &raw.currency)?;
-    Ok(PaymentResult {
-        reference,
-        status: map_status(outcome.status),
-        money,
-        captured_amount: raw.captured,
-        refunded_amount: raw.refunded,
-        next_action: outcome.next_action.map(map_next_action),
-        checkout_url: None,
-        livemode,
-    })
-}
-
-fn build_payment_snapshot(raw: &RawMoyasarPayment) -> MoyasarPaymentSnapshot<'_> {
-    let source = raw.source.as_ref();
-    let bill_reference = source.and_then(|s| {
-        s.bill_reference
-            .as_deref()
-            .or(s.bill_number.as_deref())
-            .or(s.reference_number.as_deref())
-    });
-    MoyasarPaymentSnapshot {
-        status: &raw.status,
-        source_type: source.and_then(|s| s.source_type.as_deref()),
-        transaction_url: source.and_then(|s| s.transaction_url.as_deref()),
-        bill_reference,
-    }
-}
-
-fn build_payment_reference(
-    provider_id: &ProviderId,
-    payment_id: &str,
-    order_id: Option<&str>,
-) -> Result<ProviderReference, PaymentError> {
-    let mut builder = ProviderReference::builder(provider_id.clone()).payment_id(payment_id);
-    if let Some(order) = order_id {
-        builder = builder.order_id(order);
-    }
-    builder.build()
-}
-
-fn parse_invoice_result(
-    provider_id: &ProviderId,
-    payload: &Value,
-    order_id: &str,
-    livemode: bool,
-) -> Result<PaymentResult, PaymentError> {
-    let raw: RawMoyasarInvoice =
-        serde_json::from_value(payload.clone()).map_err(|_| PaymentError::ProviderError {
-            provider: provider_id.clone(),
-            http_status: None,
-            vendor_code: None,
-            message: "unexpected Moyasar invoice response shape".to_owned(),
-        })?;
-    let outcome = map_invoice_checkout(InvoiceCheckoutInput {
-        invoice_id: &raw.id,
-        invoice_url: raw.url.as_deref(),
-        amount: raw.amount,
-        currency: &raw.currency,
-    })
-    .map_err(|err| map_local_error(provider_id, err))?;
-    let reference = ProviderReference::builder(provider_id.clone())
-        .checkout_session_id(&outcome.invoice_id)
-        .order_id(order_id)
-        .build()?;
-    let money = Money::new(outcome.amount, &outcome.currency)?;
-    Ok(PaymentResult {
-        reference,
-        status: PaymentStatus::RequiresAction,
-        money,
-        captured_amount: None,
-        refunded_amount: None,
-        next_action: Some(NextAction::Redirect {
-            url: outcome.checkout_url.clone(),
-        }),
-        checkout_url: Some(outcome.checkout_url),
-        livemode,
-    })
-}
-
-fn parse_refund_result(
-    provider_id: &ProviderId,
-    payload: &Value,
-    req: &RefundRequest,
-) -> Result<RefundResult, PaymentError> {
-    let raw: RawMoyasarPayment =
-        serde_json::from_value(payload.clone()).map_err(|_| PaymentError::ProviderError {
-            provider: provider_id.clone(),
-            http_status: None,
-            vendor_code: None,
-            message: "unexpected Moyasar refund response shape".to_owned(),
-        })?;
-    let status = if raw.status.eq_ignore_ascii_case("failed") {
-        RefundStatus::Failed
-    } else {
-        RefundStatus::Succeeded
-    };
-    let money = match req.amount.as_ref() {
-        Some(partial) => partial.clone(),
-        None => {
-            let amt = raw.refunded.filter(|&v| v > 0).unwrap_or(raw.amount);
-            Money::new(amt, &raw.currency)?
-        }
-    };
-    Ok(RefundResult {
-        refund_id: raw.id,
-        payment_reference: req.reference.clone(),
-        status,
-        money,
-        reason_detail: None,
-    })
 }
 
 fn map_status(mapped: MappedPaymentStatus) -> PaymentStatus {
@@ -897,38 +892,6 @@ fn map_next_action(action: MappedNextAction) -> NextAction {
             instructions_url,
         },
     }
-}
-
-fn map_webhook_event_status(event: NormalizedMoyasarEvent) -> Option<PaymentStatus> {
-    WEBHOOK_STATUS_TABLE
-        .iter()
-        .find(|(src, _)| *src == event)
-        .map(|(_, status)| *status)
-}
-
-fn extract_challenge_if_handshake(
-    event: Option<NormalizedMoyasarEvent>,
-    payload: &Value,
-    provider_id: &ProviderId,
-) -> Result<Option<VerificationChallenge>, PaymentError> {
-    if event != Some(NormalizedMoyasarEvent::WebhookVerification) {
-        return Ok(None);
-    }
-    let challenge = extract_verification_challenge(payload)
-        .map_err(|err| map_local_error(provider_id, err))?;
-    Ok(Some(VerificationChallenge {
-        webhook_id: challenge.webhook_id,
-        verification_code: challenge.verification_code,
-    }))
-}
-
-fn extract_webhook_reference(provider_id: &ProviderId, payload: &Value) -> Option<ProviderReference> {
-    let data = payload.get("data")?;
-    let payment_id = data.get("id").and_then(Value::as_str)?;
-    ProviderReference::builder(provider_id.clone())
-        .payment_id(payment_id)
-        .build()
-        .ok()
 }
 
 fn extract_webhook_money(payload: &Value) -> Option<Money> {
