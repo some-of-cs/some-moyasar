@@ -942,6 +942,7 @@ fn extract_webhook_money(payload: &Value) -> Option<Money> {
 mod tests {
     use std::collections::BTreeMap;
 
+    use serde_json::json;
     use some_payment_core::{
         CaptureMode, CaptureRequest, CheckoutSessionRequest, CreatePaymentRequest, HttpMethod,
         Money, PaymentCapabilities, PaymentError, PaymentProvider, PaymentStatus, ProviderId,
@@ -1091,15 +1092,17 @@ mod tests {
             .with_webhook_secret("wh_secret_canary_777");
         let provider = MoyasarProvider::new(cfg).expect("valid");
 
-        let faild_body = br#"{
+        let faild_body = json!({
             "id": "evt_typo_1",
             "type": "payment_faild",
             "live": false,
             "secret_token": "wh_secret_canary_777",
-            "data": { "id": "550e8400-e29b-41d4-a716-446655440000", "amount": 2500, "currency": "SAR" }
-        }"#;
+            "data": { "id": VALID_UUID, "amount": 2500, "currency": "SAR" }
+        })
+        .to_string()
+        .into_bytes();
         let raw_faild = RawWebhookRequest {
-            raw_body: faild_body.to_vec(),
+            raw_body: faild_body,
             headers: BTreeMap::new(),
             query_params: BTreeMap::new(),
             method: HttpMethod::Post,
@@ -1117,15 +1120,17 @@ mod tests {
                 .contains("wh_secret_canary_777")
         );
 
-        let handshake_body = br#"{
+        let handshake_body = json!({
             "id": "evt_hs_1",
             "type": "webhook_verification",
             "live": true,
             "secret_token": "wh_secret_canary_777",
             "data": { "webhook_id": "wh_live_42", "verification_code": "123456" }
-        }"#;
+        })
+        .to_string()
+        .into_bytes();
         let raw_hs = RawWebhookRequest {
-            raw_body: handshake_body.to_vec(),
+            raw_body: handshake_body,
             headers: BTreeMap::new(),
             query_params: BTreeMap::new(),
             method: HttpMethod::Post,
