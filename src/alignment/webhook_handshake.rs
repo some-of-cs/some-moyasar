@@ -250,6 +250,7 @@ fn first_non_empty_trimmed_str<'a>(
 fn first_str<'a>(candidates: &[Option<&'a serde_json::Value>]) -> Option<&'a str> {
     candidates
         .iter()
+        .copied()
         .flatten()
         .find_map(serde_json::Value::as_str)
 }
