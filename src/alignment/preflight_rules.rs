@@ -451,10 +451,16 @@ mod tests {
     fn tc_9_1_3_empty_body_for_full_ops_and_partial_amount_validation() {
         assert_eq!(build_mutation_body(None), None);
         assert_eq!(build_mutation_body(Some(0)), None);
-        assert_eq!(build_mutation_body(Some(1_250)), Some(json!({ "amount": 1_250 })));
+        assert_eq!(
+            build_mutation_body(Some(1_250)),
+            Some(json!({ "amount": 1_250 }))
+        );
 
         assert_eq!(validate_partial_amount(None).expect("None is valid"), None);
-        assert_eq!(validate_partial_amount(Some(1)).expect("Some(1) is valid"), Some(1));
+        assert_eq!(
+            validate_partial_amount(Some(1)).expect("Some(1) is valid"),
+            Some(1)
+        );
         assert!(validate_partial_amount(Some(0)).is_err());
     }
 
