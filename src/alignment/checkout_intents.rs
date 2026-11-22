@@ -17,19 +17,50 @@ pub const PAYMENT_INTENT_SECRET_PREFIX: &str = "pi_secret_";
 
 const INTENT_NOT_FULFILLABLE_CODE: &str = "intent_not_fulfillable";
 
+/// Borrowed input payload for validating and mapping a Moyasar Invoice checkout response.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::alignment::checkout_intents::{InvoiceCheckoutInput, map_invoice_checkout};
+///
+/// let input = InvoiceCheckoutInput {
+///     invoice_id: "inv_0123456789",
+///     invoice_url: Some("https://invoice.moyasar.com/inv_0123456789"),
+///     amount: 15_000,
+///     currency: "SAR",
+/// };
+/// let outcome = map_invoice_checkout(input)?;
+/// assert_eq!(outcome.invoice_id, "inv_0123456789");
+/// # Ok::<(), some_moyasar::MoyasarError>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvoiceCheckoutInput<'a> {
+    /// Unique Moyasar invoice identifier.
+    pub invoice_id: &'a str,
+    /// Optional hosted checkout URL (`invoice.url`) returned by Moyasar.
+    pub invoice_url: Option<&'a str>,
+    /// Positive invoice amount in minor currency units (e.g., halalas).
+    pub amount: u64,
+    /// 3-letter ASCII ISO 4217 currency code.
+    pub currency: &'a str,
+}
+
 /// Validated hosted checkout outcome mapped from a Moyasar Invoice response.
 ///
 /// # Examples
 ///
 /// ```
-/// use some_moyasar::alignment::checkout_intents::{InvoiceCheckoutOutcome, map_invoice_checkout};
+/// use some_moyasar::alignment::checkout_intents::{
+///     InvoiceCheckoutInput, InvoiceCheckoutOutcome, map_invoice_checkout,
+/// };
 ///
-/// let outcome: InvoiceCheckoutOutcome = map_invoice_checkout(
-///     "inv_0123456789",
-///     Some("https://invoice.moyasar.com/inv_0123456789"),
-///     15_000,
-///     "SAR",
-/// )?;
+/// let outcome: InvoiceCheckoutOutcome = map_invoice_checkout(InvoiceCheckoutInput {
+///     invoice_id: "inv_0123456789",
+///     invoice_url: Some("https://invoice.moyasar.com/inv_0123456789"),
+///     amount: 15_000,
+///     currency: "SAR",
+/// })?;
 /// assert_eq!(outcome.invoice_id, "inv_0123456789");
 /// assert_eq!(outcome.checkout_url, "https://invoice.moyasar.com/inv_0123456789");
 /// assert_eq!(outcome.amount, 15_000);
@@ -48,6 +79,49 @@ pub struct InvoiceCheckoutOutcome {
     pub currency: String,
 }
 
+/// Borrowed input payload for validating and mapping a Moyasar Payment Intent checkout response.
+///
+/// `client_secret` is always rendered as `"[REDACTED]"` in [`fmt::Debug`] output.
+///
+/// # Examples
+///
+/// ```
+/// use some_moyasar::alignment::checkout_intents::{IntentCheckoutInput, map_intent_result};
+///
+/// let input = IntentCheckoutInput {
+///     intent_id: "pi_0123456789",
+///     client_secret: "pi_secret_abc123",
+///     amount: 25_000,
+///     currency: "SAR",
+/// };
+/// assert!(format!("{input:?}").contains("[REDACTED]"));
+/// let outcome = map_intent_result(input)?;
+/// assert_eq!(outcome.intent_id, "pi_0123456789");
+/// # Ok::<(), some_moyasar::MoyasarError>(())
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct IntentCheckoutInput<'a> {
+    /// Unique Moyasar payment intent identifier.
+    pub intent_id: &'a str,
+    /// Sensitive `pi_secret_`-prefixed client secret (redacted in `Debug`).
+    pub client_secret: &'a str,
+    /// Positive payment intent amount in minor currency units (e.g., halalas).
+    pub amount: u64,
+    /// 3-letter ASCII ISO 4217 currency code.
+    pub currency: &'a str,
+}
+
+impl fmt::Debug for IntentCheckoutInput<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IntentCheckoutInput")
+            .field("intent_id", &self.intent_id)
+            .field("client_secret", &"[REDACTED]")
+            .field("amount", &self.amount)
+            .field("currency", &self.currency)
+            .finish()
+    }
+}
+
 /// Validated Payment Intent checkout outcome containing a redacted, zeroized `client_secret`.
 ///
 /// `client_secret` is automatically wiped from memory on drop via [`zeroize::ZeroizeOnDrop`]
@@ -56,14 +130,16 @@ pub struct InvoiceCheckoutOutcome {
 /// # Examples
 ///
 /// ```
-/// use some_moyasar::alignment::checkout_intents::{IntentCheckoutOutcome, map_intent_result};
+/// use some_moyasar::alignment::checkout_intents::{
+///     IntentCheckoutInput, IntentCheckoutOutcome, map_intent_result,
+/// };
 ///
-/// let outcome: IntentCheckoutOutcome = map_intent_result(
-///     "pi_0123456789",
-///     "pi_secret_abc123",
-///     25_000,
-///     "SAR",
-/// )?;
+/// let outcome: IntentCheckoutOutcome = map_intent_result(IntentCheckoutInput {
+///     intent_id: "pi_0123456789",
+///     client_secret: "pi_secret_abc123",
+///     amount: 25_000,
+///     currency: "SAR",
+/// })?;
 /// let debug_output = format!("{outcome:?}");
 /// assert!(debug_output.contains("[REDACTED]"));
 /// assert!(!debug_output.contains("pi_secret_abc123"));
@@ -156,27 +232,24 @@ pub fn is_intent_not_fulfillable(error_type: Option<&str>, error_code: Option<&s
 /// # Examples
 ///
 /// ```
-/// use some_moyasar::alignment::checkout_intents::map_invoice_checkout;
+/// use some_moyasar::alignment::checkout_intents::{InvoiceCheckoutInput, map_invoice_checkout};
 ///
-/// let outcome = map_invoice_checkout(
-///     "inv_123",
-///     Some("https://invoice.moyasar.com/inv_123"),
-///     10_000,
-///     "SAR",
-/// )?;
+/// let outcome = map_invoice_checkout(InvoiceCheckoutInput {
+///     invoice_id: "inv_123",
+///     invoice_url: Some("https://invoice.moyasar.com/inv_123"),
+///     amount: 10_000,
+///     currency: "SAR",
+/// })?;
 /// assert_eq!(outcome.checkout_url, "https://invoice.moyasar.com/inv_123");
 /// # Ok::<(), some_moyasar::MoyasarError>(())
 /// ```
 pub fn map_invoice_checkout(
-    invoice_id: &str,
-    invoice_url: Option<&str>,
-    amount: u64,
-    currency: &str,
+    input: InvoiceCheckoutInput<'_>,
 ) -> Result<InvoiceCheckoutOutcome, MoyasarError> {
-    let invoice_id = validate_non_empty_id(invoice_id, IdField::Invoice)?;
-    let checkout_url = validate_checkout_url(invoice_url)?;
-    let amount = validate_positive_amount(amount)?;
-    let currency = validate_currency(currency)?;
+    let invoice_id = validate_non_empty_id(input.invoice_id, IdField::Invoice)?;
+    let checkout_url = validate_checkout_url(input.invoice_url)?;
+    let amount = validate_positive_amount(input.amount)?;
+    let currency = validate_currency(input.currency)?;
 
     Ok(InvoiceCheckoutOutcome {
         invoice_id,
@@ -198,27 +271,29 @@ pub fn map_invoice_checkout(
 /// # Examples
 ///
 /// ```
-/// use some_moyasar::alignment::checkout_intents::map_intent_result;
+/// use some_moyasar::alignment::checkout_intents::{IntentCheckoutInput, map_intent_result};
 ///
-/// let outcome = map_intent_result("pi_123", "pi_secret_xyz789", 5_000, "SAR")?;
+/// let outcome = map_intent_result(IntentCheckoutInput {
+///     intent_id: "pi_123",
+///     client_secret: "pi_secret_xyz789",
+///     amount: 5_000,
+///     currency: "SAR",
+/// })?;
 /// assert_eq!(outcome.intent_id, "pi_123");
 /// assert_eq!(outcome.amount, 5_000);
 /// # Ok::<(), some_moyasar::MoyasarError>(())
 /// ```
 pub fn map_intent_result(
-    intent_id: &str,
-    client_secret: &str,
-    amount: u64,
-    currency: &str,
+    input: IntentCheckoutInput<'_>,
 ) -> Result<IntentCheckoutOutcome, MoyasarError> {
-    let intent_id = validate_non_empty_id(intent_id, IdField::Intent)?;
-    validate_intent_secret(client_secret)?;
-    let amount = validate_positive_amount(amount)?;
-    let currency = validate_currency(currency)?;
+    let intent_id = validate_non_empty_id(input.intent_id, IdField::Intent)?;
+    validate_intent_secret(input.client_secret)?;
+    let amount = validate_positive_amount(input.amount)?;
+    let currency = validate_currency(input.currency)?;
 
     Ok(IntentCheckoutOutcome {
         intent_id,
-        client_secret: client_secret.to_owned(),
+        client_secret: input.client_secret.to_owned(),
         amount,
         currency,
     })
@@ -358,8 +433,17 @@ mod tests {
     #[test]
     fn tc_9_1_5_redacts_intent_client_secret_in_debug_output() {
         let canary = "pi_secret_canary_do_not_leak_991";
-        let outcome = map_intent_result("pi_1001", canary, 12_500, "sar")
-            .expect("valid intent checkout must succeed");
+        let input = IntentCheckoutInput {
+            intent_id: "pi_1001",
+            client_secret: canary,
+            amount: 12_500,
+            currency: "sar",
+        };
+        let input_debug = format!("{input:?}");
+        assert!(input_debug.contains("[REDACTED]"));
+        assert!(!input_debug.contains(canary));
+
+        let outcome = map_intent_result(input).expect("valid intent checkout must succeed");
         assert_eq!(outcome.intent_id, "pi_1001");
         assert_eq!(outcome.client_secret, canary);
         assert_eq!(outcome.amount, 12_500);
@@ -372,12 +456,12 @@ mod tests {
 
     #[test]
     fn tc_9_1_5_maps_valid_invoice_url_and_rejects_missing_or_invalid_urls() {
-        let https_outcome = map_invoice_checkout(
-            "inv_9001",
-            Some("https://invoice.moyasar.com/inv_9001"),
-            45_000,
-            "SAR",
-        )
+        let https_outcome = map_invoice_checkout(InvoiceCheckoutInput {
+            invoice_id: "inv_9001",
+            invoice_url: Some("https://invoice.moyasar.com/inv_9001"),
+            amount: 45_000,
+            currency: "SAR",
+        })
         .expect("valid https invoice URL must succeed");
         assert_eq!(
             https_outcome,
@@ -389,12 +473,12 @@ mod tests {
             }
         );
 
-        let http_outcome = map_invoice_checkout(
-            "inv_9002",
-            Some("http://localhost:8080/invoices/inv_9002"),
-            100,
-            "usd",
-        )
+        let http_outcome = map_invoice_checkout(InvoiceCheckoutInput {
+            invoice_id: "inv_9002",
+            invoice_url: Some("http://localhost:8080/invoices/inv_9002"),
+            amount: 100,
+            currency: "usd",
+        })
         .expect("valid http invoice URL must succeed");
         assert_eq!(http_outcome.currency, "USD");
 
@@ -409,21 +493,77 @@ mod tests {
             Some("https://example.com/a b"),
         ];
         for bad_url in invalid_urls {
-            assert!(map_invoice_checkout("inv_1", bad_url, 100, "SAR").is_err());
+            let input = InvoiceCheckoutInput {
+                invoice_id: "inv_1",
+                invoice_url: bad_url,
+                amount: 100,
+                currency: "SAR",
+            };
+            assert!(map_invoice_checkout(input).is_err());
         }
     }
 
     #[test]
     fn tc_9_1_5_validates_id_amount_and_currency_for_both_mappers() {
         let valid_url = Some("https://invoice.moyasar.com/inv_1");
-        assert!(map_invoice_checkout("", valid_url, 100, "SAR").is_err());
-        assert!(map_invoice_checkout("inv_1", valid_url, 0, "SAR").is_err());
-        assert!(map_invoice_checkout("inv_1", valid_url, 100, "SA").is_err());
-        assert!(map_invoice_checkout("inv_1", valid_url, 100, "123").is_err());
+        let bad_invoices = [
+            InvoiceCheckoutInput {
+                invoice_id: "",
+                invoice_url: valid_url,
+                amount: 100,
+                currency: "SAR",
+            },
+            InvoiceCheckoutInput {
+                invoice_id: "inv_1",
+                invoice_url: valid_url,
+                amount: 0,
+                currency: "SAR",
+            },
+            InvoiceCheckoutInput {
+                invoice_id: "inv_1",
+                invoice_url: valid_url,
+                amount: 100,
+                currency: "SA",
+            },
+            InvoiceCheckoutInput {
+                invoice_id: "inv_1",
+                invoice_url: valid_url,
+                amount: 100,
+                currency: "123",
+            },
+        ];
+        for input in bad_invoices {
+            assert!(map_invoice_checkout(input).is_err());
+        }
 
-        assert!(map_intent_result("", "pi_secret_abc", 100, "SAR").is_err());
-        assert!(map_intent_result("pi_1", "pi_secret_", 100, "SAR").is_err());
-        assert!(map_intent_result("pi_1", "pi_secret_abc", 0, "SAR").is_err());
-        assert!(map_intent_result("pi_1", "pi_secret_abc", 100, "EURO").is_err());
+        let bad_intents = [
+            IntentCheckoutInput {
+                intent_id: "",
+                client_secret: "pi_secret_abc",
+                amount: 100,
+                currency: "SAR",
+            },
+            IntentCheckoutInput {
+                intent_id: "pi_1",
+                client_secret: "pi_secret_",
+                amount: 100,
+                currency: "SAR",
+            },
+            IntentCheckoutInput {
+                intent_id: "pi_1",
+                client_secret: "pi_secret_abc",
+                amount: 0,
+                currency: "SAR",
+            },
+            IntentCheckoutInput {
+                intent_id: "pi_1",
+                client_secret: "pi_secret_abc",
+                amount: 100,
+                currency: "EURO",
+            },
+        ];
+        for input in bad_intents {
+            assert!(map_intent_result(input).is_err());
+        }
     }
 }
