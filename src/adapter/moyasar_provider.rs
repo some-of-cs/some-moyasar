@@ -301,7 +301,8 @@ impl PaymentProvider for MoyasarProvider {
 
     async fn void_payment(&self, req: &VoidRequest) -> Result<PaymentResult, PaymentError> {
         req.validate()?;
-        self.mutate_payment(SecretOnlyOperation::Void, &req.reference, None).await
+        self.mutate_payment(SecretOnlyOperation::Void, &req.reference, None)
+            .await
     }
 
     async fn refund(&self, req: &RefundRequest) -> Result<RefundResult, PaymentError> {
