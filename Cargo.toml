@@ -1,6 +1,6 @@
 [package]
 name = "some-moyasar"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -48,6 +48,7 @@ stripe-compat = ["core", "payments", "tokens", "invoices"]
 unified-gateway = ["core", "payments", "payment-intents", "tokens", "payouts", "webhook-engine"]
 some-payments-trait = ["unified-gateway"]
 some-payment-trait = ["some-payments-trait"]
+some-payment-adapter = ["dep:some-payment-core", "dep:async-trait", "unified-gateway", "invoices"]
 async-stream = ["core"]
 test-utils = ["core", "dep:wiremock"]
 full = [
@@ -71,6 +72,7 @@ full = [
 ]
 
 [dependencies]
+async-trait = { version = "0.1", optional = true }
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
@@ -81,6 +83,7 @@ secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = { version = "0.10", optional = true }
+some-payment-core = { git = "https://github.com/some-of-cs/some-payment", package = "some-payment-core", optional = true }
 subtle = { version = "2.6", optional = true }
 thiserror = "2.0"
 uuid = { version = "1.11", features = ["v4", "v5", "serde"] }
