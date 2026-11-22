@@ -111,18 +111,6 @@ pub struct IntentCheckoutInput<'a> {
     pub currency: &'a str,
 }
 
-impl fmt::Debug for IntentCheckoutInput<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        RedactedIntentDebug {
-            name: "IntentCheckoutInput",
-            intent_id: self.intent_id,
-            amount: self.amount,
-            currency: self.currency,
-        }
-        .write(f)
-    }
-}
-
 /// Validated Payment Intent checkout outcome containing a redacted, zeroized `client_secret`.
 ///
 /// `client_secret` is automatically wiped from memory on drop via [`zeroize::ZeroizeOnDrop`]
@@ -158,35 +146,23 @@ pub struct IntentCheckoutOutcome {
     pub currency: String,
 }
 
-impl fmt::Debug for IntentCheckoutOutcome {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        RedactedIntentDebug {
-            name: "IntentCheckoutOutcome",
-            intent_id: &self.intent_id,
-            amount: self.amount,
-            currency: &self.currency,
+macro_rules! impl_redacted_intent_debug {
+    ($ty:ty, $name:literal) => {
+        impl fmt::Debug for $ty {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.debug_struct($name)
+                    .field("intent_id", &self.intent_id)
+                    .field("client_secret", &"[REDACTED]")
+                    .field("amount", &self.amount)
+                    .field("currency", &self.currency)
+                    .finish()
+            }
         }
-        .write(f)
-    }
+    };
 }
 
-struct RedactedIntentDebug<'a> {
-    name: &'static str,
-    intent_id: &'a str,
-    amount: u64,
-    currency: &'a str,
-}
-
-impl RedactedIntentDebug<'_> {
-    fn write(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct(self.name)
-            .field("intent_id", &self.intent_id)
-            .field("client_secret", &"[REDACTED]")
-            .field("amount", &self.amount)
-            .field("currency", &self.currency)
-            .finish()
-    }
-}
+impl_redacted_intent_debug!(IntentCheckoutInput<'_>, "IntentCheckoutInput");
+impl_redacted_intent_debug!(IntentCheckoutOutcome, "IntentCheckoutOutcome");
 
 /// Validates that a Moyasar Payment Intent `client_secret` starts with
 /// [`PAYMENT_INTENT_SECRET_PREFIX`] (`"pi_secret_"`) and has a non-empty, whitespace-free suffix.
@@ -266,10 +242,9 @@ pub fn is_intent_not_fulfillable(error_type: Option<&str>, error_code: Option<&s
 pub fn map_invoice_checkout(
     input: InvoiceCheckoutInput<'_>,
 ) -> Result<InvoiceCheckoutOutcome, MoyasarError> {
-    let invoice_id = validate_non_empty_id(input.invoice_id, IdField::Invoice)?;
     let checkout_url = validate_checkout_url(input.invoice_url)?;
-    let amount = validate_positive_amount(input.amount)?;
-    let currency = validate_currency(input.currency)?;
+    let (invoice_id, amount, currency) =
+        validate_common_fields(IdField::Invoice, input.invoice_id, input.amount, input.currency)?;
 
     Ok(InvoiceCheckoutOutcome {
         invoice_id,
@@ -306,10 +281,9 @@ pub fn map_invoice_checkout(
 pub fn map_intent_result(
     input: IntentCheckoutInput<'_>,
 ) -> Result<IntentCheckoutOutcome, MoyasarError> {
-    let intent_id = validate_non_empty_id(input.intent_id, IdField::Intent)?;
     validate_intent_secret(input.client_secret)?;
-    let amount = validate_positive_amount(input.amount)?;
-    let currency = validate_currency(input.currency)?;
+    let (intent_id, amount, currency) =
+        validate_common_fields(IdField::Intent, input.intent_id, input.amount, input.currency)?;
 
     Ok(IntentCheckoutOutcome {
         intent_id,
@@ -332,6 +306,18 @@ impl IdField {
             Self::Intent => "intent_id",
         }
     }
+}
+
+fn validate_common_fields(
+    field: IdField,
+    id: &str,
+    amount: u64,
+    currency: &str,
+) -> Result<(String, u64, String), MoyasarError> {
+    let id = validate_non_empty_id(id, field)?;
+    let amount = validate_positive_amount(amount)?;
+    let currency = validate_currency(currency)?;
+    Ok((id, amount, currency))
 }
 
 fn matches_intent_not_fulfillable(value: Option<&str>) -> bool {
