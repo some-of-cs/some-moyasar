@@ -131,23 +131,35 @@ async fn mount_empty_post(server: &MockServer, endpoint: &str, response_body: Va
 }
 
 #[test]
-fn tc_capabilities_identity_and_livemode() {
-    let test_provider = MoyasarProvider::from_api_key("sk_test_cap_01").expect("valid test key");
-    let live_provider = MoyasarProvider::from_api_key("sk_live_cap_01").expect("valid live key");
+fn tc_identity_and_livemode_derived_from_key_prefix() {
+    let sk_test = MoyasarProvider::from_api_key("sk_test_cap_01").expect("valid test key");
+    let sk_live = MoyasarProvider::from_api_key("sk_live_cap_01").expect("valid live key");
     let pk_test = MoyasarProvider::from_api_key("pk_test_cap_01").expect("valid pk test key");
     let pk_live = MoyasarProvider::from_api_key("pk_live_cap_01").expect("valid pk live key");
 
-    assert_eq!(test_provider.id().as_str(), "moyasar");
-    assert!(!test_provider.livemode());
-    assert!(live_provider.livemode());
-    assert!(!pk_test.livemode());
-    assert!(pk_live.livemode());
+    assert_eq!(sk_test.id().as_str(), "moyasar");
+    assert_eq!(
+        [
+            sk_test.livemode(),
+            sk_live.livemode(),
+            pk_test.livemode(),
+            pk_live.livemode(),
+        ],
+        [false, true, false, true]
+    );
+}
 
-    let caps = test_provider.capabilities();
-    assert!(caps.contains(PaymentCapabilities::NATIVE_CREATE_IDEMPOTENCY));
-    assert!(!caps.contains(PaymentCapabilities::NATIVE_MUTATION_IDEMPOTENCY));
-    assert!(!caps.contains(PaymentCapabilities::VOID_SETTLED_WINDOW));
-    assert!(caps.contains(PaymentCapabilities::WEBHOOK_VERIFICATION_HANDSHAKE));
+#[test]
+fn tc_capabilities_match_moyasar_contract() {
+    let provider = MoyasarProvider::from_api_key("sk_test_cap_02").expect("valid test key");
+    let caps = provider.capabilities();
+    let required = PaymentCapabilities::NATIVE_CREATE_IDEMPOTENCY
+        | PaymentCapabilities::WEBHOOK_VERIFICATION_HANDSHAKE;
+    let forbidden = PaymentCapabilities::NATIVE_MUTATION_IDEMPOTENCY
+        | PaymentCapabilities::VOID_SETTLED_WINDOW;
+
+    assert!(caps.contains(required));
+    assert!(!caps.intersects(forbidden));
 }
 
 #[tokio::test]
@@ -172,10 +184,11 @@ async fn tc_create_payment_paid_sar_halalas_forwards_given_id() {
     req.idempotency_key = Some(GIVEN_UUID.to_owned());
 
     let res = provider.create_payment(&req).await.expect("paid payment");
-    assert_eq!(res.status, PaymentStatus::Paid);
+    assert_eq!(
+        (res.status, res.reference.payment_id(), res.livemode),
+        (PaymentStatus::Paid, Some(PAYMENT_UUID), false)
+    );
     assert_eq!(res.money, Money::new(10_000, "SAR").expect("money"));
-    assert_eq!(res.reference.payment_id(), Some(PAYMENT_UUID));
-    assert!(!res.livemode);
 }
 
 #[tokio::test]
@@ -321,17 +334,23 @@ async fn tc_create_checkout_posts_invoice_and_returns_redirect() {
         .create_checkout(&req)
         .await
         .expect("hosted checkout");
-    assert_eq!(res.status, PaymentStatus::RequiresAction);
-    assert_eq!(res.checkout_url.as_deref(), Some(invoice_url));
+    assert_eq!(
+        (
+            res.status,
+            res.checkout_url.as_deref(),
+            res.reference.checkout_session_id(),
+        ),
+        (
+            PaymentStatus::RequiresAction,
+            Some(invoice_url),
+            Some("inv_conformance_01"),
+        )
+    );
     assert_eq!(
         res.next_action,
         Some(NextAction::Redirect {
             url: invoice_url.to_owned(),
         })
-    );
-    assert_eq!(
-        res.reference.checkout_session_id(),
-        Some("inv_conformance_01")
     );
 }
 
@@ -539,10 +558,14 @@ async fn tc_webhook_verification_handshake_redacts_debug() {
     let challenge = event
         .verification_challenge
         .expect("verification challenge populated");
-    assert_eq!(challenge.webhook_id, "wh_handshake_01");
-    assert_eq!(challenge.verification_code, "654321");
+    assert_eq!(
+        (
+            challenge.webhook_id.as_str(),
+            challenge.verification_code.as_str(),
+        ),
+        ("wh_handshake_01", "654321")
+    );
     let dbg = format!("{challenge:?}");
-    assert!(dbg.contains("[REDACTED]"));
-    assert!(!dbg.contains("654321"));
+    assert!(dbg.contains("[REDACTED]") && !dbg.contains("654321"));
     assert!(!event.raw_redacted.to_string().contains(WEBHOOK_CANARY));
 }
