@@ -1,0 +1,75 @@
+{
+  "module": "module-9-some-payment-alignment",
+  "branch": "feat/module-9-some-payment-alignment",
+  "base": "main",
+  "version": "0.10.0",
+  "status": "in_progress",
+  "stories": {
+    "us-9.1.0": {
+      "branch": "feat/us-9.1.0-moyasar-core-hardening-and-preflight-rules",
+      "status": "in_progress",
+      "units": [
+        {
+          "unit": 1,
+          "branch": "feat/us-9.1.0/unit-1-key-scope",
+          "file": "src/alignment/key_scope.rs",
+          "status": "pending"
+        },
+        {
+          "unit": 2,
+          "branch": "feat/us-9.1.0/unit-2-pan-and-status",
+          "file": "src/alignment/pan_and_status.rs",
+          "status": "pending"
+        },
+        {
+          "unit": 3,
+          "branch": "feat/us-9.1.0/unit-3-preflight-rules",
+          "file": "src/alignment/preflight_rules.rs",
+          "status": "pending"
+        },
+        {
+          "unit": 4,
+          "branch": "feat/us-9.1.0/unit-4-idempotency-errors",
+          "file": "src/alignment/idempotency_errors.rs",
+          "status": "pending"
+        },
+        {
+          "unit": 5,
+          "branch": "feat/us-9.1.0/unit-5-checkout-intents",
+          "file": "src/alignment/checkout_intents.rs",
+          "status": "pending"
+        }
+      ]
+    },
+    "us-9.2.0": {
+      "branch": "feat/us-9.2.0-moyasar-webhook-scrubbing-and-adapter",
+      "status": "in_progress",
+      "units": [
+        {
+          "unit": 1,
+          "branch": "feat/us-9.2.0/unit-1-webhook-token-verifier",
+          "file": "src/alignment/webhook_token_verifier.rs",
+          "status": "pending"
+        },
+        {
+          "unit": 2,
+          "branch": "feat/us-9.2.0/unit-2-webhook-handshake",
+          "file": "src/alignment/webhook_handshake.rs",
+          "status": "pending"
+        },
+        {
+          "unit": 3,
+          "branch": "feat/us-9.2.0/unit-3-moyasar-provider",
+          "file": "src/adapter/moyasar_provider.rs",
+          "status": "pending"
+        },
+        {
+          "unit": 4,
+          "branch": "feat/us-9.2.0/unit-4-moyasar-conformance",
+          "file": "src/adapter/conformance_tests.rs",
+          "status": "pending"
+        }
+      ]
+    }
+  }
+}

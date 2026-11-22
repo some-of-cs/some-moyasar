@@ -1,4 +1,4 @@
-//! # some-moyasar (`v0.9.0`)
+//! # some-moyasar (`v0.10.0`)
 //!
 //! Idiomatic, microkernel-architected Rust SDK and constant-time webhook verification engine
 //! for the [Moyasar Payment Gateway](https://docs.moyasar.com/api/api-introduction).
@@ -112,6 +112,12 @@ use chrono as _;
 
 #[cfg(feature = "core")]
 pub mod kernel;
+
+#[cfg(feature = "core")]
+pub mod alignment;
+
+#[cfg(feature = "some-payment-adapter")]
+pub mod adapter;
 
 #[cfg(feature = "core")]
 pub mod prelude;
