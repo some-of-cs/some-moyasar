@@ -196,10 +196,7 @@ impl SecretOnlyOperation {
 /// let err = require_secret_key("pk_live_abc123", SecretOnlyOperation::Refund).unwrap_err();
 /// assert!(matches!(err, MoyasarError::KeyTypeMismatch));
 /// ```
-pub fn require_secret_key(
-    raw_key: &str,
-    op: SecretOnlyOperation,
-) -> Result<KeyMode, MoyasarError> {
+pub fn require_secret_key(raw_key: &str, op: SecretOnlyOperation) -> Result<KeyMode, MoyasarError> {
     let _ = op.as_str();
     let classification = detect_key_mode(raw_key)?;
     if classification.kind != KeyKind::Secret {
