@@ -2,6 +2,7 @@
 
 mod config;
 mod mapper;
+/// Core [`MoyasarProvider`](moyasar_provider::MoyasarProvider) adapter implementation.
 pub mod moyasar_provider;
 
 #[cfg(test)]

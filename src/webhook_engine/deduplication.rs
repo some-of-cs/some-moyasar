@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use super::event_types::WebhookError;
-use super::timestamp::REPLAY_TOLERANCE;
+use super::timestamp::{MAX_FUTURE_SKEW, REPLAY_TOLERANCE};
 
 /// Default maximum number of webhook event IDs retained in [`InMemoryDeduplicator`].
 pub const DEFAULT_MAX_DEDUP_ENTRIES: usize = 100_000;
@@ -94,7 +94,8 @@ impl Default for InMemoryDeduplicator {
 }
 
 impl InMemoryDeduplicator {
-    /// Creates an empty [`InMemoryDeduplicator`] with [`REPLAY_TOLERANCE`] TTL and
+    /// Creates an empty [`InMemoryDeduplicator`] with
+    /// [`REPLAY_TOLERANCE`] + [`MAX_FUTURE_SKEW`] TTL and
     /// [`DEFAULT_MAX_DEDUP_ENTRIES`] capacity.
     ///
     /// # Examples
@@ -112,7 +113,10 @@ impl InMemoryDeduplicator {
     /// ```
     #[must_use]
     pub fn new() -> Self {
-        Self::with_capacity_limit(REPLAY_TOLERANCE, DEFAULT_MAX_DEDUP_ENTRIES)
+        Self::with_capacity_limit(
+            REPLAY_TOLERANCE.saturating_add(MAX_FUTURE_SKEW),
+            DEFAULT_MAX_DEDUP_ENTRIES,
+        )
     }
 
     /// Creates an [`InMemoryDeduplicator`] with an explicit entry `ttl` and `max_entries` cap.
@@ -239,6 +243,10 @@ mod tests {
     async fn in_memory_deduplicator_accepts_first_rejects_duplicate_and_supports_remove_and_clear()
     {
         let deduplicator = InMemoryDeduplicator::new();
+        assert_eq!(
+            deduplicator.ttl(),
+            REPLAY_TOLERANCE.saturating_add(MAX_FUTURE_SKEW)
+        );
         assert!(deduplicator.is_empty());
 
         let event_id = Uuid::new_v4();

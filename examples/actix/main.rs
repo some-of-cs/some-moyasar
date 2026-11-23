@@ -25,9 +25,7 @@ pub fn configure_app(cfg: &mut actix_web::web::ServiceConfig) {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let client = MoyasarClient::new("$MOYASAR_SECRET_KEY").map_err(std::io::Error::other)?;
-    let webhook_secret = std::env::var("MOYASAR_WEBHOOK_SECRET")
-        .unwrap_or_else(|_| "whsec_dev_placeholder".to_string());
-    let mut state = ActixAppState::new(client, &webhook_secret);
+    let mut state = ActixAppState::new(client, "$MOYASAR_WEBHOOK_SECRET");
     if let Ok(pk) = PublishableKey::new("$MOYASAR_PUBLISHABLE_KEY")
         && let Ok(pub_client) = MoyasarClient::new(pk)
     {

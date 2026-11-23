@@ -8,7 +8,9 @@ use serde::Serialize;
 
 use some_moyasar::prelude::{ApiErrorType, MoyasarError};
 
-const REDACTED_MARKERS: &[&str] = &["sk_live_", "sk_test_", "whsec_"];
+const REDACTED_MARKERS: &[&str] = &[
+    "sk_live_", "sk_test_", "pk_live_", "pk_test_", "whsec_", "Bearer ",
+];
 
 /// Wrapper around [`MoyasarError`] that converts SDK errors into redacted JSON HTTP responses.
 #[derive(Debug)]
@@ -41,9 +43,29 @@ impl IntoResponse for AppError {
     }
 }
 
+fn is_iban_token(s: &str) -> bool {
+    let trimmed = s.trim_matches(|c: char| !c.is_alphanumeric());
+    trimmed
+        .strip_prefix("SA")
+        .is_some_and(|digits| digits.len() == 22 && digits.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn is_pan_token(s: &str) -> bool {
+    let trimmed = s.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+    let clean: String = trimmed.chars().filter(|&c| c != '-').collect();
+    (13..=19).contains(&clean.len()) && clean.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn contains_sensitive_data(trimmed: &str) -> bool {
+    REDACTED_MARKERS.iter().any(|m| trimmed.contains(m))
+        || trimmed
+            .split_whitespace()
+            .any(|tok| is_iban_token(tok) || is_pan_token(tok))
+}
+
 fn sanitize_message(message: &str) -> String {
     let trimmed = message.trim();
-    if trimmed.is_empty() || REDACTED_MARKERS.iter().any(|m| trimmed.contains(m)) {
+    if trimmed.is_empty() || contains_sensitive_data(trimmed) {
         return "Request rejected by payment gateway.".to_owned();
     }
     trimmed.to_owned()

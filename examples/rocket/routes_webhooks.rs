@@ -30,9 +30,7 @@ fn map_webhook_error(err: WebhookError) -> MoyasarError {
     match err {
         WebhookError::SecretMismatch => MoyasarError::InvalidWebhookSecret,
         WebhookError::TimestampOutOfRange => MoyasarError::InvalidWebhookSignature,
-        WebhookError::InvalidJson(json_err) => {
-            MoyasarError::invalid_request(format!("invalid webhook JSON: {json_err}"))
-        }
+        WebhookError::InvalidJson(_) => MoyasarError::invalid_request("invalid webhook payload"),
         WebhookError::DuplicateEvent(event_id) => {
             MoyasarError::invalid_request(format!("duplicate webhook event: {event_id}"))
         }
@@ -58,10 +56,8 @@ pub async fn handle_webhook(
         .open(MAX_WEBHOOK_BODY_KIB.kibibytes())
         .into_bytes()
         .await
-        .map_err(|err| {
-            MoyasarResponder(MoyasarError::invalid_request(format!(
-                "failed to read webhook body: {err}"
-            )))
+        .map_err(|_| {
+            MoyasarResponder(MoyasarError::invalid_request("failed to read webhook body"))
         })?;
 
     if !capped.is_complete() {

@@ -77,8 +77,7 @@ fn parse_non_negative_amount(amount_minor: i64) -> Result<u64, Status> {
 
 /// Serializes a domain model or collection into a JSON string, mapping errors to `INTERNAL`.
 fn to_json_string<T: serde::Serialize>(value: &T) -> Result<String, Status> {
-    serde_json::to_string(value)
-        .map_err(|err| Status::internal(format!("failed to serialize response JSON: {err}")))
+    serde_json::to_string(value).map_err(|_| Status::internal("failed to serialize response"))
 }
 
 /// Builds a [`Response<JsonPayloadRpcResponse>`] from `id` and a serializable `value`.
