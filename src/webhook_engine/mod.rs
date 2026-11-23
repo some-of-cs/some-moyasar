@@ -1,9 +1,14 @@
 //! Constant-time webhook verification engine, replay window, deduplication, and typed extractors.
 
+/// Async webhook event deduplication trait and in-memory/noop stores.
 pub mod deduplication;
+/// Canonical Moyasar webhook event types, payloads, and error variants.
 pub mod event_types;
+/// Typed payload extractors for verified Moyasar webhook events.
 pub mod payload;
+/// Replay-window and future-skew timestamp validation for webhooks.
 pub mod timestamp;
+/// Constant-time Double-HMAC webhook secret and signature verifiers.
 pub mod verifier;
 
 pub use deduplication::{

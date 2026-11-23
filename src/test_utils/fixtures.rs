@@ -281,20 +281,29 @@ mod tests {
             feature = "card-auths"
         ))]
         for (name, val) in &fixtures {
-            let evt: crate::webhook_engine::WebhookEvent =
-                serde_json::from_value(val.clone()).expect("valid WebhookEvent");
-            if name.starts_with("card_auth_") {
-                evt.into_card_auth().expect("valid CardAuthentication");
-            } else {
-                let p = evt.into_payment().expect("valid Payment");
-                if matches!(*name, "payment_authorized" | "payment_voided") {
-                    assert_eq!(p.captured, 0);
-                    assert_eq!(p.captured_format, "0.00 SAR");
-                }
-            }
+            assert_valid_webhook_fixture(name, val);
         }
 
         verify_sandbox_and_iso_fixtures();
+    }
+
+    #[cfg(all(
+        feature = "webhook-engine",
+        feature = "payments",
+        feature = "card-auths"
+    ))]
+    fn assert_valid_webhook_fixture(name: &str, val: &Value) {
+        let evt: crate::webhook_engine::WebhookEvent =
+            serde_json::from_value(val.clone()).expect("valid WebhookEvent");
+        if name.starts_with("card_auth_") {
+            evt.into_card_auth().expect("valid CardAuthentication");
+            return;
+        }
+        let p = evt.into_payment().expect("valid Payment");
+        if matches!(name, "payment_authorized" | "payment_voided") {
+            assert_eq!(p.captured, 0);
+            assert_eq!(p.captured_format, "0.00 SAR");
+        }
     }
 
     fn verify_sandbox_and_iso_fixtures() {

@@ -48,7 +48,14 @@ pub const MAX_METADATA_VALUE_LEN: usize = 500;
 /// ```
 pub const MAX_SPLITS: usize = 50;
 
-const DISALLOWED_MANUAL_SOURCES: &[&str] = &["stcpay", "applepay", "samsungpay", "dpan", "sadad"];
+const DISALLOWED_MANUAL_SOURCES: &[&str] = &[
+    "stcpay",
+    "applepay",
+    "samsungpay",
+    "dpan",
+    "sadad",
+    "sadadbill",
+];
 
 /// Parses a Moyasar resource identifier as a canonical UUID, failing closed locally on empty or
 /// malformed values.
@@ -82,7 +89,7 @@ pub fn validate_uuid_id(id: &str, field_name: &str) -> Result<uuid::Uuid, Moyasa
 }
 
 /// Validates that `manual: true` capture is not requested for Moyasar payment sources that do not
-/// support manual capture (`stcpay`, `applepay`, `samsungpay`, `dpan`, `sadad`).
+/// support manual capture (`stcpay`, `applepay`, `samsungpay`, `dpan`, `sadad`, `sadadbill`).
 ///
 /// Matching is case-insensitive and ignores leading/trailing ASCII whitespace.
 ///
@@ -429,6 +436,8 @@ mod tests {
             "DPAN",
             "sadad",
             "SADAD",
+            "sadadbill",
+            "SadadBill",
             "  applepay  ",
         ];
         for disallowed in disallowed_sources {

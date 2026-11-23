@@ -79,23 +79,27 @@ pub fn next_period_bounds(
     interval: PlanInterval,
 ) -> (DateTime<Utc>, DateTime<Utc>) {
     let end = match interval {
-        PlanInterval::Day => period_start + Duration::days(1),
-        PlanInterval::Week => period_start + Duration::weeks(1),
+        PlanInterval::Day => add_days_clamped(period_start, 1),
+        PlanInterval::Week => period_start
+            .checked_add_signed(Duration::weeks(1))
+            .unwrap_or(DateTime::<Utc>::MAX_UTC),
         PlanInterval::Month => period_start
             .checked_add_months(Months::new(1))
-            .unwrap_or(period_start + Duration::days(30)),
+            .unwrap_or_else(|| add_days_clamped(period_start, 30)),
         PlanInterval::Year => period_start
             .checked_add_months(Months::new(12))
-            .unwrap_or_else(|| {
-                let days = if is_leap_year(period_start.year()) {
-                    366
-                } else {
-                    365
-                };
-                period_start + Duration::days(days)
-            }),
+            .unwrap_or_else(|| add_days_clamped(period_start, year_days(period_start.year()))),
     };
     (period_start, end)
+}
+
+fn add_days_clamped(dt: DateTime<Utc>, days: i64) -> DateTime<Utc> {
+    dt.checked_add_signed(Duration::days(days))
+        .unwrap_or(DateTime::<Utc>::MAX_UTC)
+}
+
+const fn year_days(year: i32) -> i64 {
+    if is_leap_year(year) { 366 } else { 365 }
 }
 
 const fn is_leap_year(year: i32) -> bool {
@@ -126,5 +130,16 @@ mod tests {
         let (_, year_end) = next_period_bounds(start, PlanInterval::Year);
         let expected_year = Utc.with_ymd_and_hms(2025, 1, 31, 12, 0, 0).unwrap();
         assert_eq!(year_end, expected_year);
+
+        for interval in [
+            PlanInterval::Day,
+            PlanInterval::Week,
+            PlanInterval::Month,
+            PlanInterval::Year,
+        ] {
+            let (s, e) = next_period_bounds(DateTime::<Utc>::MAX_UTC, interval);
+            assert_eq!(s, DateTime::<Utc>::MAX_UTC);
+            assert_eq!(e, DateTime::<Utc>::MAX_UTC);
+        }
     }
 }

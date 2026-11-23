@@ -29,7 +29,9 @@ fn configured_base_url() -> String {
 /// directly to `MoyasarClient::builder("$MOYASAR_SECRET_KEY")` (resolved behind the scenes).
 pub fn try_dotenv_secret_client() -> Option<MoyasarClient<SecretKey>> {
     let probe = MoyasarClient::new("$MOYASAR_SECRET_KEY").ok()?;
-    if !is_configured_real_secret(probe.key().expose_secret()) {
+    if probe.key().mode() != AuthMode::Test
+        || !is_configured_real_secret(probe.key().expose_secret())
+    {
         return None;
     }
     Some(
@@ -73,16 +75,16 @@ pub fn test_publishable_key_ref() -> &'static str {
     }
 }
 
-/// Returns `true` when a real `MOYASAR_SECRET_KEY` is present in `.env` / environment
-/// and `MOYASAR_RUN_LIVE_TESTS` is not explicitly set to `"0"` or `"false"`.
+/// Returns `true` when `MOYASAR_RUN_LIVE_TESTS` is explicitly set to `"1"` or `"true"`
+/// and a real test-mode `MOYASAR_SECRET_KEY` is present in `.env` / environment.
 pub fn is_live_dotenv_test_enabled() -> bool {
-    let disabled = resolve_env_secret("$MOYASAR_RUN_LIVE_TESTS")
+    let enabled = resolve_env_secret("$MOYASAR_RUN_LIVE_TESTS")
         .ok()
         .is_some_and(|v| {
             let trimmed = v.trim();
-            trimmed == "0" || trimmed.eq_ignore_ascii_case("false")
+            trimmed == "1" || trimmed.eq_ignore_ascii_case("true")
         });
-    !disabled && try_dotenv_secret_client().is_some()
+    enabled && try_dotenv_secret_client().is_some()
 }
 
 pub async fn start_secret_client() -> (MockServer, MoyasarClient<SecretKey>) {

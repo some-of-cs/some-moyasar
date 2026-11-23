@@ -13,6 +13,7 @@
 
 use std::fmt;
 
+use super::key_scope::{SecretOnlyOperation, require_secret_key};
 use crate::kernel::error::MoyasarError;
 
 /// Canonical Moyasar webhook event variants normalized from live wire slugs.
@@ -409,6 +410,7 @@ pub async fn verify_webhook(
     ctx: &WebhookApiContext<'_>,
     challenge: &HandshakeChallenge,
 ) -> Result<(), MoyasarError> {
+    require_secret_key(ctx.secret_key, SecretOnlyOperation::VerifyWebhook)?;
     let webhook_id = validate_webhook_id(&challenge.webhook_id)?;
     validate_verification_code(&challenge.verification_code)?;
 
@@ -456,6 +458,10 @@ pub async fn resend_verification(
     ctx: &WebhookApiContext<'_>,
     webhook_id: &str,
 ) -> Result<(), MoyasarError> {
+    require_secret_key(
+        ctx.secret_key,
+        SecretOnlyOperation::ResendWebhookVerification,
+    )?;
     let webhook_id = validate_webhook_id(webhook_id)?;
     let base = ctx.base_url.trim_end_matches('/');
     let url = format!("{base}/webhooks/{webhook_id}/resend_verification");
@@ -791,5 +797,32 @@ mod tests {
         ));
 
         assert!(resend_verification(&ctx, "").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn rejects_publishable_key_locally_with_zero_http_calls() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let http = reqwest::Client::new();
+        let base_url = format!("{}/v1", server.uri());
+        let ctx = WebhookApiContext {
+            http: &http,
+            base_url: &base_url,
+            secret_key: "pk_test_not_allowed",
+        };
+        let challenge = test_challenge("wh_verify_1", "123456");
+        assert!(matches!(
+            verify_webhook(&ctx, &challenge).await,
+            Err(MoyasarError::KeyTypeMismatch)
+        ));
+        assert!(matches!(
+            resend_verification(&ctx, "wh_verify_1").await,
+            Err(MoyasarError::KeyTypeMismatch)
+        ));
     }
 }

@@ -185,7 +185,7 @@ impl<'a> UnifiedTokenChargeRequest<'a> {
 }
 
 /// Unified payment intent response across payment gateways.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnifiedIntentResponse {
     /// Gateway intent identifier.
     pub id: String,
@@ -197,6 +197,27 @@ pub struct UnifiedIntentResponse {
     pub currency: Currency,
     /// Intent expiration timestamp (UTC).
     pub expires_at: DateTime<Utc>,
+}
+
+impl core::fmt::Debug for UnifiedIntentResponse {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let client_secret = self.client_secret.as_ref().map(|_| "[REDACTED]");
+        f.debug_struct("UnifiedIntentResponse")
+            .field("id", &self.id)
+            .field("client_secret", &client_secret)
+            .field("amount_minor", &self.amount_minor)
+            .field("currency", &self.currency)
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
+}
+
+impl Drop for UnifiedIntentResponse {
+    fn drop(&mut self) {
+        if let Some(ref mut secret) = self.client_secret {
+            secret.zeroize();
+        }
+    }
 }
 
 /// Unified off-session token charge response across payment gateways.
@@ -943,5 +964,29 @@ mod tests {
         let minimal_rendered = format!("{minimal:?}");
         assert!(minimal_rendered.contains("customer_email: None"));
         assert!(minimal_rendered.contains("customer_phone: None"));
+    }
+
+    #[test]
+    fn unified_intent_response_debug_redacts_client_secret() {
+        let resp = UnifiedIntentResponse {
+            id: "pi_redact_01".to_owned(),
+            client_secret: Some("pi_secret_canary_999".to_owned()),
+            amount_minor: 15_000,
+            currency: Currency::SAR,
+            expires_at: Utc::now(),
+        };
+        let rendered = format!("{resp:?}");
+        assert!(!rendered.contains("pi_secret_canary_999"));
+        assert!(rendered.contains("[REDACTED]"));
+
+        let without_secret = UnifiedIntentResponse {
+            id: "pi_redact_02".to_owned(),
+            client_secret: None,
+            amount_minor: 15_000,
+            currency: Currency::SAR,
+            expires_at: Utc::now(),
+        };
+        let rendered_none = format!("{without_secret:?}");
+        assert!(rendered_none.contains("client_secret: None"));
     }
 }

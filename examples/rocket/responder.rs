@@ -136,7 +136,7 @@ fn client_error_type_str(err: &MoyasarError) -> &'static str {
 fn error_message(err: &MoyasarError) -> String {
     match err {
         MoyasarError::Api { message, .. } => redact_sensitive(message),
-        MoyasarError::ServerError { message, .. } => redact_sensitive(message),
+        MoyasarError::ServerError { .. } => "upstream server error".to_owned(),
         MoyasarError::Network(_) => "upstream network error".to_owned(),
         other => redact_sensitive(&other.to_string()),
     }
@@ -180,10 +180,7 @@ fn is_sensitive_token(token: &str) -> bool {
 }
 
 fn is_secret_token(s: &str) -> bool {
-    let trimmed = s.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-    SENSITIVE_PREFIXES
-        .iter()
-        .any(|prefix| trimmed.starts_with(prefix))
+    SENSITIVE_PREFIXES.iter().any(|p| s.contains(p))
 }
 
 fn is_iban_token(s: &str) -> bool {
@@ -234,6 +231,7 @@ mod tests {
             message: "Unavailable".into(),
         };
         assert_eq!(map_status(&server_err), Status::ServiceUnavailable);
+        assert_eq!(error_message(&server_err), "upstream server error");
         assert_eq!(map_status(&MoyasarError::Timeout), Status::GatewayTimeout);
         assert_eq!(
             map_status(&MoyasarError::InvalidIban),
@@ -248,6 +246,7 @@ mod tests {
     #[test]
     fn is_sensitive_token_detects_secrets_iban_and_pan() {
         assert!(is_sensitive_token("sk_live_abc123"));
+        assert!(is_sensitive_token("key=sk_live_abc123"));
         assert!(is_sensitive_token("sk_test_xyz789"));
         assert!(is_sensitive_token("whsec_test_999"));
         assert!(is_sensitive_token("SA0380000000608010167519"));

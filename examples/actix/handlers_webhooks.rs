@@ -23,7 +23,11 @@ pub struct CreateWebhookEndpointInput {
 
 /// Registers all inbound webhook and `WebhooksService` management routes on `cfg`.
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.route("/v1/webhooks", web::post().to(handle_webhook))
+    cfg.service(
+        web::resource("/v1/webhooks")
+            .app_data(web::PayloadConfig::new(64 * 1024))
+            .route(web::post().to(handle_webhook)),
+    )
         .route(
             "/v1/webhooks/endpoints",
             web::post().to(create_webhook_endpoint),

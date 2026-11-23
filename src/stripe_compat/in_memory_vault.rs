@@ -145,6 +145,7 @@ impl CustomerVault for InMemoryCustomerVault {
         for tokens in guard.values_mut() {
             tokens.retain(|t| t != token_id);
         }
+        guard.retain(|_, tokens| !tokens.is_empty());
         Box::pin(ready(Ok(())))
     }
 }
@@ -181,6 +182,29 @@ mod tests {
                 .await
                 .expect("resolve")
                 .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn deactivating_last_token_reclaims_customer_capacity_slot() {
+        let vault = InMemoryCustomerVault::with_capacity_limits(1, 2);
+        let tok1 = TokenId::new("token_slot_1").expect("valid token");
+        let tok2 = TokenId::new("token_slot_2").expect("valid token");
+
+        vault
+            .associate("cus_1", tok1.clone())
+            .await
+            .expect("first customer fits");
+        assert!(vault.associate("cus_2", tok2.clone()).await.is_err());
+
+        vault.deactivate(&tok1).await.expect("deactivate");
+        vault
+            .associate("cus_2", tok2.clone())
+            .await
+            .expect("reclaimed slot accepts new customer");
+        assert_eq!(
+            vault.resolve_tokens("cus_2").await.expect("resolve"),
+            vec![tok2]
         );
     }
 }
