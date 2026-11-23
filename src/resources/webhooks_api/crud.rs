@@ -158,10 +158,7 @@ impl CreateWebhookParams {
         let url = url.into();
         validate_https_url(&url)?;
         let shared_secret = shared_secret.into();
-        let exposed = shared_secret.expose().trim();
-        if exposed.is_empty() || exposed.starts_with('$') {
-            return Err(MoyasarError::InvalidKey);
-        }
+        validate_shared_secret(&shared_secret)?;
         Ok(Self {
             http_method: "post".to_owned(),
             url,
@@ -279,12 +276,21 @@ impl<'a, K: SecretAuthKey> WebhooksService<'a, K> {
     }
 }
 
+fn validate_shared_secret(secret: &WebhookSecret) -> Result<(), MoyasarError> {
+    let exposed = secret.expose().trim();
+    if exposed.is_empty() || exposed.starts_with('$') {
+        return Err(MoyasarError::InvalidKey);
+    }
+    Ok(())
+}
+
 async fn post_webhook<K: AuthKey>(
     client: &MoyasarClient<K>,
     base_url: &str,
     params: &CreateWebhookParams,
 ) -> Result<WebhookEndpoint, MoyasarError> {
     validate_https_url(&params.url)?;
+    validate_shared_secret(&params.shared_secret)?;
     let url = format!("{}{WEBHOOKS_PATH}", base_url.trim_end_matches('/'));
     let max_retries = client.config().max_network_retries;
     let (status, body) = execute_with_retry(max_retries, || async {
@@ -619,5 +625,29 @@ mod tests {
                 .expect_err("webhook URL with userinfo, fragment, or empty host must fail");
             assert!(matches!(err, MoyasarError::InvalidWebhookUrl));
         }
+    }
+
+    #[tokio::test]
+    async fn revalidates_mutated_shared_secret_before_sending() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/webhooks"))
+            .respond_with(ResponseTemplate::new(201))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let mut params = CreateWebhookParams::new(
+            "https://merchant.example/webhooks",
+            WebhookSecret::new("whsec_valid"),
+        )
+        .expect("valid initial params");
+        params.shared_secret = WebhookSecret::new("$UNRESOLVED_ENV_SECRET");
+
+        let client = test_client();
+        let err = post_webhook(&client, &server.uri(), &params)
+            .await
+            .expect_err("mutated invalid shared_secret must fail before transport");
+        assert!(matches!(err, MoyasarError::InvalidKey));
     }
 }

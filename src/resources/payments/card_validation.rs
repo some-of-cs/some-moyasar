@@ -28,7 +28,7 @@ pub fn luhn_valid(number: &str) -> bool {
     let mut count = 0usize;
     let mut sum = 0u32;
     for byte in number.bytes().rev().filter(|&b| !matches!(b, b' ' | b'-')) {
-        if !byte.is_ascii_digit() {
+        if count == 19 || !byte.is_ascii_digit() {
             return false;
         }
         sum += luhn_step(u32::from(byte - b'0'), count);
@@ -147,6 +147,7 @@ mod tests {
             "411111111111111a",
             "",
             "00000000000",
+            "41111111111111111111",
         ];
         for pan in valid {
             assert!(luhn_valid(pan), "expected valid Luhn for {pan}");

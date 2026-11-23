@@ -149,10 +149,27 @@ impl<'a, K: SecretAuthKey> PaymentIntentsService<'a, K> {
     }
 }
 
+fn validate_create_params(params: &CreatePaymentIntentParams) -> Result<(), MoyasarError> {
+    if params.amount == 0 {
+        return Err(MoyasarError::invalid_request(
+            "payment intent amount must be greater than zero",
+        ));
+    }
+    let trimmed = params.callback_url.trim();
+    let valid_scheme = trimmed.starts_with("https://") || trimmed.starts_with("http://");
+    if !valid_scheme || reqwest::Url::parse(trimmed).is_err() {
+        return Err(MoyasarError::invalid_request(
+            "payment intent callback_url must be a valid http:// or https:// URL",
+        ));
+    }
+    Ok(())
+}
+
 fn prepare_create_payload(
     params: &CreatePaymentIntentParams,
     policy: &GivenIdPolicy,
 ) -> Result<serde_json::Value, MoyasarError> {
+    validate_create_params(params)?;
     let mut payload = serde_json::to_value(params).map_err(|e| MoyasarError::Api {
         error_type: ApiErrorType::InvalidRequestError,
         message: e.to_string(),
@@ -295,5 +312,35 @@ mod tests {
         let sk = SecretKey::new("sk_test_create_cancel").expect("valid key");
         let client = MoyasarClient::new(sk).expect("client builds");
         let _svc = client.payment_intents();
+    }
+
+    #[test]
+    fn rejects_zero_amount_and_invalid_callback_urls() {
+        let zero = CreatePaymentIntentParams::new(0, Currency::SAR, "https://example.com/cb");
+        let err = prepare_create_payload(&zero, &GivenIdPolicy::Random)
+            .expect_err("zero amount must fail");
+        assert!(matches!(
+            err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                ..
+            }
+        ));
+
+        for bad_cb in ["", "ftp://example.com/cb", "javascript:alert(1)", "https://"] {
+            let params = CreatePaymentIntentParams::new(1000, Currency::SAR, bad_cb);
+            let err = prepare_create_payload(&params, &GivenIdPolicy::Random)
+                .expect_err("invalid callback_url must fail");
+            assert!(matches!(
+                err,
+                MoyasarError::Api {
+                    error_type: ApiErrorType::InvalidRequestError,
+                    ..
+                }
+            ));
+        }
+
+        let http_ok = CreatePaymentIntentParams::new(1000, Currency::SAR, "http://localhost/cb");
+        assert!(prepare_create_payload(&http_ok, &GivenIdPolicy::Random).is_ok());
     }
 }

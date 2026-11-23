@@ -10,8 +10,9 @@ use crate::resources::settlements::models::Settlement;
 ///
 /// # Errors
 ///
-/// Returns [`MoyasarError::Api`] (`InvalidRequestError`) if arithmetic overflow/underflow occurs
-/// or if the summed line net amounts do not match the settlement's net amount.
+/// Returns [`MoyasarError::Api`] (`InvalidRequestError`) if arithmetic overflow/underflow occurs,
+/// if any line currency differs from `settlement.currency`, or if the summed line net amounts do
+/// not match the settlement's net amount.
 ///
 /// # Examples
 ///
@@ -58,6 +59,11 @@ pub fn reconcile_settlement(
     })?;
     let mut sum: i64 = 0;
     for line in lines {
+        if line.currency != settlement.currency {
+            return Err(MoyasarError::invalid_request(
+                "settlement line currency does not match settlement currency",
+            ));
+        }
         let line_net = checked_line_net(line).ok_or_else(|| {
             MoyasarError::invalid_request("settlement line net calculation overflowed")
         })?;
@@ -78,4 +84,48 @@ fn checked_line_net(line: &SettlementLine) -> Option<i64> {
         .minor_units()
         .checked_sub(line.fee.minor_units())
         .and_then(|v| v.checked_sub(line.tax.minor_units()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kernel::error::ApiErrorType;
+    use crate::kernel::types::Currency;
+
+    #[test]
+    fn rejects_settlement_line_with_mismatched_currency() {
+        let settlement: Settlement = serde_json::from_str(
+            r#"{
+                "id": "stl_currency_check",
+                "recipient_type": "entity",
+                "currency": "SAR",
+                "source_currency": "SAR",
+                "amount": 10000,
+                "fee": 200,
+                "tax": 30,
+                "created_at": "2026-11-14T00:00:00Z"
+            }"#,
+        )
+        .expect("valid settlement fixture");
+        let mismatched_line = SettlementLine {
+            payment_id: None,
+            line_type: Some("payment".to_owned()),
+            currency: Currency::USD,
+            amount: Amount::from_minor(10_000),
+            fee: Amount::from_minor(200),
+            tax: Amount::from_minor(30),
+            reference: None,
+            settled_at: None,
+        };
+
+        let err = reconcile_settlement(&settlement, &[mismatched_line])
+            .expect_err("mismatched currency must fail reconciliation");
+        assert!(matches!(
+            err,
+            MoyasarError::Api {
+                error_type: ApiErrorType::InvalidRequestError,
+                ..
+            }
+        ));
+    }
 }

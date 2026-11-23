@@ -217,6 +217,9 @@ impl<'a, K: SecretAuthKey> PayoutAccountsService<'a, K> {
         base_url: &str,
         params: &CreatePayoutAccountParams,
     ) -> Result<PayoutAccount, MoyasarError> {
+        if matches!(params.account_type, PayoutAccountType::Bank) {
+            validate_bank_properties(&params.properties)?;
+        }
         let client = self.client();
         let url = format!("{}{}", base_url.trim_end_matches('/'), PAYOUT_ACCOUNTS_PATH);
         execute_with_retry(client.config().max_network_retries, || {
@@ -455,5 +458,33 @@ mod tests {
         ));
         let msg = err.to_string();
         assert!(msg.contains("failed to decode JSON response:"));
+    }
+
+    #[tokio::test]
+    async fn revalidates_mutated_bank_properties_before_sending() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/payout_accounts"))
+            .respond_with(ResponseTemplate::new(201))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let key = SecretKey::new("sk_test_payout_mutated").expect("valid secret key");
+        let client = MoyasarClient::new(key).expect("client builds");
+        let mut params = CreatePayoutAccountParams::new(
+            PayoutAccountType::Bank,
+            sample_bank_properties(),
+            SecretString::from(r#"{"api_key":"secret"}"#),
+        )
+        .expect("valid initial bank params");
+        params.properties.iban = Some("INVALID_IBAN".to_owned());
+
+        let err = client
+            .payout_accounts()
+            .create_at(&server.uri(), &params)
+            .await
+            .expect_err("mutated invalid IBAN must fail before transport");
+        assert!(matches!(err, MoyasarError::InvalidIban));
     }
 }

@@ -55,7 +55,7 @@ impl fmt::Debug for StcPaySource {
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StcPaySourceResponse {
     /// Source type discriminator (`"stcpay"`).
-    #[serde(rename = "type", default)]
+    #[serde(rename = "type", default, skip_serializing)]
     pub source_type: Option<String>,
     /// Customer mobile number associated with the STC Pay charge.
     #[serde(default)]
@@ -85,7 +85,7 @@ impl fmt::Debug for StcPaySourceResponse {
             .field("reference_number", &self.reference_number)
             .field("branch", &self.branch)
             .field("cashier", &self.cashier)
-            .field("transaction_url", &self.transaction_url)
+            .field("transaction_url", &"[REDACTED]")
             .field("message", &self.message)
             .finish()
     }
@@ -223,11 +223,18 @@ mod tests {
             reference_number: Some("REF-123".to_owned()),
             branch: None,
             cashier: None,
-            transaction_url: None,
+            transaction_url: Some(
+                "https://api.moyasar.com/v1/stc_pays/pay_1/proceed?otp_token=secret_otp_tok"
+                    .to_owned(),
+            ),
             message: None,
         };
         let resp_dbg = format!("{resp:?}");
         assert!(resp_dbg.contains(r#"mobile: "[REDACTED]""#));
+        assert!(resp_dbg.contains(r#"transaction_url: "[REDACTED]""#));
         assert!(!resp_dbg.contains("0598765432"));
+        assert!(!resp_dbg.contains("secret_otp_tok"));
+        let resp_json = serde_json::to_value(&resp).expect("serializes");
+        assert!(resp_json.get("type").is_none());
     }
 }

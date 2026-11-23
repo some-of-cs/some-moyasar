@@ -47,9 +47,14 @@ pub struct ApiErrorPayload {
 
 impl From<ApiErrorPayload> for MoyasarError {
     fn from(payload: ApiErrorPayload) -> Self {
+        let message = payload
+            .message
+            .as_deref()
+            .map(truncate_error_body)
+            .unwrap_or_default();
         Self::Api {
             error_type: payload.error_type,
-            message: payload.message.unwrap_or_default(),
+            message,
             errors: payload.errors,
             response_code: payload.response_code,
         }
@@ -227,22 +232,36 @@ impl MoyasarError {
 
     /// Parses an HTTP status code and response body into a structured [`MoyasarError`].
     ///
-    /// Valid Moyasar error JSON (`type`, `message`, `errors`, `response_code`) maps to
-    /// [`MoyasarError::Api`]; unparseable 5xx bodies fall back to [`MoyasarError::ServerError`].
+    /// HTTP 5xx responses always map to retryable [`MoyasarError::ServerError`] (preserving any
+    /// parsed JSON `message`, truncated to [`MAX_ERROR_BODY_CHARS`]). Valid 4xx Moyasar error
+    /// JSON (`type`, `message`, `errors`, `response_code`) maps to [`MoyasarError::Api`].
     pub fn from_api_response(status: u16, body: &str) -> Self {
+        if status >= 500 {
+            return Self::ServerError {
+                status,
+                message: extract_server_error_message(body),
+            };
+        }
         if let Ok(payload) = serde_json::from_str::<ApiErrorPayload>(body) {
             return Self::from(payload);
         }
-        let message = truncate_error_body(body);
-        if status >= 500 {
-            return Self::ServerError { status, message };
-        }
         Self::Api {
             error_type: ApiErrorType::Unknown,
-            message,
+            message: truncate_error_body(body),
             errors: Vec::new(),
             response_code: None,
         }
+    }
+}
+
+fn extract_server_error_message(body: &str) -> String {
+    let parsed_msg = serde_json::from_str::<ApiErrorPayload>(body)
+        .ok()
+        .and_then(|payload| payload.message)
+        .filter(|msg| !msg.is_empty());
+    match parsed_msg {
+        Some(msg) => truncate_error_body(&msg),
+        None => truncate_error_body(body),
     }
 }
 
@@ -413,6 +432,44 @@ mod tests {
                 assert!(message.ends_with("..."));
             }
             other => panic!("expected Api, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_json_5xx_responses_to_retryable_server_error_and_truncates_messages() {
+        let json_500 = r#"{"type":"api_error","message":"Upstream gateway fault"}"#;
+        let err_500 = MoyasarError::from_api_response(500, json_500);
+        assert!(err_500.is_retryable());
+        match err_500 {
+            MoyasarError::ServerError { status, message } => {
+                assert_eq!(status, 500);
+                assert_eq!(message, "Upstream gateway fault");
+            }
+            other => panic!("expected ServerError for JSON 500, got {other:?}"),
+        }
+
+        let long_msg = "a".repeat(MAX_ERROR_BODY_CHARS + 100);
+        let json_503 = format!(r#"{{"type":"api_error","message":"{long_msg}"}}"#);
+        let err_503 = MoyasarError::from_api_response(503, &json_503);
+        assert!(err_503.is_retryable());
+        match err_503 {
+            MoyasarError::ServerError { status, message } => {
+                assert_eq!(status, 503);
+                assert_eq!(message.len(), MAX_ERROR_BODY_CHARS + 3);
+                assert!(message.ends_with("..."));
+            }
+            other => panic!("expected ServerError for JSON 503, got {other:?}"),
+        }
+
+        let json_400 = format!(r#"{{"type":"invalid_request_error","message":"{long_msg}"}}"#);
+        let err_400 = MoyasarError::from_api_response(400, &json_400);
+        assert!(!err_400.is_retryable());
+        match err_400 {
+            MoyasarError::Api { message, .. } => {
+                assert_eq!(message.len(), MAX_ERROR_BODY_CHARS + 3);
+                assert!(message.ends_with("..."));
+            }
+            other => panic!("expected Api for JSON 400, got {other:?}"),
         }
     }
 }

@@ -22,7 +22,7 @@
 //!   `given_id` tokens into mutating JSON request payloads so transient 5xx and network timeouts
 //!   can be retried safely without double-charging customers.
 //!
-//! ## Complete 18-Service Accessor & Engine Matrix (Modules 1–9, `v0.1.0`–`v0.9.0`)
+//! ## Complete 19-Service Accessor & Engine Matrix (Modules 1–9, `v0.1.0`–`v0.10.0`)
 //!
 //! | # | Module & Version | Accessor / Entrypoint | Service / Engine Type | Feature Flag | Key Requirement |
 //! | :- | :--- | :--- | :--- | :--- | :--- |
@@ -44,6 +44,7 @@
 //! | 16 | **M8 (`v0.8.0`) Stripe Refunds** | `client.refunds()` | `RefundsService` | `stripe-compat` | `SecretKey` |
 //! | 17 | **M8 (`v0.8.0`) Stripe Customers** | `client.customers(vault)` | `CustomersService` | `stripe-compat` | `SecretKey` + `CustomerVault` |
 //! | 18 | **M8 (`v0.8.0`) Subscriptions & Unified** | `client.subscriptions(vault)` / `UnifiedPaymentGateway` | `SubscriptionsService` / `UnifiedPaymentGateway` | `stripe-compat` / `unified-gateway` | `SecretKey` |
+//! | 19 | **M9 (`v0.10.0`) Orchestrator Alignment & Adapter** | `alignment::*` / `MoyasarProvider::new` | `alignment` / `adapter::MoyasarProvider` | `core` / `some-payment-adapter` | `SecretKey` |
 //!
 //! ## Feature-Flag Quick Reference
 //!
@@ -65,11 +66,15 @@
 //! | `webhook-engine` | **Yes** | `ConstantTimeSecretVerifier`, replay-window validation, `InMemoryDeduplicator`, and `payment_faild` typo resilience |
 //! | `sources-webhooks` | **Yes** | Umbrella feature enabling `sources`, `webhooks-api`, and `webhook-engine` |
 //! | `stripe-compat` | No | `RefundsService`, `CustomersService`, `SubscriptionsService`, `InMemoryCustomerVault`, and pro-rata refund helpers |
-//! | `unified` / `unified-gateway` (aliases `some-payments-trait`, `some-payment-trait`) | No | Cross-gateway `UnifiedPaymentGateway`, `PaymentCapability`, `PayoutCapability`, and `WebhookCapability` traits |
+//! | `unified-gateway` (aliases `some-payments-trait`, `some-payment-trait`) | No | Cross-gateway `UnifiedPaymentGateway`, `PaymentCapability`, `PayoutCapability`, and `WebhookCapability` traits |
+//! | `some-payment-adapter` | No | Optional `some-payment-core` orchestrator adapter (`adapter::MoyasarProvider`) |
 //! | `async-stream` | No | Asynchronous `futures::Stream` auto-pagination adapter over `Paginator` |
-//! | `axum` / `actix` / `rocket` / `tonic-support` | Example / Dev | Reference server and E2E integration suites (`axum_server`, `actix_server`, `rocket_server`, `tonic_grpc_server`) enabled via `--features full` |
 //! | `test-utils` | No | `MoyasarMockServer` (`wiremock`) and deterministic JSON fixtures for all 11+1 webhook events, STC Pay, SADAD, and ISO 8583 |
 //! | `full` | No | Enables all production modules, `stripe-compat`, `unified-gateway`, and `async-stream` |
+//!
+//! > **Reference Server Examples:** The runnable reference servers (`axum_server`, `actix_server`,
+//! > `rocket_server`, and `tonic_grpc_server`) are compiled as Cargo examples using
+//! > `--features full` rather than separate Cargo feature flags.
 //!
 //! ## Quick Start Examples
 //!
@@ -90,17 +95,7 @@
 //!
 //! ```
 //! use some_moyasar::prelude::{Amount, Currency};
-//! # #[allow(dead_code)]
-//! # trait AmountMinorExt {
-//! #     fn as_minor(self) -> i64;
-//! # }
-//! # impl AmountMinorExt for Amount {
-//! #     fn as_minor(self) -> i64 {
-//! #         self.minor_units()
-//! #     }
-//! # }
 //!
-//! assert!(Amount::from_major(150, Currency::SAR).as_minor() == 15_000);
 //! assert_eq!(Amount::from_major(150, Currency::SAR).minor_units(), 15_000);
 //! ```
 
