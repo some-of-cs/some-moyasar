@@ -100,7 +100,7 @@ fn serialize_opt_response_code<S: Serializer>(
 /// Credit or debit card source metadata returned by the Moyasar Payments API.
 ///
 /// Only the masked card `number` is ever retained (satisfying PCI-DSS 4.0 Requirement 3.2).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CardSourceResponse {
     /// Card network / scheme (`mada`, `visa`, `master`, `amex`, etc.).
     #[serde(default)]
@@ -146,8 +146,29 @@ pub struct CardSourceResponse {
     pub issuer_card_category: Option<String>,
 }
 
+impl fmt::Debug for CardSourceResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CardSourceResponse")
+            .field("company", &self.company)
+            .field("name", &self.name)
+            .field("number", &self.number)
+            .field("gateway_id", &self.gateway_id)
+            .field("reference_number", &self.reference_number)
+            .field("token", &"[REDACTED]")
+            .field("message", &self.message)
+            .field("transaction_url", &self.transaction_url)
+            .field("authorization_code", &self.authorization_code)
+            .field("response_code", &self.response_code)
+            .field("issuer_name", &self.issuer_name)
+            .field("issuer_country", &self.issuer_country)
+            .field("issuer_card_type", &self.issuer_card_type)
+            .field("issuer_card_category", &self.issuer_card_category)
+            .finish()
+    }
+}
+
 /// Digital wallet (Apple Pay / Samsung Pay) source metadata returned by Moyasar.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WalletSourceResponse {
     /// Underlying card network (`mada`, `visa`, `master`, etc.).
     #[serde(default)]
@@ -176,6 +197,22 @@ pub struct WalletSourceResponse {
     /// Two-digit ISO 8583 acquirer response code.
     #[serde(default, serialize_with = "serialize_opt_response_code")]
     pub response_code: Option<ResponseCode>,
+}
+
+impl fmt::Debug for WalletSourceResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WalletSourceResponse")
+            .field("company", &self.company)
+            .field("name", &self.name)
+            .field("number", &self.number)
+            .field("gateway_id", &self.gateway_id)
+            .field("reference_number", &self.reference_number)
+            .field("token", &"[REDACTED]")
+            .field("message", &self.message)
+            .field("transaction_url", &self.transaction_url)
+            .field("response_code", &self.response_code)
+            .finish()
+    }
 }
 
 #[cfg(test)]
@@ -243,5 +280,43 @@ mod tests {
         let reparsed: PaymentSourceResponse =
             serde_json::from_str(&roundtrip_json).expect("re-deserializes");
         assert_eq!(parsed, reparsed);
+    }
+
+    #[test]
+    fn card_and_wallet_source_responses_redact_token_in_debug() {
+        let card = CardSourceResponse {
+            company: Some(CardBrand::Visa),
+            name: Some("Alice".to_owned()),
+            number: Some("4111-XXXX-XXXX-1111".to_owned()),
+            gateway_id: None,
+            reference_number: None,
+            token: Some("token_secret_card_999".to_owned()),
+            message: None,
+            transaction_url: None,
+            authorization_code: None,
+            response_code: None,
+            issuer_name: None,
+            issuer_country: None,
+            issuer_card_type: None,
+            issuer_card_category: None,
+        };
+        let card_dbg = format!("{card:?}");
+        assert!(card_dbg.contains(r#"token: "[REDACTED]""#));
+        assert!(!card_dbg.contains("token_secret_card_999"));
+
+        let wallet = WalletSourceResponse {
+            company: Some(CardBrand::Mada),
+            name: Some("Bob".to_owned()),
+            number: Some("5555-XXXX-XXXX-4444".to_owned()),
+            gateway_id: None,
+            reference_number: None,
+            token: Some("token_secret_wallet_888".to_owned()),
+            message: None,
+            transaction_url: None,
+            response_code: None,
+        };
+        let wallet_dbg = format!("{wallet:?}");
+        assert!(wallet_dbg.contains(r#"token: "[REDACTED]""#));
+        assert!(!wallet_dbg.contains("token_secret_wallet_888"));
     }
 }

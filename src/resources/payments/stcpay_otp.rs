@@ -66,7 +66,7 @@ pub struct StcPayOtpPayment {
     /// Raw source payload returned by the gateway (redacted in `Debug` output).
     #[serde(default)]
     pub source: Option<serde_json::Value>,
-    /// Optional merchant metadata map.
+    /// Optional merchant metadata map (redacted in `Debug` output).
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
     /// Optional callback URL.
@@ -99,7 +99,7 @@ impl fmt::Debug for StcPayOtpPayment {
             .field("currency", &self.currency)
             .field("description", &self.description)
             .field("source", &"[REDACTED]")
-            .field("metadata", &self.metadata)
+            .field("metadata", &"[REDACTED]")
             .field("callback_url", &self.callback_url)
             .field("invoice_id", &self.invoice_id)
             .field("created_at", &self.created_at)
@@ -131,7 +131,7 @@ impl<'a, K: SecretAuthKey> PaymentsService<'a, K> {
     /// - Enforces same-origin (`scheme`, `host`, and `port`) against `client.base_url()`
     ///   without userinfo or fragments to prevent SSRF and credential exfiltration.
     /// - Uses `transaction_url` verbatim without client-side URL reconstruction.
-    /// - Redacts `otp` and `source` in all `Debug` formatting.
+    /// - Redacts `otp`, `source`, and `metadata` in all `Debug` formatting.
     ///
     /// # Errors
     ///
@@ -233,7 +233,9 @@ fn is_allowed_stc_otp_url<K: AuthKey>(transaction_url: &str, client: &MoyasarCli
     ) else {
         return false;
     };
-    has_no_userinfo_or_fragment(&parsed) && has_same_origin(&parsed, &base)
+    has_no_userinfo_or_fragment(&parsed)
+        && has_same_origin(&parsed, &base)
+        && parsed.path().starts_with("/v1/stc_pays/")
 }
 
 #[cfg(test)]
@@ -267,15 +269,17 @@ mod tests {
             currency: "SAR".to_owned(),
             description: None,
             source: Some(serde_json::json!({ "mobile": "0512345678" })),
-            metadata: None,
+            metadata: Some(serde_json::json!({ "customer_note": "sensitive_pii_42" })),
             callback_url: None,
             invoice_id: None,
             created_at: None,
             updated_at: None,
         };
         let pay_dbg = format!("{payment:?}");
-        assert!(pay_dbg.contains("[REDACTED]"));
+        assert!(pay_dbg.contains(r#"source: "[REDACTED]""#));
+        assert!(pay_dbg.contains(r#"metadata: "[REDACTED]""#));
         assert!(!pay_dbg.contains("0512345678"));
+        assert!(!pay_dbg.contains("sensitive_pii_42"));
     }
 
     #[tokio::test]
@@ -289,6 +293,7 @@ mod tests {
             "http://localhost.evil.com/v1/stc_pays/pay_1/proceed",
             "https://user:pass@api.moyasar.com/v1/stc_pays/pay_1/proceed",
             "https://api.moyasar.com/v1/stc_pays/pay_1/proceed#frag",
+            "https://api.moyasar.com/v1/payments/pay_1/refund",
         ] {
             let err = client
                 .payments()

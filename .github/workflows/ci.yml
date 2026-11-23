@@ -81,6 +81,7 @@ jobs:
           cargo check --no-default-features --features async-stream
           cargo check --no-default-features --features test-utils
           cargo check --no-default-features --features full
+          cargo check --no-default-features --features some-payment-adapter
           cargo check --all-features
 
       - name: Check default library target
