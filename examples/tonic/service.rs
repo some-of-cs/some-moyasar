@@ -93,8 +93,8 @@ impl MoyasarPaymentGateway for MoyasarGrpcService {
             .map_err(|err| to_tonic_status(&err))?;
 
         Ok(Response::new(CreateIntentRpcResponse {
-            id: res.id,
-            client_secret: res.client_secret,
+            id: res.id.clone(),
+            client_secret: res.client_secret.clone(),
             amount_minor: to_proto_amount(res.amount_minor)?,
             currency: res.currency.as_str().to_owned(),
             expires_at: res.expires_at.to_rfc3339(),
