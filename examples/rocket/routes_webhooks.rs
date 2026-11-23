@@ -57,9 +57,7 @@ pub async fn handle_webhook(
         .into_bytes()
         .await
         .map_err(|_| {
-            MoyasarResponder(MoyasarError::invalid_request(
-                "failed to read webhook body",
-            ))
+            MoyasarResponder(MoyasarError::invalid_request("failed to read webhook body"))
         })?;
 
     if !capped.is_complete() {

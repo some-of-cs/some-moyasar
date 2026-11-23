@@ -28,22 +28,22 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .app_data(web::PayloadConfig::new(64 * 1024))
             .route(web::post().to(handle_webhook)),
     )
-        .route(
-            "/v1/webhooks/endpoints",
-            web::post().to(create_webhook_endpoint),
-        )
-        .route(
-            "/v1/webhooks/endpoints",
-            web::get().to(list_webhook_endpoints),
-        )
-        .route(
-            "/v1/webhooks/available_events",
-            web::get().to(list_available_webhook_events),
-        )
-        .route(
-            "/v1/webhooks/attempts",
-            web::get().to(list_webhook_attempts),
-        );
+    .route(
+        "/v1/webhooks/endpoints",
+        web::post().to(create_webhook_endpoint),
+    )
+    .route(
+        "/v1/webhooks/endpoints",
+        web::get().to(list_webhook_endpoints),
+    )
+    .route(
+        "/v1/webhooks/available_events",
+        web::get().to(list_available_webhook_events),
+    )
+    .route(
+        "/v1/webhooks/attempts",
+        web::get().to(list_webhook_attempts),
+    );
 }
 
 /// Maps a [`WebhookError`] produced during signature or payload verification
