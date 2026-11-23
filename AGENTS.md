@@ -1,4 +1,4 @@
-# some-moyasar (`v0.10.0`) — Agent Guide
+# some-moyasar (v0.10.0) — Agent Guide
 
 Zero-`unsafe` (`#![forbid(unsafe_code)]`) microkernel Rust SDK (MSRV `1.85`, edition `2024`).
 
@@ -17,25 +17,25 @@ some-moyasar = { version = "0.10.0", features = ["full"] }
 
 |Feature|Def|Scope|
 |:--|:--:|:--|
-|`core`|Y|Client, keys, `Amount`, `Currency`, errors|
-|`env-keys`|Y|`$ENV`/`${ENV}` & `.env*` keys|
-|`payments`|Y|Payments, splits, AFT, STC, SADAD|
-|`payment-intents`|Y|Intents (1h expiry)|
-|`tokens-invoices-3ds`|Y|`tokens`, `invoices`, `card-auths` (`card-auth`)|
-|`payouts`|Y|Accounts & payouts (`internal`/`ips`/`sarie`)|
-|`settlements-ledger`|Y|Alias `settlements`: ledger & transfers|
-|`sources-webhooks`|Y|`sources`, `webhooks-api`, `webhook-engine`|
-|`stripe-compat`|N|Refunds, customers, subscriptions|
-|`unified-gateway`|N|Aliases `some-payment(s)-trait`|
-|`some-payment-adapter`|N|`MoyasarProvider` (`PaymentProvider`)|
-|`async-stream`|N|`futures::Stream` pagination|
-|`test-utils`|N|`MoyasarMockServer` (`wiremock`)|
-|`full`|N|Default + compat, unified, stream|
+|core|Y|Client, keys, Amount, Currency, errors|
+|env-keys|Y|`$ENV`/`${ENV}` & `.env*` keys|
+|payments|Y|Payments, splits, AFT, STC, SADAD|
+|payment-intents|Y|Intents (1h expiry)|
+|tokens-invoices-3ds|Y|tokens, invoices, card-auths (card-auth)|
+|payouts|Y|Accounts & payouts (internal/ips/sarie)|
+|settlements-ledger|Y|Alias settlements: ledger & transfers|
+|sources-webhooks|Y|sources, webhooks-api, webhook-engine|
+|stripe-compat|N|Refunds, customers, subscriptions|
+|unified-gateway|N|Aliases some-payment(s)-trait|
+|some-payment-adapter|N|MoyasarProvider (PaymentProvider)|
+|async-stream|N|futures::Stream pagination|
+|test-utils|N|MoyasarMockServer (wiremock)|
+|full|N|Default + compat, unified, stream|
 
 ## Core Invariants
 
-- Minor units: `Amount(i64)` / `u64` (`100` halalas = `1 SAR`; no floats, no `unsafe`).
-- Keys: `SecretKey` (`sk_test_`/`sk_live_`) for server mutations; `PublishableKey` (`pk_test_`/`pk_live_`) for tokenization, Apple Pay, payment/intent creation. `AuthMode::Live` enforces HTTPS.
+- Minor units: `Amount(i64)` / `u64` (100 halalas = 1 SAR; zero floats, zero `unsafe`).
+- Keys: `SecretKey` (`sk_test_`/`sk_live_`) for server mutations; `PublishableKey` (`pk_test_`/`pk_live_`) for client tokenization, Apple Pay, payment/intent creation. `AuthMode::Live` enforces HTTPS.
 - Idempotency: `given_id` UUID (v4 auto or v5 via `idempotency_v5::derive_subscription_given_id`).
 - Webhooks: Constant-time (`ConstantTimeSecretVerifier` / `verify_and_scrub_moyasar_webhook`), recursive `secret_token` scrubbing, `payment_faild` typo tolerance, `InMemoryDeduplicator`.
 - Redaction: Zero PAN/CVC logs; `Debug` prints `[REDACTED]`, secrets zeroize on drop.
@@ -91,23 +91,23 @@ fn provider(key: &str) -> Result<impl PaymentProvider, PaymentError> {
 
 |Module|Role|
 |:--|:--|
-|`kernel`|Client, auth, `Amount`, `idempotency_v5`|
-|`prelude`|Re-exports for enabled features|
-|`resources::payments`|CRUD, capture, void, refund|
-|`resources::payment_intents`|Intents (`create`/`fulfill`/`retrieve`/`cancel`)|
-|`resources::tokens`|Saved card tokens|
-|`resources::invoices`|Hosted e-invoices|
-|`resources::card_auths`|Standalone 3DS & MPI|
-|`resources::payouts`|Payout accounts & payouts|
-|`resources::settlements`|Settlements, transfers, ledger|
-|`resources::sources`|BIN/IIN & Apple Pay|
-|`resources::webhooks_api`|`/v1/webhooks` CRUD & attempts|
-|`webhook_engine`|Verifier, replay, dedup|
-|`stripe_compat`|Refunds, customers, subscriptions|
-|`unified`|`UnifiedPaymentGateway`|
-|`alignment`|Guards & `verify_and_scrub_moyasar_webhook`|
-|`adapter`|`moyasar_provider::MoyasarProvider`|
-|`test_utils`|`MoyasarMockServer` & fixtures|
+|kernel|Client, auth, Amount, idempotency_v5|
+|prelude|Re-exports for enabled features|
+|resources::payments|CRUD, capture, void, refund|
+|resources::payment_intents|Intents (create/fulfill/retrieve/cancel)|
+|resources::tokens|Saved card tokens|
+|resources::invoices|Hosted e-invoices|
+|resources::card_auths|Standalone 3DS & MPI|
+|resources::payouts|Payout accounts & payouts|
+|resources::settlements|Settlements, transfers, ledger|
+|resources::sources|BIN/IIN & Apple Pay|
+|resources::webhooks_api|/v1/webhooks CRUD & attempts|
+|webhook_engine|Verifier, replay, dedup|
+|stripe_compat|Refunds, customers, subscriptions|
+|unified|UnifiedPaymentGateway|
+|alignment|Guards & verify_and_scrub_moyasar_webhook|
+|adapter|moyasar_provider::MoyasarProvider|
+|test_utils|MoyasarMockServer & fixtures|
 
 Examples (`--features full`): `examples/{actix,axum,rocket,tonic}`.
 
