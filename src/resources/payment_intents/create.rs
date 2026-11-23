@@ -327,7 +327,12 @@ mod tests {
             }
         ));
 
-        for bad_cb in ["", "ftp://example.com/cb", "javascript:alert(1)", "https://"] {
+        for bad_cb in [
+            "",
+            "ftp://example.com/cb",
+            "javascript:alert(1)",
+            "https://",
+        ] {
             let params = CreatePaymentIntentParams::new(1000, Currency::SAR, bad_cb);
             let err = prepare_create_payload(&params, &GivenIdPolicy::Random)
                 .expect_err("invalid callback_url must fail");
